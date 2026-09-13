@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
-    "build": "next build",
-    "start": "next start --hostname 127.0.0.1",
+    "build": "prisma generate && next build",
+    "start": "next start",
     "lint": "eslint .",
     "db:migrate": "prisma migrate dev",
     "db:seed": "node --env-file=.env node_modules/tsx/dist/cli.mjs prisma/seed.ts",
@@ -44,5 +44,6 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "packageManager": "pnpm@11.0.0"
 }
