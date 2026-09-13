@@ -1,0 +1,160 @@
+import { createHash,randomUUID } from 'node:crypto';
+import { Prisma } from '@prisma/client';
+import { z } from 'zod';
+import { db } from '@/lib/db';
+import { Actor,HttpError } from '@/lib/auth';
+import { dayKey } from '@/lib/time';
+import { parseInquiryDate } from '@/lib/customer-date';
+import { metaFields,identifyHeader,parseMetaCsv,normHeader,MetaField,MetaValues,MetaRow,MetaPreview,MetaDecision } from '@/lib/meta-import';
+import { normalizePhone } from './customer-service';
+import { translator } from './meta-translation-service';
+
+const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+const fieldEnum=z.enum(Object.keys(metaFields) as [MetaField,...MetaField[]]);
+const previewSchema=z.object({filename:z.string().min(1).max(200),text:z.string().max(2_000_000),mapping:z.record(fieldEnum).optional(),overrides:z.record(z.record(z.string().max(5000))).optional(),decisions:z.record(z.object({action:z.enum(['create','link']),customerId:z.string().optional()})).optional()});
+type Draft={userId:string;fileHash:string;expires:number;preview:MetaPreview;decisions:Record<string,MetaDecision>};
+const drafts=new Map<string,Draft>();
+function admin(user:Actor){if(user.role!=='ADMIN')throw new HttpError(403,'智能导入需要管理员权限');}
+const phones=(c:{phone:string;whatsapp:string})=>[c.phone,c.whatsapp].filter(Boolean).map(normalizePhone).filter(p=>p.length>=7);
+const email=(s:string)=>s.trim().toLowerCase();
+type Candidate={id:string;name:string;companyName:string;phones:string[];emails:string[];deleted:boolean;ordinal:number};
+const scientific=(s:string)=>/^\d[\d.]*e[+-]?\d+$/i.test(s.replace(/^[pl]:/i,''));
+export function metaDate(value:string,tz:string){
+ let v=value.trim().replace(/^(\d{4}-\d{2}-\d{2}) /,'$1T').replace(/([+-]\d{2})(\d{2})$/,'$1:$2');
+ if(/^\d{4}\/\d{2}\/\d{2}$/.test(v))v=v.replaceAll('/','-');
+ return dayKey(parseInquiryDate(v,tz),tz);
+}
+function statusSignature(row:MetaRow){return JSON.stringify([row.status,row.targetId,row.ordinal,row.candidates.map(c=>c.id).sort()]);}
+
+async function classify(rows:MetaRow[],decisions:Record<string,MetaDecision>,client:Prisma.TransactionClient=db){
+ const customers=await client.customer.findMany({include:{submissions:{select:{ordinal:true,values:true}}}});
+ const candidates:Candidate[]=customers.map(c=>{
+  const history=c.submissions.map(s=>JSON.parse(s.values) as MetaValues);
+  return {id:c.id,name:c.name,companyName:c.companyName,phones:[...new Set([...phones(c),...history.flatMap(phones)])],emails:[...new Set([c.email,...history.map(v=>v.email)].filter(Boolean).map(email))],deleted:!!c.deletedAt,ordinal:Math.max(1,...c.submissions.map(s=>s.ordinal))};
+ });
+ const imported=new Set((await client.leadSubmission.findMany({where:{eventKey:{in:rows.map(r=>r.key)}},select:{eventKey:true}})).map(r=>r.eventKey));
+ const seen=new Set<string>();
+ const ordered=[...rows].sort((a,b)=>a.values.inquiryAt.localeCompare(b.values.inquiryAt)||a.row-b.row);
+ for(const row of ordered){
+  row.targetId=undefined;row.ordinal=undefined;row.candidates=[];
+  if(imported.has(row.key)||seen.has(row.key)){row.status='IMPORTED';row.reason=imported.has(row.key)?'该 Meta Lead / 原始记录已导入，不新增留资次数':'文件内同一条留资重复出现，跳过';continue;}
+  seen.add(row.key);
+  const v=row.values;
+  if(row.warnings.some(w=>w.startsWith('阻止：'))){row.status='INVALID';row.reason='请补充或修正必填字段后重新预览';continue;}
+  const p=phones(v),e=email(v.email);
+  const exact=candidates.filter(c=>p.some(n=>c.phones.includes(n))||e&&c.emails.includes(e));
+  const weak=exact.length?[]:candidates.filter(c=>p.some(n=>c.phones.some(m=>Math.min(n.length,m.length)>=8&&n.slice(-8)===m.slice(-8)))||v.name&&normHeader(c.name)===normHeader(v.name));
+  const matches=exact.length?exact:weak;
+  row.candidates=matches.map(c=>({id:c.id,name:c.name,deleted:c.deleted}));
+  const decision=decisions[String(row.row)];
+  let target:Candidate|undefined;
+  if(decision?.action==='link'){
+   target=matches.find(c=>c.id===decision.customerId&&!c.deleted);
+   if(!target){row.status='SUSPECT';row.reason='选中的客户不再匹配或已删除，请重新核对';continue;}
+  }else if(decision?.action!=='create'&&exact.length===1&&!exact[0].deleted)target=exact[0];
+  if(target){
+   row.status='REPEAT';row.reason='联系方式匹配，追加留资历史，保留客户原资料';row.targetId=target.id;row.ordinal=++target.ordinal;
+   target.phones=[...new Set([...target.phones,...p])];if(e&&!target.emails.includes(e))target.emails.push(e);
+  }else if(decision?.action!=='create'&&(matches.length||!p.length&&!e)){
+   row.status='SUSPECT';row.reason=matches.some(c=>c.deleted)?'匹配到回收站客户，请先恢复或明确作为不同客户处理':exact.length>1?'联系方式对应多个客户，请选择正确客户':matches.length?'仅姓名或电话号码尾号相似，请人工核对':'缺少可查重的联系方式，请补充或明确作为新客户';
+  }else{
+   row.status='NEW';row.ordinal=1;row.reason=decision?.action==='create'?'已人工确认作为不同的新客户':'未发现匹配客户';
+   candidates.push({id:`row:${row.row}`,name:v.name,companyName:v.companyName,phones:p,emails:e?[e]:[],deleted:false,ordinal:1});
+  }
+ }
+ return rows;
+}
+
+export async function previewMeta(input:unknown,user:Actor):Promise<MetaPreview>{
+ admin(user);const request=previewSchema.parse(input);
+ let csv:ReturnType<typeof parseMetaCsv>;try{csv=parseMetaCsv(request.text);}catch(e){throw new HttpError(400,(e as Error).message);}
+ const mapping=Object.fromEntries(csv.headers.map(h=>[h,request.mapping?.[h]??identifyHeader(h)]));
+ const ambiguous:string[]=[];
+ if(!request.mapping||!Object.keys(request.mapping).length){
+  const fields=Object.values(mapping).filter(v=>v!=='ignore'&&v!=='notes');
+  for(const field of new Set(fields))if(fields.filter(f=>f===field).length>1){ambiguous.push(metaFields[field]);for(const header of csv.headers)if(mapping[header]===field)mapping[header]='ignore';}
+ }
+ const assigned=Object.values(mapping).filter(v=>v!=='ignore'&&v!=='notes');
+ if(new Set(assigned).size!==assigned.length)throw new HttpError(400,'多个列映射到同一字段，请在字段对应中选择要使用的列；其余列可保留为补充回答');
+ const settings=await db.setting.findUniqueOrThrow({where:{id:'system'}});
+ const translation=await translator();const rows:MetaRow[]=[];
+ for(let index=0;index<csv.rows.length;index++){
+  const original=csv.rows[index],mapped:Partial<Record<MetaField,string>>={};
+  for(const [header,value] of Object.entries(original))if(mapping[header]!=='ignore'){
+   const f=mapping[header];mapped[f]=f==='notes'&&mapped[f]?`${mapped[f]}\n${header}: ${value}`:value;
+  }
+  if(!mapped.name&&(mapped.firstName||mapped.lastName))mapped.name=[mapped.firstName,mapped.lastName].filter(Boolean).join(' ');
+  const values=Object.fromEntries(Object.keys(metaFields).filter(k=>!['ignore','firstName','lastName'].includes(k)).map(k=>[k,mapped[k as MetaField]??''])) as MetaValues;
+  values.leadId=values.leadId.replace(/^l:/i,'');
+  values.phone=values.phone.replace(/^p:/i,'');values.whatsapp=values.whatsapp.replace(/^p:/i,'');
+  // Identity is derived from source data before corrections/translations. Re-export order and names do not affect it.
+  const canonical=JSON.stringify(Object.entries(original).map(([k,v])=>[normHeader(k),v]).sort(([a],[b])=>a.localeCompare(b)));
+  const key=values.leadId?`meta:${values.leadId}`:`row:${hash(canonical)}`;
+  const row:MetaRow={row:index+2,key,values,original,status:'NEW',reason:'',warnings:ambiguous.map(f=>`多列可能对应${f}，未自动选择，请展开字段对应核对`),pending:[],candidates:[]};
+  const overrides=request.overrides?.[String(row.row)]??{};
+  for(const [f,value] of Object.entries(overrides))if(Object.hasOwn(values,f)&&!['leadId','formId'].includes(f))values[f as keyof MetaValues]=value.trim();
+  if(!values.name)row.warnings.push('阻止：缺少客户姓名，请补充原始姓名');
+  try{values.inquiryAt=metaDate(values.inquiryAt,settings.timezone);}catch{row.warnings.push('阻止：询盘日期缺失、不合法或在未来，请按原始资料补充 YYYY-MM-DD 日期');}
+  for(const field of ['leadId','phone','whatsapp'] as const)if(scientific(values[field]))row.warnings.push(`阻止：${metaFields[field]} 已变成科学计数法，请重新下载 Meta 原始 CSV，不能恢复或猜测丢失数字`);
+  if(values.email&&!z.string().email().safeParse(values.email).success)row.warnings.push('阻止：邮箱格式不合法');
+  if(values.quantity&&!/^\d+$/.test(values.quantity))row.warnings.push('数量不是明确整数，采购数量留空，原回答保留在留资历史');
+  if(/^\d+$/.test(values.quantity)&&Number(values.quantity)>2147483647)row.warnings.push('阻止：采购数量超过可存储范围');
+  const platform=values.source.toLowerCase();values.source=['fb','facebook'].includes(platform)?'FACEBOOK':['ig','instagram'].includes(platform)?'INSTAGRAM':['FACEBOOK','INSTAGRAM'].includes(values.source)?values.source:'';
+  if(!values.source)row.warnings.push('未识别 Facebook / Instagram 来源，留空待确认');
+  for(const field of ['customerType','productInterest','salesMarket','concerns','country','city','notes'] as const){
+   // A manual Chinese correction takes precedence; proper fields are never submitted for translation.
+   const result=await translation.translate(values[field],[values.name,values.companyName,values.email,values.productModel,values.adName,values.phone,values.whatsapp]);values[field]=result.text;if(result.pending)row.pending.push(metaFields[field]);
+  }
+  if(!mapped.leadId)row.warnings.push('没有 Meta Lead ID：使用原始整行指纹查重；请保留原始导出文件');
+  rows.push(row);
+ }
+ await classify(rows,request.decisions??{});
+ for(const [id,draft] of drafts)if(draft.expires<Date.now())drafts.delete(id);
+ // Bound memory used by abandoned previews. Drafts contain private data and expire after 30 minutes.
+ while(drafts.size>=20)drafts.delete(drafts.keys().next().value!);
+ const token=randomUUID(),expires=Date.now()+30*60_000;
+ const preview={token,filename:request.filename,headers:csv.headers,mapping,rows,translationConfigured:translation.configured,expiresAt:new Date(expires).toISOString()};
+ drafts.set(token,{preview,userId:user.id,fileHash:hash(request.text),expires,decisions:request.decisions??{}});
+ return preview;
+}
+
+const purchaseCodes:Record<string,string>={'批发商':'WHOLESALE','进口商':'IMPORTER','经销商':'DISTRIBUTOR','家具零售':'RETAILER','品牌客户':'BRAND','电商客户':'ECOMMERCE'};
+let commitQueue:Promise<unknown>=Promise.resolve();
+export function commitMeta(input:unknown,user:Actor){
+ const next=commitQueue.then(()=>executeCommitMeta(input,user),()=>executeCommitMeta(input,user));
+ commitQueue=next.catch(()=>undefined);return next;
+}
+async function executeCommitMeta(input:unknown,user:Actor){
+ admin(user);const v=z.object({token:z.string().uuid(),rows:z.array(z.number().int()).min(1).max(500),confirmed:z.literal(true),allowPendingTranslation:z.boolean().default(false)}).parse(input);
+ const existing=await db.metaImportRun.findUnique({where:{id:v.token}});if(existing){if(existing.userId!==user.id)throw new HttpError(403,'无权使用此预览');return JSON.parse(existing.result);}
+ const draft=drafts.get(v.token);if(!draft||draft.expires<Date.now())throw new HttpError(409,'预览已过期或服务已重启，请重新上传预览');if(draft.userId!==user.id)throw new HttpError(403,'无权使用此预览');
+ const selected=new Set(v.rows),rows=draft.preview.rows.filter(r=>selected.has(r.row));
+ if(rows.length!==selected.size)throw new HttpError(400,'包含不属于当前预览的行');
+ if(rows.some(r=>!['NEW','REPEAT'].includes(r.status)))throw new HttpError(400,'只能确认新客户或已核对的重复留资；请先处理疑似重复和错误');
+ if(!v.allowPendingTranslation&&rows.some(r=>r.pending.length))throw new HttpError(400,'部分回答尚未翻译，请先处理或明确选择保留原文待处理');
+ const settings=await db.setting.findUniqueOrThrow({where:{id:'system'}});
+ return db.$transaction(async tx=>{
+  const done=await tx.metaImportRun.findUnique({where:{id:v.token}});if(done)return JSON.parse(done.result);
+  const fresh=await classify(structuredClone(draft.preview.rows),draft.decisions,tx);
+  if(rows.some(row=>statusSignature(row)!==statusSignature(fresh.find(r=>r.row===row.row)!)))throw new HttpError(409,'客户或留资记录已变化，为避免重复请重新预览');
+  const result={created:0,repeated:0,skipped:draft.preview.rows.length-rows.length,customerIds:[] as string[]};
+  const newIds=new Map<string,string>();
+  for(const row of [...rows].sort((a,b)=>a.values.inquiryAt.localeCompare(b.values.inquiryAt)||a.row-b.row)){
+   const f=row.values;let customerId=row.targetId;
+   if(customerId?.startsWith('row:'))customerId=newIds.get(customerId);
+   if(row.status==='REPEAT'&&!customerId)throw new HttpError(400,'同文件中的首次留资未选中，请同时选择首次留资行');
+   if(row.status==='NEW'){
+    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,phone:f.phone,whatsapp:f.whatsapp,email:f.email,country:f.country,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:purchaseCodes[f.customerType]??'',quantity:/^\d+$/.test(f.quantity)?Number(f.quantity):null,inquiryAt:parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:user.id,currency:settings.currency,stage:'NEW',isQualified:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
+    customerId=c.id;newIds.set(`row:${row.row}`,c.id);result.created++;
+    await tx.stageHistory.create({data:{customerId,changedBy:user.id,toStage:'NEW',note:'Meta CSV 智能导入'}});
+   }else result.repeated++;
+   const previous=await tx.leadSubmission.aggregate({where:{customerId:customerId!},_max:{ordinal:true}});
+   const ordinal=row.status==='NEW'?1:Math.max(1,previous._max.ordinal??1)+1;
+   if(ordinal!==row.ordinal)throw new HttpError(400,'同一客户的多次留资请按顺序选中，包含更早的留资行，以保持编号与预览一致');
+   await tx.leadSubmission.create({data:{customerId:customerId!,eventKey:row.key,leadId:f.leadId,ordinal,occurredAt:parseInquiryDate(f.inquiryAt,settings.timezone),values:JSON.stringify(f),raw:JSON.stringify(row.original),filename:draft.preview.filename,fileHash:draft.fileHash,translationPending:JSON.stringify(row.pending)}});
+   result.customerIds.push(customerId!);
+  }
+  await tx.metaImportRun.create({data:{id:v.token,userId:user.id,result:JSON.stringify(result)}});
+  return result;
+ },{timeout:30000});
+}

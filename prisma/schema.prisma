@@ -1,0 +1,168 @@
+generator client {
+ provider = "prisma-client-js"
+}
+datasource db {
+ provider = "sqlite"
+ url = env("DATABASE_URL")
+}
+model User {
+ id String @id @default(cuid())
+ name String
+ email String @unique
+ passwordHash String
+ role String @default("SALES")
+ createdAt DateTime @default(now())
+ customers Customer[]
+}
+model Customer {
+ id String @id @default(cuid())
+ name String
+ companyName String @default("")
+ country String @default("")
+ countryCode String @default("")
+ city String @default("")
+ phone String @default("")
+ whatsapp String @default("")
+ email String @default("")
+ source String @default("OTHER")
+ sourceDetail String @default("")
+ language String @default("")
+ productInterest String @default("")
+ productModel String @default("")
+ purchaseType String @default("OTHER")
+ quantity Int? @default(0)
+ budget Decimal @default(0)
+ estimatedOrderValue Decimal @default(0)
+ currency String @default("CNY")
+ purchaseTimeline String @default("")
+ shippingCountry String @default("")
+ shippingCity String @default("")
+ shippingPostalCode String @default("")
+ stage String @default("NEW")
+ isQualified Boolean?
+ invalidReason String @default("")
+ ownerId String
+ owner User @relation(fields: [ownerId], references: [id])
+ contactedAt DateTime?
+ firstReplyAt DateTime?
+ needsConfirmedAt DateTime?
+ quotedAt DateTime?
+ quotedAmount Decimal @default(0)
+ wonAt DateTime?
+ lostAt DateTime?
+ lastFollowUpAt DateTime?
+ nextFollowUpAt DateTime?
+ notes String @default("")
+ createdAt DateTime @default(now())
+ inquiryAt DateTime?
+ updatedAt DateTime @updatedAt
+ deletedAt DateTime?
+ followUps FollowUp[]
+ stageHistory StageHistory[]
+ deals Deal[]
+ submissions LeadSubmission[]
+ @@index([stage])
+ @@index([source])
+ @@index([country])
+ @@index([ownerId])
+ @@index([createdAt])
+ @@index([inquiryAt])
+ @@index([nextFollowUpAt])
+ @@index([isQualified])
+ @@index([email])
+ @@index([phone])
+ @@index([whatsapp])
+}
+model FollowUp {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id])
+ type String
+ content String
+ followUpAt DateTime
+ nextFollowUpAt DateTime?
+ createdBy String
+ createdAt DateTime @default(now())
+ @@index([customerId, followUpAt])
+}
+model StageHistory {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id])
+ fromStage String?
+ toStage String
+ changedAt DateTime @default(now())
+ changedBy String
+ note String @default("")
+ @@index([customerId, changedAt])
+}
+model Deal {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id])
+ orderNumber String @default("")
+ dealAmount Decimal
+ productCost Decimal
+ grossProfit Decimal
+ grossMargin Decimal
+ currency String @default("CNY")
+ product String @default("")
+ productModel String @default("")
+ quantity Int @default(0)
+ notes String @default("")
+ dealDate DateTime
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([dealDate])
+ @@index([customerId])
+}
+model SalesTarget {
+ id String @id @default(cuid())
+ periodKey String @unique
+ periodType String
+ year Int
+ month Int?
+ week Int?
+ targetRevenue Decimal
+ manual Boolean @default(false)
+ currency String @default("CNY")
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+model Setting {
+ id String @id @default("system")
+ companyName String @default("木远家具贸易")
+ currency String @default("CNY")
+ timezone String @default("Asia/Shanghai")
+}
+
+model LeadSubmission {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id])
+ eventKey String @unique
+ leadId String @default("")
+ ordinal Int
+ occurredAt DateTime
+ values String
+ raw String
+ filename String
+ fileHash String
+ translationPending String @default("[]")
+ createdAt DateTime @default(now())
+ @@unique([customerId, ordinal])
+ @@index([customerId, occurredAt])
+}
+
+model MetaImportRun {
+ id String @id
+ userId String
+ result String
+ createdAt DateTime @default(now())
+}
+
+model TranslationSetting {
+ id String @id @default("meta")
+ endpoint String @default("")
+ encryptedKey String @default("")
+}
