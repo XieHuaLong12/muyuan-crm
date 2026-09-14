@@ -19,6 +19,13 @@ const phones=(c:{phone:string;whatsapp:string})=>[c.phone,c.whatsapp].filter(Boo
 const email=(s:string)=>s.trim().toLowerCase();
 type Candidate={id:string;name:string;companyName:string;phones:string[];emails:string[];deleted:boolean;ordinal:number};
 const scientific=(s:string)=>/^\d[\d.]*e[+-]?\d+$/i.test(s.replace(/^[pl]:/i,''));
+
+const importedStageLabels:Record<string,string>={'new':'新客户','new_customer':'新客户','contacted':'已联系','replied':'已回复','catalogue_sent':'已回复','catalog_sent':'已回复','style_confirmed':'已确认需求','needs_confirmed':'已确认需求','quoted':'已报价','follow_up':'跟进中','won':'已成交','not_needed_now':'暂不需要','paused':'暂不需要','invalid_lead':'无效客户','新客户':'新客户','已联系':'已联系','已回复':'已回复','已发目录':'已回复','已发送目录':'已回复','已确认款式':'已确认需求','已确认需求':'已确认需求','已报价':'已报价','跟进中':'跟进中','已成交':'已成交','暂不需要':'暂不需要','无效客户':'无效客户'};
+const stageCodes:Record<string,string>={'新客户':'NEW','已联系':'CONTACTED','已回复':'REPLIED','已确认需求':'NEEDS_CONFIRMED','已报价':'QUOTED','跟进中':'FOLLOW_UP','已成交':'WON','暂不需要':'PAUSED','无效客户':'INVALID'};
+const importedCustomerTypes:Record<string,string>={'wholesaler':'批发商','importer':'进口商','distributor':'经销商','furniture_retailer':'家具零售','online_seller_/_e-commerce':'电商客户','online_seller_/_ecommerce':'电商客户','brand':'品牌客户','interior_designer_/_project_business':'其他','i_am_buying_for_personal_use':'其他','other_business':'其他','批发商':'批发商','进口商':'进口商','经销商':'经销商','家具零售':'家具零售','品牌客户':'品牌客户','电商客户':'电商客户','其他':'其他'};
+function normalizeImportedStage(value:string){if(!value.trim())return '';const raw=value.trim();const key=raw.toLowerCase().replace(/[\s-]+/g,'_');return importedStageLabels[key]??importedStageLabels[raw]??'';}
+function normalizeCustomerType(value:string){if(!value.trim())return '';const raw=value.trim();const key=raw.toLowerCase().replace(/\s+/g,'_');return importedCustomerTypes[key]??importedCustomerTypes[raw]??'';}
+
 export function metaDate(value:string,tz:string){
  let v=value.trim().replace(/^(\d{4}-\d{2}-\d{2}) /,'$1T').replace(/([+-]\d{2})(\d{2})$/,'$1:$2');
  if(/^\d{4}\/\d{2}\/\d{2}$/.test(v))v=v.replaceAll('/','-');
@@ -138,6 +145,9 @@ export async function previewMeta(input:unknown,user:Actor):Promise<MetaPreview>
   const row:MetaRow={row:index+2,key,values,original,status:'NEW',reason:'',warnings:ambiguous.map(f=>`多列可能对应${f}，未自动选择，请展开字段对应核对`),pending:[],candidates:[]};
   const overrides=request.overrides?.[String(row.row)]??{};
   for(const [f,value] of Object.entries(overrides))if(Object.hasOwn(values,f)&&!['leadId','formId'].includes(f))values[f as keyof MetaValues]=value.trim();
+  const originalStage=values.stage;if(originalStage){const normalizedStage=normalizeImportedStage(originalStage);if(normalizedStage)values.stage=normalizedStage;else row.warnings.push(`阻止：未识别客户阶段「${originalStage}」，请人工确认`);}
+
+  const originalCustomerType=values.customerType;if(originalCustomerType){const normalizedCustomerType=normalizeCustomerType(originalCustomerType);if(normalizedCustomerType)values.customerType=normalizedCustomerType;else{row.warnings.push(`客户身份「${originalCustomerType}」未识别，将按“其他”处理`);values.customerType='其他';}}
   if(!values.name)row.warnings.push('阻止：缺少客户姓名，请补充原始姓名');
   try{values.inquiryAt=metaDate(values.inquiryAt,settings.timezone);}catch{row.warnings.push('阻止：询盘日期缺失、不合法或在未来，请按原始资料补充 YYYY-MM-DD 日期');}
   for(const field of ['leadId','phone','whatsapp'] as const)if(scientific(values[field]))row.warnings.push(`阻止：${metaFields[field]} 已变成科学计数法，请重新下载 Meta 原始 CSV，不能恢复或猜测丢失数字`);
@@ -163,7 +173,7 @@ export async function previewMeta(input:unknown,user:Actor):Promise<MetaPreview>
  return preview;
 }
 
-const purchaseCodes:Record<string,string>={'批发商':'WHOLESALE','进口商':'IMPORTER','经销商':'DISTRIBUTOR','家具零售':'RETAILER','品牌客户':'BRAND','电商客户':'ECOMMERCE'};
+const purchaseCodes:Record<string,string>={'批发商':'WHOLESALE','进口商':'IMPORTER','经销商':'DISTRIBUTOR','家具零售':'RETAILER','品牌客户':'BRAND','电商客户':'ECOMMERCE','其他':'OTHER'};
 let commitQueue:Promise<unknown>=Promise.resolve();
 export function commitMeta(input:unknown,user:Actor){
  const next=commitQueue.then(()=>executeCommitMeta(input,user),()=>executeCommitMeta(input,user));
@@ -188,10 +198,10 @@ async function executeCommitMeta(input:unknown,user:Actor){
    const f=row.values;let customerId=row.targetId;
    if(customerId?.startsWith('row:'))customerId=newIds.get(customerId);
    if(row.status==='REPEAT'&&!customerId)throw new HttpError(400,'同文件中的首次留资未选中，请同时选择首次留资行');
-   if(row.status==='NEW'){
-    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,phone:f.phone,whatsapp:f.whatsapp,email:f.email,country:f.country,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:purchaseCodes[f.customerType]??'',quantity:/^\d+$/.test(f.quantity)?Number(f.quantity):null,inquiryAt:parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:user.id,currency:settings.currency,stage:'NEW',isQualified:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
+   if(row.status==='NEW'){const importedStage=stageCodes[f.stage]??'NEW';const importedPurchaseType=purchaseCodes[f.customerType]??'OTHER';
+    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,phone:f.phone,whatsapp:f.whatsapp,email:f.email,country:f.country,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:importedPurchaseType,quantity:/^\d+$/.test(f.quantity)?Number(f.quantity):null,inquiryAt:parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:user.id,currency:settings.currency,stage:importedStage,isQualified:importedStage==='INVALID'?false:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
     customerId=c.id;newIds.set(`row:${row.row}`,c.id);result.created++;
-    await tx.stageHistory.create({data:{customerId,changedBy:user.id,toStage:'NEW',note:'Meta CSV 智能导入'}});
+    await tx.stageHistory.create({data:{customerId,changedBy:user.id,toStage:importedStage,note:'CSV 智能导入'}});
    }else result.repeated++;
    const previous=await tx.leadSubmission.aggregate({where:{customerId:customerId!},_max:{ordinal:true}});
    const ordinal=row.status==='NEW'?1:Math.max(1,previous._max.ordinal??1)+1;
