@@ -144,11 +144,11 @@ model LeadSubmission {
  leadId String @default("")
  ordinal Int
  occurredAt DateTime
- values String
- raw String
+ values String @db.LongText
+ raw String @db.LongText
  filename String
  fileHash String
- translationPending String @default("[]")
+ translationPending String @db.Text
  createdAt DateTime @default(now())
  @@unique([customerId, ordinal])
  @@index([customerId, occurredAt])
