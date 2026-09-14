@@ -29,27 +29,26 @@ type MetricCustomer = {
 };
 
 /**
- * 是否已经联系过客户
+ * 是否已经联系客户
  *
- * 当前统计规则：
- * NEW = 尚未联系
- * 其他阶段 = 已经联系
+ * NEW = 未联系
+ * INVALID = 无效客户，不参与
+ * 其他阶段 = 已联系
  */
 function hasBeenContacted(customer: {
   stage: string;
 }) {
-  return customer.stage !== 'NEW';
+  return !['NEW', 'INVALID'].includes(customer.stage);
 }
 
 /**
  * 是否已经收到客户回复
  *
- * 最终统计规则：
+ * NEW = 未回复
+ * CONTACTED = 未回复
+ * INVALID = 排除
  *
- * NEW = 不算回复
- * CONTACTED = 不算回复
- *
- * 其他所有阶段都算已经回复：
+ * 其他阶段全部算回复：
  * REPLIED
  * NEEDS_CONFIRMED
  * QUOTED
@@ -57,13 +56,17 @@ function hasBeenContacted(customer: {
  * WON
  * PAUSED
  *
- * 完全按照当前客户阶段判断，
- * 不再使用 firstReplyAt 作为回复率兜底。
+ * 不再依赖 firstReplyAt。
+ * 不要求 isQualified === true。
  */
 function hasReplied(customer: {
   stage: string;
 }) {
-  return !['NEW', 'CONTACTED'].includes(customer.stage);
+  return ![
+    'NEW',
+    'CONTACTED',
+    'INVALID',
+  ].includes(customer.stage);
 }
 
 export function metrics(
@@ -74,9 +77,29 @@ export function metrics(
   }[]
 ) {
   /**
+   * 非无效客户
+   *
+   * 这是回复率的统计基础。
+   * 包括：
+   * - 待判断
+   * - 有效客户
+   *
+   * 排除：
+   * - INVALID 无效客户
+   */
+  const replyBase = customers.filter(
+    (c) => c.stage !== 'INVALID'
+  );
+
+  /**
    * 有效客户
    *
-   * INVALID 不参与有效率之后的销售转化指标。
+   * 继续用于：
+   * - 有效率
+   * - 报价率
+   * - 成交率
+   *
+   * 不用于限制回复率。
    */
   const valid = customers.filter(
     (c) =>
@@ -85,25 +108,25 @@ export function metrics(
   );
 
   /**
-   * 已联系客户
+   * 已联系
    *
-   * 有效客户中：
-   * NEW 不算已联系
-   * 其他阶段全部算已联系
+   * 非无效客户中：
+   * NEW 不算
+   * 其他阶段算已联系
    */
-  const contacted = valid.filter(
+  const contacted = replyBase.filter(
     (c) => hasBeenContacted(c)
   );
 
   /**
-   * 已回复客户
+   * 已回复
    *
-   * 有效客户中：
-   * NEW 不算回复
-   * CONTACTED 不算回复
+   * 非无效客户中：
+   * NEW 不算
+   * CONTACTED 不算
    * 其他阶段全部算回复
    */
-  const replied = valid.filter(
+  const replied = replyBase.filter(
     (c) => hasReplied(c)
   );
 
@@ -151,14 +174,14 @@ export function metrics(
 
     kpis: [
       /**
-       * 1. 询盘数
+       * 1. 新增询盘
        */
       customers.length,
 
       /**
-       * 2. 有效率
+       * 2. 客户有效率
        *
-       * 有效客户 ÷ 总询盘
+       * 已判断有效客户 ÷ 总询盘
        */
       ratio(
         valid.length,
@@ -168,24 +191,22 @@ export function metrics(
       /**
        * 3. 客户回复率
        *
-       * 已回复客户 ÷ 已联系客户
+       * 已回复的非无效客户
+       * ÷
+       * 全部非无效客户
        *
-       * NEW：
-       * 不进入分母，也不进入分子
-       *
-       * CONTACTED：
-       * 进入分母，不进入分子
-       *
-       * 其他阶段：
-       * 同时进入分母和分子
+       * 待判断客户正常参与。
+       * INVALID 不参与。
        */
       ratio(
         replied.length,
-        contacted.length
+        replyBase.length
       ),
 
       /**
        * 4. 报价率
+       *
+       * 已报价有效客户 ÷ 有效客户
        */
       ratio(
         quoted.length,
@@ -194,6 +215,8 @@ export function metrics(
 
       /**
        * 5. 成交率
+       *
+       * 已成交有效客户 ÷ 有效客户
        */
       ratio(
         won.length,
@@ -210,7 +233,6 @@ export function metrics(
     ],
   };
 }
-
 export async function dashboard(
   user: Actor,
   period: Period,
