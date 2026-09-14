@@ -29,9 +29,54 @@ function statusSignature(row:MetaRow){return JSON.stringify([row.status,row.targ
 async function classify(rows:MetaRow[],decisions:Record<string,MetaDecision>,client:Prisma.TransactionClient=db){
  const customers=await client.customer.findMany({include:{submissions:{select:{ordinal:true,values:true}}}});
  const candidates:Candidate[]=customers.map(c=>{
-  const history=c.submissions.map(s=>JSON.parse(s.values) as MetaValues);
-  return {id:c.id,name:c.name,companyName:c.companyName,phones:[...new Set([...phones(c),...history.flatMap(phones)])],emails:[...new Set([c.email,...history.map(v=>v.email)].filter(Boolean).map(email))],deleted:!!c.deletedAt,ordinal:Math.max(1,...c.submissions.map(s=>s.ordinal))};
- });
+  const history=c.submissions.flatMap(s=>{
+    try{
+      const parsed=JSON.parse(s.values);
+
+      if(
+        parsed &&
+        typeof parsed==='object' &&
+        !Array.isArray(parsed)
+      ){
+        return [parsed as MetaValues];
+      }
+
+      return [];
+    }catch{
+      return [];
+    }
+  });
+
+  return {
+    id:c.id,
+    name:c.name,
+    companyName:c.companyName,
+
+    phones:[
+      ...new Set([
+        ...phones(c),
+        ...history.flatMap(phones)
+      ])
+    ],
+
+    emails:[
+      ...new Set([
+        c.email,
+        ...history.map(v=>v.email)
+      ]
+        .filter(Boolean)
+        .map(email)
+      )
+    ],
+
+    deleted:!!c.deletedAt,
+
+    ordinal:Math.max(
+      1,
+      ...c.submissions.map(s=>s.ordinal)
+    )
+  };
+});
  const imported=new Set((await client.leadSubmission.findMany({where:{eventKey:{in:rows.map(r=>r.key)}},select:{eventKey:true}})).map(r=>r.eventKey));
  const seen=new Set<string>();
  const ordered=[...rows].sort((a,b)=>a.values.inquiryAt.localeCompare(b.values.inquiryAt)||a.row-b.row);
