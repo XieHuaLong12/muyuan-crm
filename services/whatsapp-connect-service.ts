@@ -20,8 +20,9 @@ function encrypt(value: string) {
 
 export function decryptWhatsAppAccessToken(value: string) {
   if (!value) return '';
-  const [iv, tag, data] = value.split('.').map((part) => Buffer.from(part, 'base64'));
-  if (!iv || !tag || !data) throw new Error('WhatsApp access token 格式无效');
+  const parts = value.split('.');
+  if (parts.length !== 3) throw new Error('WhatsApp access token 格式无效');
+  const [iv, tag, data] = parts.map((part) => Buffer.from(part, 'base64'));
   const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), iv);
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
@@ -88,7 +89,7 @@ export async function whatsappConnectionStatus(): Promise<WhatsAppConnectionStat
 const connectInput = z.object({
   code: z.string().trim().min(10).max(4096),
   wabaId: z.string().regex(/^\d+$/, 'WABA ID 无效'),
-  phoneNumberId: z.string().regex(/^\d+$/, 'Phone Number ID 无效'),
+  phoneNumberId: z.string().regex(/^\d+$/, 'Phone Number ID 无效').optional(),
   businessId: z.string().regex(/^\d+$/).optional().default(''),
 });
 
@@ -126,7 +127,9 @@ async function subscribeWaba(wabaId: string, accessToken: string) {
   }
 }
 
-async function phoneMetadata(phoneNumberId: string, accessToken: string) {
+type PhoneMetadata = { id: string; displayPhoneNumber: string; verifiedName: string };
+
+async function phoneMetadata(phoneNumberId: string, accessToken: string): Promise<PhoneMetadata> {
   const url = new URL(`${graphBase()}/${phoneNumberId}`);
   url.searchParams.set('fields', 'display_phone_number,verified_name');
   const response = await fetch(url, {
@@ -134,17 +137,40 @@ async function phoneMetadata(phoneNumberId: string, accessToken: string) {
     signal: AbortSignal.timeout(10000),
     redirect: 'error',
   });
-  if (!response.ok) return { displayPhoneNumber: '', verifiedName: '' };
+  if (!response.ok) return { id: phoneNumberId, displayPhoneNumber: '', verifiedName: '' };
   const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   return {
+    id: phoneNumberId,
     displayPhoneNumber: typeof body.display_phone_number === 'string' ? body.display_phone_number : '',
     verifiedName: typeof body.verified_name === 'string' ? body.verified_name : '',
   };
 }
 
+async function discoverPhoneNumber(wabaId: string, accessToken: string): Promise<PhoneMetadata> {
+  const url = new URL(`${graphBase()}/${wabaId}/phone_numbers`);
+  url.searchParams.set('fields', 'id,display_phone_number,verified_name');
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(10000),
+    redirect: 'error',
+  });
+  const body = (await response.json().catch(() => ({}))) as { data?: Array<Record<string, unknown>>; error?: { message?: string } };
+  if (!response.ok) throw new HttpError(502, body.error?.message ? `无法读取 WABA 电话号码：${body.error.message}` : '无法读取 WABA 电话号码');
+  const rows = (body.data ?? []).map((row) => ({
+    id: typeof row.id === 'string' ? row.id : '',
+    displayPhoneNumber: typeof row.display_phone_number === 'string' ? row.display_phone_number : '',
+    verifiedName: typeof row.verified_name === 'string' ? row.verified_name : '',
+  })).filter((row) => row.id);
+  if (rows.length === 1) return rows[0];
+  if (!rows.length) throw new HttpError(409, 'Meta 没有返回可用的 WhatsApp 电话号码');
+  throw new HttpError(409, `这个 WABA 有 ${rows.length} 个电话号码。请在 Hostinger 设置 WHATSAPP_PREFERRED_PHONE_NUMBER_ID 后重试。`);
+}
+
 export async function completeWhatsAppEmbeddedSignup(input: unknown) {
   const value = connectInput.parse(input);
   if (!process.env.META_EMBEDDED_SIGNUP_CONFIG_ID?.trim()) throw new HttpError(503, 'Embedded Signup Configuration ID 尚未配置');
+  const configuredPhoneId = process.env.WHATSAPP_PREFERRED_PHONE_NUMBER_ID?.trim();
+  const initialPhoneId = value.phoneNumberId || configuredPhoneId || '';
   const now = new Date();
   await db.whatsAppIntegration.upsert({
     where: { id: 'primary' },
@@ -154,7 +180,7 @@ export async function completeWhatsAppEmbeddedSignup(input: unknown) {
       connectionMode: 'COEXISTENCE',
       businessId: value.businessId,
       wabaId: value.wabaId,
-      phoneNumberId: value.phoneNumberId,
+      phoneNumberId: initialPhoneId,
       encryptedAccessToken: '',
       scopes: '',
       lastError: '',
@@ -163,7 +189,7 @@ export async function completeWhatsAppEmbeddedSignup(input: unknown) {
       status: 'CONNECTING',
       businessId: value.businessId,
       wabaId: value.wabaId,
-      phoneNumberId: value.phoneNumberId,
+      phoneNumberId: initialPhoneId,
       lastError: '',
     },
   });
@@ -171,7 +197,9 @@ export async function completeWhatsAppEmbeddedSignup(input: unknown) {
   try {
     const token = await exchangeCode(value.code);
     await subscribeWaba(value.wabaId, token.accessToken);
-    const meta = await phoneMetadata(value.phoneNumberId, token.accessToken);
+    const meta = initialPhoneId
+      ? await phoneMetadata(initialPhoneId, token.accessToken)
+      : await discoverPhoneNumber(value.wabaId, token.accessToken);
     const expiresAt = token.expiresIn ? new Date(Date.now() + token.expiresIn * 1000) : null;
     await db.whatsAppIntegration.update({
       where: { id: 'primary' },
@@ -180,7 +208,7 @@ export async function completeWhatsAppEmbeddedSignup(input: unknown) {
         connectionMode: 'COEXISTENCE',
         businessId: value.businessId,
         wabaId: value.wabaId,
-        phoneNumberId: value.phoneNumberId,
+        phoneNumberId: meta.id,
         displayPhoneNumber: meta.displayPhoneNumber,
         verifiedName: meta.verifiedName,
         encryptedAccessToken: encrypt(token.accessToken),
