@@ -229,3 +229,25 @@ model TranslationSetting {
  endpoint String @default("")
  encryptedKey String @default("")
 }
+
+model WhatsAppIntegration {
+ id String @id @default("primary")
+ status String @default("DISCONNECTED")
+ connectionMode String @default("COEXISTENCE")
+ businessId String @default("")
+ wabaId String @default("")
+ phoneNumberId String @default("")
+ displayPhoneNumber String @default("")
+ verifiedName String @default("")
+ encryptedAccessToken String @db.LongText
+ tokenExpiresAt DateTime?
+ scopes String @db.Text
+ subscribedAt DateTime?
+ connectedAt DateTime?
+ lastVerifiedAt DateTime?
+ lastError String @db.Text
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([wabaId])
+ @@index([phoneNumberId])
+}
