@@ -2,7 +2,7 @@ generator client {
  provider = "prisma-client-js"
 }
 datasource db {
- provider = "mysql"
+ provider = "sqlite"
  url = env("DATABASE_URL")
 }
 model User {
@@ -23,6 +23,8 @@ model Customer {
  city String @default("")
  phone String @default("")
  whatsapp String @default("")
+ whatsappNormalized String @default("")
+ waId String?
  email String @default("")
  source String @default("OTHER")
  sourceDetail String @default("")
@@ -52,6 +54,17 @@ model Customer {
  lostAt DateTime?
  lastFollowUpAt DateTime?
  nextFollowUpAt DateTime?
+ aiScore Int @default(0)
+ aiPriority String @default("UNRANKED")
+ aiIntent String @default("UNKNOWN")
+ aiSummary String @default("")
+ aiNextAction String @default("")
+ aiReason String @default("")
+ aiRisk String @default("")
+ aiLastAnalyzedAt DateTime?
+ lastWhatsAppAt DateTime?
+ lastInboundAt DateTime?
+ lastOutboundAt DateTime?
  notes String @default("")
  createdAt DateTime @default(now())
  inquiryAt DateTime?
@@ -61,6 +74,8 @@ model Customer {
  stageHistory StageHistory[]
  deals Deal[]
  submissions LeadSubmission[]
+ whatsappMessages WhatsAppMessage[]
+ intelligence CustomerIntelligence?
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -72,6 +87,11 @@ model Customer {
  @@index([email])
  @@index([phone])
  @@index([whatsapp])
+ @@index([whatsappNormalized])
+ @@index([waId])
+ @@index([aiScore])
+ @@index([aiPriority])
+ @@index([lastWhatsAppAt])
 }
 model FollowUp {
  id String @id @default(cuid())
@@ -144,14 +164,57 @@ model LeadSubmission {
  leadId String @default("")
  ordinal Int
  occurredAt DateTime
- values String @db.LongText
- raw String @db.LongText
+ values String
+ raw String
  filename String
  fileHash String
- translationPending String @db.Text
+ translationPending String
  createdAt DateTime @default(now())
  @@unique([customerId, ordinal])
  @@index([customerId, occurredAt])
+}
+
+model WhatsAppMessage {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id])
+ waMessageId String @unique
+ waId String @default("")
+ direction String
+ messageType String @default("TEXT")
+ text String @default("")
+ status String @default("")
+ sentAt DateTime
+ raw String @default("")
+ aiProcessedAt DateTime?
+ createdAt DateTime @default(now())
+ @@index([customerId, sentAt])
+ @@index([waId])
+}
+
+model CustomerIntelligence {
+ id String @id @default(cuid())
+ customerId String @unique
+ customer Customer @relation(fields: [customerId], references: [id])
+ score Int @default(0)
+ priority String @default("UNRANKED")
+ intent String @default("UNKNOWN")
+ customerType String @default("UNKNOWN")
+ productsJson String @default("[]")
+ quantity Int?
+ currentNeed String @default("")
+ mainObjection String @default("")
+ suggestedStage String @default("")
+ nextAction String @default("")
+ reason String @default("")
+ risk String @default("")
+ confidence Int @default(0)
+ lastMessageAt DateTime?
+ analyzedAt DateTime?
+ updatedAt DateTime @updatedAt
+ @@index([priority])
+ @@index([score])
+ @@index([intent])
 }
 
 model MetaImportRun {
