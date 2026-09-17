@@ -15,12 +15,14 @@ test('WhatsApp Coexistence：授权码交换、WABA订阅和密钥加密保存',
     META_EMBEDDED_SIGNUP_CONFIG_ID: process.env.META_EMBEDDED_SIGNUP_CONFIG_ID,
     META_GRAPH_VERSION: process.env.META_GRAPH_VERSION,
     WHATSAPP_VERIFY_TOKEN: process.env.WHATSAPP_VERIFY_TOKEN,
+    WHATSAPP_PREFERRED_PHONE_NUMBER_ID: process.env.WHATSAPP_PREFERRED_PHONE_NUMBER_ID,
   };
   process.env.META_APP_ID = '123456789';
   process.env.META_APP_SECRET = 'test-app-secret';
   process.env.META_EMBEDDED_SIGNUP_CONFIG_ID = '987654321';
   process.env.META_GRAPH_VERSION = 'v26.0';
   process.env.WHATSAPP_VERIFY_TOKEN = 'test-verify-token';
+  process.env.WHATSAPP_PREFERRED_PHONE_NUMBER_ID = '6677889900';
 
   const calls: string[] = [];
   globalThis.fetch = async (input, init) => {
@@ -43,11 +45,11 @@ test('WhatsApp Coexistence：授权码交换、WABA订阅和密钥加密保存',
     const result = await completeWhatsAppEmbeddedSignup({
       code: 'test-authorization-code-1234567890',
       wabaId: '1122334455',
-      phoneNumberId: '6677889900',
       businessId: '9988776655',
     });
     assert.equal(result.connection?.status, 'CONNECTED');
     assert.equal(result.connection?.connectionMode, 'COEXISTENCE');
+    assert.equal(result.connection?.phoneNumberId, '6677889900');
     assert.equal(result.connection?.displayPhoneNumber, '+86 158 1569 4430');
     assert.ok(calls.some((call) => call.includes('/oauth/access_token')));
     assert.ok(calls.some((call) => call.includes('/1122334455/subscribed_apps')));
