@@ -5,12 +5,33 @@ on:
     branches: [main]
   push:
     branches:
-      - feature/ai-whatsapp-foundation
+      - main
+      - feature/whatsapp-webhook
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: muyuan_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/muyuan_test
+      AUTH_SECRET: ci-auth-secret-at-least-32-characters-long
+      SEED_ADMIN_PASSWORD: ci-admin-password
+      WEBHOOK_SECRET: ci-webhook-secret
+      DEFAULT_TIMEZONE: Asia/Shanghai
+      DEFAULT_CURRENCY: CNY
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,8 +47,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Initialize local test database
-        run: pnpm db:init
+      - name: Prepare CI env file
+        run: |
+          cat > .env <<'EOF'
+          DATABASE_URL="mysql://root:root@127.0.0.1:3306/muyuan_test"
+          AUTH_SECRET="ci-auth-secret-at-least-32-characters-long"
+          SEED_ADMIN_PASSWORD="ci-admin-password"
+          WEBHOOK_SECRET="ci-webhook-secret"
+          DEFAULT_TIMEZONE="Asia/Shanghai"
+          DEFAULT_CURRENCY="CNY"
+          EOF
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Push schema to MySQL
+        run: pnpm exec prisma db push --skip-generate
+
+      - name: Seed test database
+        run: pnpm db:seed
 
       - name: Test
         run: pnpm test
