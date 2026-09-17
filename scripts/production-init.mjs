@@ -1,5 +1,8 @@
 import { scryptSync, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+
+if (fs.existsSync('.env')) process.loadEnvFile('.env');
 
 function required(name) {
   const value = process.env[name];
