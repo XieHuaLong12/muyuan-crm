@@ -29,7 +29,7 @@ type ConnectionStatus = {
 
 type EmbeddedSession = {
   wabaId: string;
-  phoneNumberId: string;
+  phoneNumberId?: string;
   businessId?: string;
 };
 
@@ -108,15 +108,15 @@ export function WhatsAppConnect() {
       if (!data || data.type !== 'WA_EMBEDDED_SIGNUP') return;
       const eventName = typeof data.event === 'string' ? data.event : '';
       const payload = data.data && typeof data.data === 'object' ? data.data as Record<string, unknown> : {};
-      if (eventName === 'FINISH') {
+      if (eventName === 'FINISH' || eventName === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
         const wabaId = String(payload.waba_id ?? '');
         const phoneNumberId = String(payload.phone_number_id ?? '');
         const businessId = String(payload.business_id ?? '');
-        if (wabaId && phoneNumberId) {
-          sessionRef.current = { wabaId, phoneNumberId, businessId };
-          setInfo('Meta 已确认 WhatsApp 账号和号码，正在完成 CRM 连接…');
+        if (wabaId) {
+          sessionRef.current = { wabaId, phoneNumberId: phoneNumberId || undefined, businessId: businessId || undefined };
+          setInfo('Meta 已确认 WhatsApp Business 账号，正在完成 CRM 连接…');
         }
-      } else if (eventName === 'CANCEL') {
+      } else if (eventName === 'CANCEL' || eventName === 'CANCEL_WHATSAPP_BUSINESS_APP_ONBOARDING') {
         setInfo('你取消了 WhatsApp 连接，没有修改现有号码。');
       } else if (eventName === 'ERROR') {
         setError(typeof payload.error_message === 'string' ? payload.error_message : 'Meta Embedded Signup 返回错误');
@@ -148,12 +148,12 @@ export function WhatsAppConnect() {
           return;
         }
         const session = await waitForSession();
-        if (!session) throw new Error('Meta 已返回授权码，但没有返回 WABA / Phone Number ID。请确认使用的是 WhatsApp Business App Coexistence 配置。');
+        if (!session) throw new Error('Meta 已返回授权码，但没有返回 WABA ID。请确认使用的是 WhatsApp Business App Coexistence 配置。');
         const next = await api<ConnectionStatus>('whatsapp/connect', 'POST', {
           code,
           wabaId: session.wabaId,
           phoneNumberId: session.phoneNumberId,
-          businessId: session.businessId || undefined,
+          businessId: session.businessId,
         });
         setStatus(next);
         setInfo('WhatsApp 已连接到 CRM，Webhook 已订阅。');
@@ -169,6 +169,7 @@ export function WhatsAppConnect() {
       extras: {
         setup: {},
         featureType: 'whatsapp_business_app_onboarding',
+        version: 'v4',
         sessionInfoVersion: '3',
       },
     });
