@@ -96,7 +96,7 @@ function deepSeekConfig() {
   return {
     apiKey,
     baseUrl: (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, ''),
-    model: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
+    model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
   };
 }
 
@@ -352,7 +352,7 @@ JSON 示例：
 
   return {
     customerId,
-    model: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
+    model: process.env.DEEPSEEK_MODEL || 'deepseek-flash',
     analysis,
     analyzedAt: now,
   };
