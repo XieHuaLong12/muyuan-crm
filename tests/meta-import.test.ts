@@ -59,7 +59,7 @@ test('智能导入：预览零写入、幂等、重复留资、疑似重复、�
   assert.equal(await db.leadSubmission.count({where:{eventKey:`meta:${prefix}-concurrent`}}),1);
   const retired=await db.customer.create({data:{name:'Deleted customer',phone:'+441111009999',ownerId:user.id,deletedAt:new Date()}});ids.push(retired.id);
   const deleted=await preview(make(prefix+'-deleted','Deleted','+441111009999'));assert.equal(deleted.rows[0].status,'SUSPECT');assert.ok(deleted.rows[0].candidates[0].deleted);
-  assert.deepEqual(await db.$queryRawUnsafe('PRAGMA foreign_key_check'),[]);
+  if((process.env.DATABASE_URL??'').startsWith('file:'))assert.deepEqual(await db.$queryRawUnsafe('PRAGMA foreign_key_check'),[]);
  }finally{
   await db.leadSubmission.deleteMany({where:{customerId:{in:ids}}});await db.stageHistory.deleteMany({where:{customerId:{in:ids}}});await db.customer.deleteMany({where:{id:{in:ids}}});await db.metaImportRun.deleteMany({where:{id:{in:runIds}}});await db.$disconnect();
  }
