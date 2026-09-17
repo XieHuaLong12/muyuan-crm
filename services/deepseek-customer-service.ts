@@ -75,6 +75,9 @@ function safeJson(value: string) {
 function sanitizeLeadValues(value: unknown) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
   const record = { ...(value as Record<string, unknown>) };
+  for (const [key, item] of Object.entries(record)) {
+    if (typeof item === 'string') record[key] = clip(item, 1200);
+  }
   for (const key of [
     'phone',
     'whatsapp',
@@ -240,7 +243,7 @@ export async function analyzeCustomerWithDeepSeek(customerId: string, user: Acto
     })),
     recentLeadSubmissions: [...customer.submissions].reverse().map((item) => ({
       at: item.occurredAt.toISOString(),
-      values: sanitizeLeadValues(safeJson(clip(item.values, 4000))),
+      values: sanitizeLeadValues(safeJson(item.values)),
     })),
     recentDeals: customer.deals.map((deal) => ({
       amount: Number(deal.dealAmount),
