@@ -72,6 +72,21 @@ function safeJson(value: string) {
   }
 }
 
+function sanitizeLeadValues(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const record = { ...(value as Record<string, unknown>) };
+  for (const key of [
+    'phone',
+    'whatsapp',
+    'email',
+    'name',
+    'firstName',
+    'lastName',
+    'leadId',
+  ]) delete record[key];
+  return record;
+}
+
 function deepSeekConfig() {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
   if (!apiKey) throw new HttpError(503, '尚未配置 DEEPSEEK_API_KEY');
@@ -225,7 +240,7 @@ export async function analyzeCustomerWithDeepSeek(customerId: string, user: Acto
     })),
     recentLeadSubmissions: [...customer.submissions].reverse().map((item) => ({
       at: item.occurredAt.toISOString(),
-      values: safeJson(clip(item.values, 4000)),
+      values: sanitizeLeadValues(safeJson(clip(item.values, 4000))),
     })),
     recentDeals: customer.deals.map((deal) => ({
       amount: Number(deal.dealAmount),
