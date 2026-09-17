@@ -2,7 +2,7 @@ generator client {
  provider = "prisma-client-js"
 }
 datasource db {
- provider = "sqlite"
+ provider = "mysql"
  url = env("DATABASE_URL")
 }
 model User {
@@ -164,11 +164,11 @@ model LeadSubmission {
  leadId String @default("")
  ordinal Int
  occurredAt DateTime
- values String
- raw String
+ values String @db.LongText
+ raw String @db.LongText
  filename String
  fileHash String
- translationPending String
+ translationPending String @db.Text
  createdAt DateTime @default(now())
  @@unique([customerId, ordinal])
  @@index([customerId, occurredAt])
@@ -182,10 +182,10 @@ model WhatsAppMessage {
  waId String @default("")
  direction String
  messageType String @default("TEXT")
- text String @default("")
+ text String @db.Text
  status String @default("")
  sentAt DateTime
- raw String @default("")
+ raw String @db.LongText
  aiProcessedAt DateTime?
  createdAt DateTime @default(now())
  @@index([customerId, sentAt])
@@ -200,7 +200,7 @@ model CustomerIntelligence {
  priority String @default("UNRANKED")
  intent String @default("UNKNOWN")
  customerType String @default("UNKNOWN")
- productsJson String @default("[]")
+ productsJson String @db.Text
  quantity Int?
  currentNeed String @default("")
  mainObjection String @default("")
