@@ -100,7 +100,7 @@ function deepSeekConfig() {
   };
 }
 
-async function callDeepSeek(systemPrompt: string, context: unknown, retry = false) {
+export async function callDeepSeek<T>(systemPrompt: string, context: unknown, parse: (input: unknown) => T, retry = false): Promise<T> {
   const { apiKey, baseUrl, model } = deepSeekConfig();
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
@@ -141,14 +141,14 @@ async function callDeepSeek(systemPrompt: string, context: unknown, retry = fals
 
   const content = body.choices?.[0]?.message?.content?.trim();
   if (!content) {
-    if (!retry) return callDeepSeek(systemPrompt, context, true);
+    if (!retry) return callDeepSeek(systemPrompt, context, parse, true);
     throw new HttpError(502, 'DeepSeek 返回了空内容');
   }
 
   try {
-    return finalizeDeepSeekAnalysis(JSON.parse(content));
+    return parse(JSON.parse(content));
   } catch (error) {
-    if (!retry) return callDeepSeek(systemPrompt, context, true);
+    if (!retry) return callDeepSeek(systemPrompt, context, parse, true);
     throw new HttpError(
       502,
       `DeepSeek 返回的客户分析格式不正确：${error instanceof Error ? error.message : 'unknown error'}`
@@ -292,7 +292,7 @@ JSON 示例：
   "confidence": 92
 }`;
 
-  const analysis = await callDeepSeek(systemPrompt, context);
+  const analysis = await callDeepSeek(systemPrompt, context, finalizeDeepSeekAnalysis);
   const now = new Date();
   const lastMessageAt = customer.whatsappMessages[0]?.sentAt ?? null;
 
