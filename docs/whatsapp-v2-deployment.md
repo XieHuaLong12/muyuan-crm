@@ -25,7 +25,9 @@
 
 原仓库 schema 是 MySQL，但旧迁移仍是 SQLite。旧文件已原样移至 `prisma/legacy-sqlite-migrations/`，MySQL 使用新基线 + V2 增量迁移。历史消息 `text` 数据列保留，通过 Prisma 的 `content @map("text")` 读取；不会清空消息或客户。
 
-先备份生产数据库。已有通过 `db push` 创建的 V1 MySQL 数据库，在首次部署此版本前运行：
+已有通过 `db push` 创建、尚无迁移登记的 V1 MySQL 数据库，会在构建/启动时自动验证结构、登记基线并执行迁移，无需单独进入 Hostinger 执行命令。若数据库结构不匹配或存在其他迁移历史，脚本会停止，避免错误登记。
+
+如需手动执行同样的升级流程，可先备份数据库后运行：
 
 ```sh
 pnpm install --no-frozen-lockfile

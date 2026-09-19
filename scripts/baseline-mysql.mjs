@@ -11,4 +11,4 @@ if (diff.status !== 0) {
   process.exit(diff.status || 1);
 }
 const resolve = spawnSync(process.execPath, [cli, 'migrate', 'resolve', '--applied', '20260918000000_mysql_baseline'], { stdio: 'inherit' });
-process.exit(resolve.status || 0);
+process.exit(resolve.status ?? 1);

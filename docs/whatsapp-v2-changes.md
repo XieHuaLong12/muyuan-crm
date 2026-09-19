@@ -46,3 +46,5 @@ A	docs/whatsapp-v2-changes.md
 生产数据库迁移与真实 Gupshup/DeepSeek 凭据联调需在部署环境进行。
 
 界面验收：实际 CustomerDetail 组件 + 模拟 API，Chrome 无头浏览器验证 AI 草稿使用与发送交互；1600px 桌面左右比例约 1.5:1，390px 手机无横向溢出，无浏览器运行错误。
+
+GitHub 直接发布适配：production-init 自动识别无迁移历史的 V1 MySQL 库，通过结构对比后登记基线并迁移；CI 额外验证旧库升级、重复启动和历史数据保留。
