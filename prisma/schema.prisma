@@ -62,6 +62,7 @@ model Customer {
  aiReason String @default("")
  aiRisk String @default("")
  aiLastAnalyzedAt DateTime?
+ lastContactAt DateTime?
  lastWhatsAppAt DateTime?
  lastInboundAt DateTime?
  lastOutboundAt DateTime?
@@ -178,16 +179,20 @@ model WhatsAppMessage {
  id String @id @default(cuid())
  customerId String
  customer Customer @relation(fields: [customerId], references: [id])
- waMessageId String @unique
+ waMessageId String? @unique
+ requestId String? @unique
+ providerMessageId String? @unique
+ sender String @default("")
  waId String @default("")
  direction String
  messageType String @default("TEXT")
- text String @db.Text
+ content String @map("text") @db.Text
  status String @default("")
  sentAt DateTime
  raw String @db.LongText
  aiProcessedAt DateTime?
  createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
  @@index([customerId, sentAt])
  @@index([waId])
 }

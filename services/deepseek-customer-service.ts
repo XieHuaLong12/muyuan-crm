@@ -166,7 +166,7 @@ export async function analyzeCustomerWithDeepSeek(customerId: string, user: Acto
         select: {
           direction: true,
           messageType: true,
-          text: true,
+          content: true,
           sentAt: true,
         },
       },
@@ -209,7 +209,7 @@ export async function analyzeCustomerWithDeepSeek(customerId: string, user: Acto
     .map((message) => ({
       direction: message.direction,
       type: message.messageType,
-      text: clip(message.text || '', 1800),
+      text: clip(message.content || '', 1800),
       at: message.sentAt.toISOString(),
     }));
 

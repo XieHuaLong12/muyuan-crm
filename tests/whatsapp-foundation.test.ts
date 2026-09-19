@@ -40,7 +40,7 @@ test('AI/WhatsApp基础模型：客户标准化号码、消息和智能画像可
         waId: '99988776655441',
         direction: 'INBOUND',
         messageType: 'TEXT',
-        text: 'Please quote 30 pcs.',
+        content: 'Please quote 30 pcs.',
         sentAt: new Date(),
         raw: '{"test":true}',
       },
