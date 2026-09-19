@@ -1,3 +1,6 @@
+import { Prisma } from '@prisma/client';
+import { HttpError } from '@/lib/auth';
+import { parseGupshup, statusPredecessors } from '@/lib/gupshup';
 import { db } from '@/lib/db';
 import { normalizeWhatsApp } from '@/lib/whatsapp';
 import { resolveWhatsAppCustomer } from '@/services/whatsapp-identity-service';
@@ -89,204 +92,95 @@ export function extractWhatsAppMessageText(message: Record<string, unknown>): st
 
 function parseTimestamp(value: string | undefined) {
   const seconds = Number(value);
-  return Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : new Date();
+  return Number.isFinite(seconds) && seconds > 0 && seconds < 8e12 ? new Date(seconds * 1000) : new Date();
 }
 
-async function defaultOwnerId() {
-  const configured = process.env.WHATSAPP_DEFAULT_OWNER_EMAIL?.trim().toLowerCase();
-  if (configured) {
-    const owner = await db.user.findUnique({ where: { email: configured }, select: { id: true } });
-    if (owner) return owner.id;
+type Incoming = { id: string; phone: string; name: string; content: string; messageType: string; sentAt: Date; raw: unknown; direction?: 'INBOUND' | 'OUTBOUND'; sender?: string };
+
+async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
+  const waId = normalizeWhatsApp(input.phone);
+  if (!/^[1-9]\d{6,14}$/.test(waId)) throw new HttpError(400, 'Webhook 电话号码不合法');
+  const direction = input.direction || 'INBOUND';
+  if (direction === 'INBOUND') result.received++; else result.outboundEchoes++;
+  await db.$transaction(async tx => {
+    // One short database lock serializes identity resolution across app instances.
+    // No provider or AI requests run while holding this lock.
+    await tx.$queryRaw(Prisma.sql`SELECT id FROM Setting WHERE id = 'system' FOR UPDATE`);
+    if (await tx.whatsAppMessage.findUnique({ where: { waMessageId: input.id } })) {
+      result.duplicateMessages++; return;
+    }
+    const resolved = await resolveWhatsAppCustomer({ waId, phone: input.phone }, tx);
+    if (resolved.status === 'AMBIGUOUS') {
+      throw new HttpError(409, '多个客户匹配此 WhatsApp 号码，请合并重复客户后重试');
+    }
+    let customerId: string;
+    if (resolved.status === 'MATCHED') { customerId = resolved.customerId; result.matchedCustomers++; }
+    else {
+      const email = process.env.WHATSAPP_DEFAULT_OWNER_EMAIL?.trim().toLowerCase();
+      const owner = (email ? await tx.user.findUnique({ where: { email } }) : null) ||
+        await tx.user.findFirst({ where: { role: 'ADMIN' }, orderBy: { createdAt: 'asc' } });
+      if (!owner) throw new Error('CRM 中没有可分配的新客户负责人');
+      const customer = await tx.customer.create({ data: { name: input.name || `WhatsApp ${waId.slice(-4)}`,
+        ownerId: owner.id, phone: waId, whatsapp: waId, whatsappNormalized: waId, waId,
+        source: 'WHATSAPP', stage: 'NEW', inquiryAt: input.sentAt } });
+      customerId = customer.id;
+      await tx.stageHistory.create({ data: { customerId, toStage: 'NEW', changedBy: owner.id, note: 'WhatsApp 首次消息自动创建客户' } });
+      result.createdCustomers++;
+    }
+    const customer = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
+    const latest = (previous: Date | null) => previous && previous > input.sentAt ? previous : input.sentAt;
+    await tx.whatsAppMessage.create({ data: { customerId, waMessageId: input.id, waId, direction,
+      sender: input.sender || (direction === 'INBOUND' ? waId : 'BUSINESS'), content: input.content,
+      messageType: input.messageType, status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT',
+      sentAt: input.sentAt, raw: JSON.stringify(input.raw) } });
+    await tx.customer.update({ where: { id: customerId }, data: { waId,
+      lastContactAt: latest(customer.lastContactAt), lastWhatsAppAt: latest(customer.lastWhatsAppAt),
+      ...(direction === 'INBOUND' ? { lastInboundAt: latest(customer.lastInboundAt) } : { lastOutboundAt: latest(customer.lastOutboundAt) }) } });
+  });
+}
+
+export async function applyWhatsAppStatus(id: string, status: string, gsId?: string) {
+  const predecessors = statusPredecessors(status);
+  if (!predecessors.length) return 0;
+  const updated = await db.whatsAppMessage.updateMany({ where: {
+    direction: 'OUTBOUND', status: { in: predecessors },
+    OR: [{ waMessageId: id }, { providerMessageId: gsId || id }],
+  }, data: { status, ...(gsId ? { waMessageId: id } : {}) } });
+  return updated.count;
+}
+
+export async function ingestWhatsAppWebhook(input: unknown): Promise<WhatsAppWebhookResult> {
+  const result: WhatsAppWebhookResult = { received: 0, outboundEchoes: 0, createdCustomers: 0,
+    matchedCustomers: 0, duplicateMessages: 0, ambiguous: 0, statusesUpdated: 0 };
+  const root = asObject(input);
+  if (!root) throw new HttpError(400, 'Webhook 必须为 JSON 对象');
+  if (root.object !== 'whatsapp_business_account') {
+    const parsed = parseGupshup(input);
+    if (parsed.kind === 'message') await storeMessage(parsed, result);
+    if (parsed.kind === 'status') result.statusesUpdated = await applyWhatsAppStatus(parsed.id, parsed.status, parsed.gsId);
+    return result;
   }
-  const admin = await db.user.findFirst({
-    where: { role: 'ADMIN' },
-    orderBy: { createdAt: 'asc' },
-    select: { id: true },
-  });
-  if (!admin) throw new Error('无法接收 WhatsApp 新客户：CRM 中没有管理员账号');
-  return admin.id;
-}
-
-async function resolveOrCreateCustomer(input: {
-  waId: string;
-  phone: string;
-  profileName: string;
-  sentAt: Date;
-}) {
-  const resolution = await resolveWhatsAppCustomer({ waId: input.waId, phone: input.phone });
-  if (resolution.status === 'MATCHED') {
-    return { status: 'MATCHED' as const, customerId: resolution.customerId };
-  }
-  if (resolution.status === 'AMBIGUOUS') return { status: 'AMBIGUOUS' as const };
-
-  const normalized = normalizeWhatsApp(input.phone || input.waId);
-  const ownerId = await defaultOwnerId();
-  const customer = await db.customer.create({
-    data: {
-      name: input.profileName || `WhatsApp ${normalized.slice(-4) || '客户'}`,
-      ownerId,
-      whatsapp: input.phone || input.waId,
-      whatsappNormalized: normalized,
-      waId: normalizeWhatsApp(input.waId) || null,
-      source: 'WHATSAPP',
-      stage: 'NEW',
-      inquiryAt: input.sentAt,
-      lastWhatsAppAt: input.sentAt,
-      notes: '由 WhatsApp Webhook 自动创建。',
-    },
-  });
-  await db.stageHistory.create({
-    data: {
-      customerId: customer.id,
-      toStage: 'NEW',
-      changedBy: ownerId,
-      note: 'WhatsApp 首次消息自动创建客户',
-    },
-  });
-  return { status: 'CREATED' as const, customerId: customer.id };
-}
-
-async function alreadyStored(messageId: string) {
-  return db.whatsAppMessage.findUnique({ where: { waMessageId: messageId }, select: { id: true } });
-}
-
-export async function ingestWhatsAppWebhook(payload: WhatsAppWebhookPayload): Promise<WhatsAppWebhookResult> {
-  const result: WhatsAppWebhookResult = {
-    received: 0,
-    outboundEchoes: 0,
-    createdCustomers: 0,
-    matchedCustomers: 0,
-    duplicateMessages: 0,
-    ambiguous: 0,
-    statusesUpdated: 0,
-  };
-
-  if (payload.object !== 'whatsapp_business_account') return result;
-
-  for (const entry of payload.entry ?? []) {
-    for (const change of entry.changes ?? []) {
-      if (!change.value) continue;
+  const payload = input as WhatsAppWebhookPayload;
+  for (const entry of payload.entry || []) {
+    for (const change of entry.changes || []) {
       const value = change.value;
-
+      if (!value) continue;
       if (change.field === 'messages') {
-        for (const status of value.statuses ?? []) {
-          if (!status.id || !status.status) continue;
-          const updated = await db.whatsAppMessage.updateMany({
-            where: { waMessageId: status.id },
-            data: { status: status.status },
-          });
-          result.statusesUpdated += updated.count;
-        }
-
-        const profileByWaId = new Map(
-          (value.contacts ?? [])
-            .filter((contact) => contact.wa_id)
-            .map((contact) => [normalizeWhatsApp(contact.wa_id), contact.profile?.name ?? ''])
-        );
-
-        for (const message of value.messages ?? []) {
-          if (!message.id || !message.from) continue;
-          result.received++;
-          if (await alreadyStored(message.id)) {
-            result.duplicateMessages++;
-            continue;
-          }
-
-          const waId = normalizeWhatsApp(message.from);
-          const sentAt = parseTimestamp(message.timestamp);
-          const resolved = await resolveOrCreateCustomer({
-            waId,
-            phone: message.from,
-            profileName: profileByWaId.get(waId) ?? '',
-            sentAt,
-          });
-          if (resolved.status === 'AMBIGUOUS') {
-            result.ambiguous++;
-            continue;
-          }
-          if (resolved.status === 'CREATED') result.createdCustomers++;
-          else result.matchedCustomers++;
-
-          await db.$transaction([
-            db.whatsAppMessage.create({
-              data: {
-                customerId: resolved.customerId,
-                waMessageId: message.id,
-                waId,
-                direction: 'INBOUND',
-                messageType: (message.type || 'unknown').toUpperCase(),
-                content: extractWhatsAppMessageText(message),
-                status: 'received',
-                sentAt,
-                raw: JSON.stringify(message),
-              },
-            }),
-            db.customer.update({
-              where: { id: resolved.customerId },
-              data: {
-                waId,
-                lastWhatsAppAt: sentAt,
-                lastInboundAt: sentAt,
-              },
-            }),
-          ]);
+        for (const status of value.statuses || []) {
+          if (status.id && status.status) result.statusesUpdated += await applyWhatsAppStatus(status.id, status.status.toUpperCase());
         }
       }
-
-      if (change.field === 'smb_message_echoes') {
-        const profileByWaId = new Map(
-          (value.contacts ?? [])
-            .filter((contact) => contact.wa_id)
-            .map((contact) => [normalizeWhatsApp(contact.wa_id), contact.profile?.name ?? ''])
-        );
-        for (const message of value.message_echoes ?? []) {
-          if (!message.id || !message.to) continue;
-          result.outboundEchoes++;
-          if (await alreadyStored(message.id)) {
-            result.duplicateMessages++;
-            continue;
-          }
-          const customerPhone = normalizeWhatsApp(message.to);
-          const sentAt = parseTimestamp(message.timestamp);
-          const resolved = await resolveOrCreateCustomer({
-            waId: customerPhone,
-            phone: message.to,
-            profileName: profileByWaId.get(customerPhone) ?? '',
-            sentAt,
-          });
-          if (resolved.status === 'AMBIGUOUS') {
-            result.ambiguous++;
-            continue;
-          }
-          if (resolved.status === 'CREATED') result.createdCustomers++;
-          else result.matchedCustomers++;
-
-          await db.$transaction([
-            db.whatsAppMessage.create({
-              data: {
-                customerId: resolved.customerId,
-                waMessageId: message.id,
-                waId: customerPhone,
-                direction: 'OUTBOUND',
-                messageType: (message.type || 'unknown').toUpperCase(),
-                content: extractWhatsAppMessageText(message),
-                status: 'sent-from-business-app',
-                sentAt,
-                raw: JSON.stringify(message),
-              },
-            }),
-            db.customer.update({
-              where: { id: resolved.customerId },
-              data: {
-                lastWhatsAppAt: sentAt,
-                lastOutboundAt: sentAt,
-              },
-            }),
-          ]);
-        }
+      const outbound = change.field === 'smb_message_echoes';
+      if (!outbound && change.field !== 'messages') continue;
+      for (const message of (outbound ? value.message_echoes : value.messages) || []) {
+        const phone = outbound ? message.to : message.from;
+        if (!message.id || !phone) continue;
+        const name = value.contacts?.find(c => normalizeWhatsApp(c.wa_id) === normalizeWhatsApp(phone))?.profile?.name || '';
+        await storeMessage({ id: message.id, phone, name, content: extractWhatsAppMessageText(message),
+          messageType: (message.type || 'unknown').toUpperCase(), sentAt: parseTimestamp(message.timestamp), raw: message,
+          direction: outbound ? 'OUTBOUND' : 'INBOUND', sender: message.from }, result);
       }
     }
   }
-
   return result;
 }

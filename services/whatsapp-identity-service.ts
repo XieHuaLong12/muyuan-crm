@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { normalizeWhatsApp } from '@/lib/whatsapp';
 
@@ -15,7 +16,7 @@ export type WhatsAppCustomerResolution =
 export async function resolveWhatsAppCustomer(input: {
   waId?: string | null;
   phone?: string | null;
-}): Promise<WhatsAppCustomerResolution> {
+}, client: Prisma.TransactionClient = db): Promise<WhatsAppCustomerResolution> {
   const waId = normalizeWhatsApp(input.waId);
   const normalized = normalizeWhatsApp(input.phone || input.waId);
 
@@ -24,7 +25,7 @@ export async function resolveWhatsAppCustomer(input: {
   }
 
   if (waId) {
-    const byWaId = await db.customer.findMany({
+    const byWaId = await client.customer.findMany({
       where: { deletedAt: null, waId },
       select: { id: true },
       take: 3,
@@ -45,11 +46,18 @@ export async function resolveWhatsAppCustomer(input: {
     return { status: 'NOT_FOUND', normalized: '' };
   }
 
-  const byNumber = await db.customer.findMany({
+  let byNumber = await client.customer.findMany({
     where: { deletedAt: null, whatsappNormalized: normalized },
     select: { id: true, waId: true },
     take: 3,
   });
+
+  if (byNumber.length === 0) {
+    const legacy = await client.customer.findMany({
+      where: { deletedAt: null }, select: { id: true, waId: true, phone: true, whatsapp: true },
+    });
+    byNumber = legacy.filter(c => [c.phone, c.whatsapp].some(number => normalizeWhatsApp(number) === normalized));
+  }
 
   if (byNumber.length === 0) {
     return { status: 'NOT_FOUND', normalized };
@@ -65,7 +73,7 @@ export async function resolveWhatsAppCustomer(input: {
 
   const customer = byNumber[0];
   if (waId && !customer.waId) {
-    await db.customer.update({
+    await client.customer.update({
       where: { id: customer.id },
       data: { waId },
     });

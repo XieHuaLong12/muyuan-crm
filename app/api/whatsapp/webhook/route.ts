@@ -1,3 +1,5 @@
+import { ZodError } from 'zod';
+import { HttpError } from '@/lib/auth';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { ingestWhatsAppWebhook } from '@/services/whatsapp-webhook-service';
@@ -63,7 +65,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const isMetaWebhook = req.headers.has('x-hub-signature-256');
+  const isMetaWebhook = !!payload && typeof payload === 'object' && 'object' in payload && payload.object === 'whatsapp_business_account';
+  if (!isMetaWebhook) {
+    const secret = process.env.GUPSHUP_WEBHOOK_SECRET?.trim();
+    if (secret && !safeEqual(req.nextUrl.searchParams.get('token') || req.headers.get('x-webhook-secret') || '', secret)) {
+      return NextResponse.json({ success: false, error: 'Invalid webhook token' }, { status: 401 });
+    }
+    const app = process.env.GUPSHUP_APP_NAME?.trim();
+    if (app && (!payload || typeof payload !== 'object' || !('app' in payload) || payload.app !== app)) {
+      return NextResponse.json({ success: false, error: 'Unexpected Gupshup app' }, { status: 400 });
+    }
+  }
 
   if (isMetaWebhook) {
     const appSecret = process.env.META_APP_SECRET?.trim();
@@ -96,11 +108,6 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    console.log(
-      'WhatsApp webhook payload:',
-      JSON.stringify(payload)
-    );
-
     const result = await ingestWhatsAppWebhook(
       payload as Parameters<typeof ingestWhatsAppWebhook>[0]
     );
@@ -110,6 +117,9 @@ export async function POST(req: NextRequest) {
       ...result,
     });
   } catch (error) {
+    if (error instanceof ZodError || error instanceof HttpError) {
+      return NextResponse.json({ success: false, error: error instanceof ZodError ? 'Invalid webhook payload' : error.message }, { status: error instanceof ZodError ? 400 : error.status });
+    }
     console.error(
       'WhatsApp webhook ingestion failed',
       error
