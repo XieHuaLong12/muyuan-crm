@@ -36,6 +36,7 @@ type WhatsAppWebhookPayload = {
 };
 
 export type WhatsAppWebhookResult = {
+  customerIds: string[];
   received: number;
   outboundEchoes: number;
   createdCustomers: number;
@@ -106,7 +107,9 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
     // One short database lock serializes identity resolution across app instances.
     // No provider or AI requests run while holding this lock.
     await tx.$queryRaw(Prisma.sql`SELECT id FROM Setting WHERE id = 'system' FOR UPDATE`);
-    if (await tx.whatsAppMessage.findUnique({ where: { waMessageId: input.id } })) {
+    const existing = await tx.whatsAppMessage.findUnique({ where: { waMessageId: input.id } });
+    if (existing) {
+      if (direction === 'INBOUND') result.customerIds.push(existing.customerId);
       result.duplicateMessages++; return;
     }
     const resolved = await resolveWhatsAppCustomer({ waId, phone: input.phone }, tx);
@@ -127,6 +130,7 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
       await tx.stageHistory.create({ data: { customerId, toStage: 'NEW', changedBy: owner.id, note: 'WhatsApp 首次消息自动创建客户' } });
       result.createdCustomers++;
     }
+    if (direction === 'INBOUND') result.customerIds.push(customerId);
     const customer = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
     const latest = (previous: Date | null) => previous && previous > input.sentAt ? previous : input.sentAt;
     await tx.whatsAppMessage.create({ data: { customerId, waMessageId: input.id, waId, direction,
@@ -150,7 +154,7 @@ export async function applyWhatsAppStatus(id: string, status: string, gsId?: str
 }
 
 export async function ingestWhatsAppWebhook(input: unknown): Promise<WhatsAppWebhookResult> {
-  const result: WhatsAppWebhookResult = { received: 0, outboundEchoes: 0, createdCustomers: 0,
+  const result: WhatsAppWebhookResult = { customerIds: [], received: 0, outboundEchoes: 0, createdCustomers: 0,
     matchedCustomers: 0, duplicateMessages: 0, ambiguous: 0, statusesUpdated: 0 };
   const root = asObject(input);
   if (!root) throw new HttpError(400, 'Webhook 必须为 JSON 对象');

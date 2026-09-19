@@ -26,6 +26,8 @@ const suggestedStages = [
   'WON',
   'PAUSED',
   'INVALID',
+  'ORDER',
+  'LOST',
 ] as const;
 
 export const deepSeekAnalysisSchema = z.object({
@@ -273,7 +275,7 @@ export async function analyzeCustomerWithDeepSeek(customerId: string, user: Acto
 score：0-100，表示销售跟进价值与当前采购意向的综合优先级。
 intent：HIGH / MEDIUM / LOW / UNKNOWN。
 customerType：IMPORTER / WHOLESALE / DISTRIBUTOR / RETAILER / BRAND / ECOMMERCE / PROJECT / OTHER / UNKNOWN。
-suggestedStage 只能是 NEW / CONTACTED / REPLIED / NEEDS_CONFIRMED / QUOTED / FOLLOW_UP / WON / PAUSED / INVALID 或空字符串。
+suggestedStage 只能是 NEW / CONTACTED / REPLIED / NEEDS_CONFIRMED / QUOTED / FOLLOW_UP / WON / PAUSED / INVALID / ORDER / LOST 或空字符串。
 
 JSON 示例：
 {

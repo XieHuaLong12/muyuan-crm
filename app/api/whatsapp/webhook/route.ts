@@ -1,7 +1,8 @@
 import { ZodError } from 'zod';
 import { HttpError } from '@/lib/auth';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { NextRequest, NextResponse } from 'next/server';
+import { updateWhatsAppStage } from '@/services/whatsapp-stage-service';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { ingestWhatsAppWebhook } from '@/services/whatsapp-webhook-service';
 
 export const dynamic = 'force-dynamic';
@@ -112,10 +113,15 @@ export async function POST(req: NextRequest) {
       payload as Parameters<typeof ingestWhatsAppWebhook>[0]
     );
 
-    return NextResponse.json({
-      success: true,
-      ...result,
+    after(async () => {
+      for (const customerId of new Set(result.customerIds)) {
+        try { await updateWhatsAppStage(customerId); }
+        catch { console.error('WhatsApp AI stage processing failed; message remains pending', customerId); }
+      }
     });
+    const { customerIds, ...counts } = result;
+    void customerIds;
+    return NextResponse.json({ success: true, ...counts });
   } catch (error) {
     if (error instanceof ZodError || error instanceof HttpError) {
       return NextResponse.json({ success: false, error: error instanceof ZodError ? 'Invalid webhook payload' : error.message }, { status: error instanceof ZodError ? 400 : error.status });
