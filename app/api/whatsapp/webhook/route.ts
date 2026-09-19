@@ -4,7 +4,6 @@ import { ingestWhatsAppWebhook } from '@/services/whatsapp-webhook-service';
 
 export const dynamic = 'force-dynamic';
 
-
 function safeEqual(a: string, b: string) {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
@@ -15,195 +14,113 @@ function safeEqual(a: string, b: string) {
   );
 }
 
-
 /**
  * Meta webhook verification
  * Gupshup health check fallback
  */
 export async function GET(req: NextRequest) {
+  const mode = req.nextUrl.searchParams.get('hub.mode') ?? '';
+  const token = req.nextUrl.searchParams.get('hub.verify_token') ?? '';
+  const challenge = req.nextUrl.searchParams.get('hub.challenge') ?? '';
+  const expected = process.env.WHATSAPP_VERIFY_TOKEN ?? '';
 
-  const mode =
-    req.nextUrl.searchParams.get('hub.mode') ?? '';
-
-  const token =
-    req.nextUrl.searchParams.get('hub.verify_token') ?? '';
-
-  const challenge =
-    req.nextUrl.searchParams.get('hub.challenge') ?? '';
-
-  const expected =
-    process.env.WHATSAPP_VERIFY_TOKEN ?? '';
-
-
-  // Meta Cloud API verification
   if (
     mode === 'subscribe' &&
     expected &&
     safeEqual(token, expected)
   ) {
-
-    return new NextResponse(challenge,{
-      status:200,
-      headers:{
-        'Content-Type':
-        'text/plain; charset=utf-8'
-      }
+    return new NextResponse(challenge, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+      },
     });
   }
 
-
-  // Gupshup webhook validation
   return NextResponse.json({
-    success:true,
-    message:'Webhook ready'
+    success: true,
+    message: 'Webhook ready',
   });
-
 }
-
-
 
 /**
  * Receive WhatsApp messages
  */
 export async function POST(req: NextRequest) {
-
-
   const raw = await req.text();
 
-
-  let payload:any;
+  let payload: unknown;
 
   try {
-
     payload = JSON.parse(raw);
-
   } catch {
-
-    return NextResponse.json({
-      success:false,
-      error:'Invalid JSON payload'
-    },{
-      status:400
-    });
-
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Invalid JSON payload',
+      },
+      { status: 400 }
+    );
   }
 
+  const isMetaWebhook = req.headers.has('x-hub-signature-256');
 
-  /**
-   * 判断来源
-   */
+  if (isMetaWebhook) {
+    const appSecret = process.env.META_APP_SECRET?.trim();
 
-  const isMetaWebhook =
-    req.headers.has('x-hub-signature-256');
-
-
-  const isGupshupWebhook =
-    payload?.type ||
-    payload?.payload ||
-    payload?.app;
-
-
-  /**
-   * Meta Cloud API
-   * 保留原安全验证
-   */
-  if(isMetaWebhook){
-
-    const appSecret =
-      process.env.META_APP_SECRET?.trim();
-
-
-    if(!appSecret){
-
-      return NextResponse.json({
-        success:false,
-        error:
-        'META_APP_SECRET is not configured'
-      },{
-        status:503
-      });
-
+    if (!appSecret) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'META_APP_SECRET is not configured',
+        },
+        { status: 503 }
+      );
     }
 
+    const signature = req.headers.get('x-hub-signature-256') ?? '';
 
-    const signature =
-      req.headers.get(
-        'x-hub-signature-256'
-      ) ?? '';
+    const expected = `sha256=${createHmac('sha256', appSecret)
+      .update(raw)
+      .digest('hex')}`;
 
-
-    const expected =
-      `sha256=${
-        createHmac(
-          'sha256',
-          appSecret
-        )
-        .update(raw)
-        .digest('hex')
-      }`;
-
-
-    if(
-      !signature ||
-      !safeEqual(signature,expected)
-    ){
-
-      return NextResponse.json({
-        success:false,
-        error:
-        'Invalid webhook signature'
-      },{
-        status:401
-      });
-
+    if (!signature || !safeEqual(signature, expected)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid webhook signature',
+        },
+        { status: 401 }
+      );
     }
-
   }
-
-
-  /**
-   * Gupshup 不验证 Meta signature
-   */
-
 
   try {
-
-
     console.log(
       'WhatsApp webhook payload:',
       JSON.stringify(payload)
     );
 
-
-    const result =
-      await ingestWhatsAppWebhook(
-        payload
-      );
-
+    const result = await ingestWhatsAppWebhook(
+      payload as Parameters<typeof ingestWhatsAppWebhook>[0]
+    );
 
     return NextResponse.json({
-      success:true,
-      ...result
+      success: true,
+      ...result,
     });
-
-
-  } catch(error){
-
-
+  } catch (error) {
     console.error(
       'WhatsApp webhook ingestion failed',
       error
     );
 
-
-    return NextResponse.json({
-      success:false,
-      error:
-      'Webhook processing failed'
-    },{
-      status:500
-    });
-
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Webhook processing failed',
+      },
+      { status: 500 }
+    );
   }
-
 }
