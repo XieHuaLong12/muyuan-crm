@@ -61,8 +61,20 @@ jobs:
       - name: Generate Prisma client
         run: pnpm exec prisma generate
 
-      - name: Push schema to MySQL
-        run: pnpm exec prisma db push --skip-generate
+      - name: Verify existing MySQL automatic upgrade
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/muyuan_upgrade
+        run: |
+          mysql -h127.0.0.1 -uroot -proot -e 'CREATE DATABASE muyuan_upgrade'
+          pnpm exec prisma db push --schema prisma/baseline/schema.prisma --skip-generate
+          mysql -h127.0.0.1 -uroot -proot muyuan_upgrade -e "INSERT INTO User (id,name,email,passwordHash) VALUES ('upgrade-sentinel','Existing user','existing@example.com','preserve-me')"
+          node scripts/production-init.mjs
+          node scripts/production-init.mjs
+          pnpm exec prisma migrate status
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_upgrade -e "SELECT COUNT(*) FROM User WHERE id='upgrade-sentinel' AND passwordHash='preserve-me'")" = "1"
+
+      - name: Apply MySQL migrations
+        run: pnpm exec prisma migrate deploy
 
       - name: Seed test database
         run: pnpm db:seed

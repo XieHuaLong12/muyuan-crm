@@ -66,7 +66,7 @@ test('WhatsApp Coexistence: 手机 Business App 发出的消息作为 OUTBOUND �
     const message = await db.whatsAppMessage.findUniqueOrThrow({ where: { waMessageId: `wamid.echo.${customer.id}` } });
     assert.equal(message.customerId, customer.id);
     assert.equal(message.direction, 'OUTBOUND');
-    assert.equal(message.text, 'I will send you the FOB quotation today.');
+    assert.equal(message.content, 'I will send you the FOB quotation today.');
     const updated = await db.customer.findUniqueOrThrow({ where: { id: customer.id } });
     assert.ok(updated.lastOutboundAt);
   } finally {

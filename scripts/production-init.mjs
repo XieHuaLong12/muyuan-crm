@@ -17,14 +17,33 @@ required('DATABASE_URL');
 const adminPassword = required('SEED_ADMIN_PASSWORD');
 required('AUTH_SECRET');
 
+const { PrismaClient } = await import('@prisma/client');
+const probe = new PrismaClient();
+let needsBaseline = false;
+try {
+  const tables = await probe.$queryRaw`SELECT TABLE_NAME AS name FROM information_schema.tables WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('Customer', '_prisma_migrations')`;
+  const names = new Set(tables.map(table => table.name));
+  if (names.has('Customer')) {
+    const migrations = names.has('_prisma_migrations')
+      ? await probe.$queryRaw`SELECT COUNT(*) AS count FROM _prisma_migrations`
+      : [{ count: 0 }];
+    needsBaseline = Number(migrations[0].count) === 0;
+  }
+} finally {
+  await probe.$disconnect();
+}
+if (needsBaseline) {
+  const baseline = spawnSync(process.execPath, ['scripts/baseline-mysql.mjs'], { stdio: 'inherit', env: process.env });
+  if (baseline.status !== 0) process.exit(baseline.status ?? 1);
+}
+
 const prismaCli = 'node_modules/prisma/build/index.js';
-const push = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--skip-generate'], {
+const push = spawnSync(process.execPath, [prismaCli, 'migrate', 'deploy'], {
   stdio: 'inherit',
   env: process.env,
 });
 if (push.status !== 0) process.exit(push.status ?? 1);
 
-const { PrismaClient } = await import('@prisma/client');
 const db = new PrismaClient();
 
 function hashPassword(password) {
