@@ -61,8 +61,8 @@ jobs:
       - name: Generate Prisma client
         run: pnpm exec prisma generate
 
-      - name: Push schema to MySQL
-        run: pnpm exec prisma db push --skip-generate
+      - name: Apply MySQL migrations
+        run: pnpm exec prisma migrate deploy
 
       - name: Seed test database
         run: pnpm db:seed

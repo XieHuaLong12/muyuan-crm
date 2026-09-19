@@ -18,7 +18,7 @@ const adminPassword = required('SEED_ADMIN_PASSWORD');
 required('AUTH_SECRET');
 
 const prismaCli = 'node_modules/prisma/build/index.js';
-const push = spawnSync(process.execPath, [prismaCli, 'db', 'push', '--skip-generate'], {
+const push = spawnSync(process.execPath, [prismaCli, 'migrate', 'deploy'], {
   stdio: 'inherit',
   env: process.env,
 });

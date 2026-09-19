@@ -10,3 +10,4 @@ CREATE UNIQUE INDEX `WhatsAppMessage_requestId_key` ON `WhatsAppMessage`(`reques
 CREATE UNIQUE INDEX `WhatsAppMessage_providerMessageId_key` ON `WhatsAppMessage`(`providerMessageId`);
 UPDATE `WhatsAppMessage` SET `updatedAt` = `createdAt`, `sender` = IF(`direction` = 'INBOUND', `waId`, 'BUSINESS');
 UPDATE `Customer` SET `lastContactAt` = `lastWhatsAppAt` WHERE `lastWhatsAppAt` IS NOT NULL;
+ALTER TABLE `WhatsAppMessage` ALTER COLUMN `updatedAt` DROP DEFAULT;
