@@ -96,7 +96,7 @@ function parseTimestamp(value: string | undefined) {
   return Number.isFinite(seconds) && seconds > 0 && seconds < 8e12 ? new Date(seconds * 1000) : new Date();
 }
 
-type Incoming = { id: string; phone: string; name: string; content: string; messageType: string; sentAt: Date; raw: unknown; direction?: 'INBOUND' | 'OUTBOUND'; sender?: string };
+type Incoming = { id: string; phone: string; name: string; content: string; messageType: string; sentAt: Date; raw: unknown; direction?: 'INBOUND' | 'OUTBOUND'; sender?: string; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null };
 
 async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
   const waId = normalizeWhatsApp(input.phone);
@@ -135,7 +135,7 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
     const latest = (previous: Date | null) => previous && previous > input.sentAt ? previous : input.sentAt;
     await tx.whatsAppMessage.create({ data: { customerId, waMessageId: input.id, waId, direction,
       sender: input.sender || (direction === 'INBOUND' ? waId : 'BUSINESS'), content: input.content,
-      messageType: input.messageType, status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT',
+      messageType: input.messageType, mediaUrl: input.mediaUrl?.startsWith('https://') ? input.mediaUrl : null, mimeType: input.mimeType, fileName: input.fileName, status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT',
       sentAt: input.sentAt, raw: JSON.stringify(input.raw) } });
     await tx.customer.update({ where: { id: customerId }, data: { waId,
       lastContactAt: latest(customer.lastContactAt), lastWhatsAppAt: latest(customer.lastWhatsAppAt),

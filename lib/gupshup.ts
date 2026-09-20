@@ -20,7 +20,7 @@ export function parseGupshup(input: unknown) {
     const content = field(payload, 'text') || field(payload, 'caption') || field(payload, 'title') ||
       field(payload, 'filename') || `[${message.type.toUpperCase()}]`;
     return { kind: 'message' as const, id: message.id, phone, name: message.sender?.name || '',
-      content, messageType: message.type.toUpperCase(), sentAt: new Date(event.timestamp || Date.now()), raw: message };
+      content, mediaUrl: field(payload,'url') || null, mimeType: field(payload,'contentType') || null, fileName: field(payload,'filename') || null, messageType: message.type.toUpperCase(), sentAt: new Date(event.timestamp || Date.now()), raw: message };
   }
   if (event.type === 'message-event') {
     const data = z.object({ id: z.string().min(1).max(191), gsId: z.string().max(191).optional(),

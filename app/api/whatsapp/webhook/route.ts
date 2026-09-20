@@ -1,6 +1,7 @@
 import { ZodError } from 'zod';
 import { HttpError } from '@/lib/auth';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { syncCustomerWorkflow } from '@/services/workflow-service';
 import { updateWhatsAppStage } from '@/services/whatsapp-stage-service';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { ingestWhatsAppWebhook } from '@/services/whatsapp-webhook-service';
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
 
     after(async () => {
       for (const customerId of new Set(result.customerIds)) {
-        try { await updateWhatsAppStage(customerId); }
+        try { await syncCustomerWorkflow(customerId); await updateWhatsAppStage(customerId); }
         catch { console.error('WhatsApp AI stage processing failed; message remains pending', customerId); }
       }
     });
