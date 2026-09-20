@@ -12,7 +12,7 @@ const event = (id: string, phone = '15557770001', text = 'Please quote compresse
   app: 'TestApp', type: 'message', timestamp, version: 2,
   payload: { id, source: phone, type: 'text', sender: { phone, name: 'V2 Buyer' }, payload: { text } },
 });
-const analysis: ConversationAnalysis = { reply: 'Could you confirm model and quantity?', stage: 'QUOTED', confidence: 95, reason: '客户询价', evidence: 'FOB price' };
+const analysis: ConversationAnalysis = { reply: 'Could you confirm model and quantity?', stage: 'QUOTED', confidence: 95, reason: '客户询价', evidence: 'FOB price', nextTask: { title:'Send quotation',type:'QUOTATION',dueInDays:1 } };
 
 test('Gupshup V2: parses message milliseconds and prevents status regression', () => {
   const parsed = parseGupshup(event('message-1', undefined, undefined, 1750000000000));
@@ -103,6 +103,7 @@ test('WhatsApp V2 integration: ingestion, sends, receipts, scoped history and AI
     assert.equal((await db.customer.findUniqueOrThrow({ where: { id: customerId } })).stage, 'QUOTED');
     assert.equal(await db.stageHistory.count({ where: { customerId, changedBy: 'AI:DeepSeek' } }), 1);
     await updateWhatsAppStage(customerId);
+    assert.equal(await db.task.count({where:{customerId,source:'AI',type:'QUOTATION'}}),1);
     assert.equal(await db.stageHistory.count({ where: { customerId, changedBy: 'AI:DeepSeek' } }), 1);
   } finally {
     for (const key of ['GUPSHUP_API_KEY', 'GUPSHUP_SOURCE', 'GUPSHUP_APP_NAME', 'DEEPSEEK_API_KEY']) {
