@@ -6,8 +6,12 @@ import { tmpdir } from 'node:os';
 import { db } from '../lib/db';
 import { createTask,updateTask,deleteTask,listTasks } from '../services/task-service';
 import { syncCustomerWorkflow,getReminders,dismissReminder,recordWorkflowEvent } from '../services/workflow-service';
-import { uploadMedia,readMedia,signedMediaUrl,verifyMediaToken } from '../services/whatsapp-media-service';
+import { uploadMedia,readMedia,signedMediaUrl,verifyMediaToken,mediaKind } from '../services/whatsapp-media-service';
 import { priorityCustomers } from '../services/sales-workspace-service';
+
+test('media transport types match Gupshup supported types',()=>{
+ assert.equal(mediaKind('image/png'),'image');assert.equal(mediaKind('image/webp'),'file');assert.equal(mediaKind('audio/mpeg'),'audio');assert.equal(mediaKind('audio/ogg'),'file');assert.equal(mediaKind('audio/ogg; codecs=opus'),'audio');
+});
 
 test('V3 tasks, reminders, scope, workflow lifecycle and media integration',async()=>{
  const admin=await db.user.findUniqueOrThrow({where:{email:'admin@example.com'}});

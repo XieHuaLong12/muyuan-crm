@@ -16,3 +16,4 @@
 @media(max-width:520px){.v3-customer-actions button{font-size:10px}.v3-header-customer p,.v3-header-customer>small{font-size:10px}.v3-workspace-tabs button{font-size:11px}.v3-today-metrics>a>div{font-size:10px}}
 @media(min-width:801px){.v3-customer-layout{height:calc(100dvh - 224px);min-height:460px}.v3-customer-workspace{min-height:0}}
 @media(min-width:801px) and (max-height:780px){.v3-customer-page>.compact{margin-bottom:16px}.v3-customer-page>.compact p{display:none}.v3-customer-layout{height:calc(100dvh - 180px);min-height:430px}.v3-customer-header{padding-top:14px;padding-bottom:10px}.v3-customer-actions{padding-bottom:10px}.v3-content:has(.v3-customer-page){padding-top:25px}}
+.v3-task-row .v3-status-select{width:90px;flex:0 0 90px}.v3-task-row .v3-task-body{flex:1 1 180px}.v3-task-row .v3-task-title{width:auto;max-width:100%}.v3-list-filters select{width:auto}.v3-composer-actions .primary{flex-shrink:0}.v3-task-check{margin:0}

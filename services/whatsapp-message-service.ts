@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError } from '@/lib/auth';
 import { accessible } from '@/services/customer-service';
-import { signedMediaUrl } from './whatsapp-media-service';
+import { signedMediaUrl,mediaKind } from './whatsapp-media-service';
 import { syncCustomerWorkflow } from './workflow-service';
 import { normalizeWhatsApp } from '@/lib/whatsapp';
 
@@ -46,7 +46,8 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
   }
   const mediaOrigin=process.env.PUBLIC_APP_URL?.replace(/\/$/,'')||origin;
   if(asset && !mediaOrigin)throw new HttpError(503,'附件发送需要可访问的应用地址');
-  const kind=asset?(asset.mimeType.startsWith('image/')?'image':asset.mimeType.startsWith('audio/')?'audio':asset.mimeType.startsWith('video/')?'video':'file'):'text';
+  const kind=asset?mediaKind(asset.mimeType):'text';
+  if(kind==='audio'&&content)throw new HttpError(400,'语音附件不支持附带文字，请先清空输入框，文字可单独发送');
   let message;
   try {
     message = await db.whatsAppMessage.create({ data: { customerId, requestId, waId: destination,
@@ -65,7 +66,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
     response = await fetch('https://api.gupshup.io/wa/api/v1/msg', { method: 'POST',
       headers: { apikey: apiKey, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ channel: 'whatsapp', source, destination, 'src.name': appName,
-        message: JSON.stringify(asset ? (kind==='image'?{type:kind,originalUrl:signedMediaUrl(asset.id,mediaOrigin!),previewUrl:signedMediaUrl(asset.id,mediaOrigin!),caption:content}:{type:kind,url:signedMediaUrl(asset.id,mediaOrigin!),filename:asset.fileName,caption:content}):{type:'text',text:content}) }), signal: AbortSignal.timeout(20_000) });
+        message: JSON.stringify(asset ? (kind==='image'?{type:kind,originalUrl:signedMediaUrl(asset.id,mediaOrigin!),previewUrl:signedMediaUrl(asset.id,mediaOrigin!),caption:content}:{type:kind,url:signedMediaUrl(asset.id,mediaOrigin!),...(kind==='file'?{filename:asset.fileName}:{}),...(kind!=='audio'?{caption:content}:{})}):{type:'text',text:content}) }), signal: AbortSignal.timeout(20_000) });
     body = await response.json();
   } catch {
     // A timeout cannot prove rejection: keep a durable record and never auto-resend.
