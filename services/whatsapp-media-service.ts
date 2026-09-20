@@ -1,5 +1,5 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { db } from '@/lib/db';
 import { Actor, HttpError } from '@/lib/auth';
@@ -15,6 +15,6 @@ export async function uploadMedia(file:File,customerId:string,user:Actor){
   if(!file.size||file.size>20*1024*1024)throw new HttpError(400,'文件大小须在 1 字节至 20 MB 之间');
   const key=randomUUID();await mkdir(storage(),{recursive:true});
   await writeFile(path.join(storage(),key),Buffer.from(await file.arrayBuffer()),{flag:'wx',mode:0o600});
-  return db.mediaAsset.create({data:{customerId,createdBy:user.id,fileName:file.name.replace(/[\r\n/\\]/g,'_').slice(0,180)||'attachment',mimeType:file.type,storageKey:key,size:file.size}});
+  try { return await db.mediaAsset.create({data:{customerId,createdBy:user.id,fileName:file.name.replace(/[\r\n/\\]/g,'_').slice(0,180)||'attachment',mimeType:file.type,storageKey:key,size:file.size}}); } catch(error) { await unlink(path.join(storage(),key)).catch(()=>{}); throw error; }
 }
 export async function readMedia(id:string){const asset=await db.mediaAsset.findUnique({where:{id}});if(!asset)throw new HttpError(404,'文件不存在');return {asset,buffer:await readFile(path.join(storage(),asset.storageKey)).catch(()=>{throw new HttpError(404,'文件已不可用，请重新上传');})};}

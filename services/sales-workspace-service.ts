@@ -15,6 +15,7 @@ export async function priorityCustomers(user: Actor) {
   const rows = await db.customer.findMany({ where: scope(user), select: {
     id:true, name:true, companyName:true, country:true, whatsapp:true, stage:true, aiScore:true, aiIntent:true, aiNextAction:true,
     estimatedOrderValue:true, currency:true, lastInboundAt:true, lastOutboundAt:true, nextFollowUpAt:true,
+    _count: { select: { quotations: { where: { status: 'DRAFT' } } } },
     readStates: { where: { userId: user.id }, select: { readAt:true } },
     whatsappMessages: { orderBy: [{ sentAt:'desc' }, { id:'desc' }], take:1, select: { content:true } },
   } });
@@ -26,8 +27,8 @@ export async function priorityCustomers(user: Actor) {
     // Only use a capped logarithmic amount signal; never aggregate mixed currencies.
     const amount = Math.min(12, Math.log10(1+Number(c.estimatedOrderValue))*2);
     const priorityScore = (terminal ? -1000 : 0) + c.aiScore + (c.aiIntent==='HIGH'?25:0) + (needsReply?30:0) + (overdue?40:0) + (unread?15:0) + amount;
-    const { readStates, whatsappMessages, ...customer } = c; void readStates;
-    return { ...customer, estimatedOrderValue: String(c.estimatedOrderValue), unread, needsReply, overdue, priorityScore,
+    const { readStates, whatsappMessages, _count, ...customer } = c; void readStates;
+    return { ...customer, estimatedOrderValue: String(c.estimatedOrderValue), draftQuotes: _count.quotations, unread, needsReply, overdue, priorityScore,
       latestMessage: whatsappMessages[0]?.content || '', lastInboundAt:c.lastInboundAt?.toISOString()||null,
       lastOutboundAt:c.lastOutboundAt?.toISOString()||null, nextFollowUpAt:c.nextFollowUpAt?.toISOString()||null };
   }).sort((a,b)=>b.priorityScore-a.priorityScore || a.name.localeCompare(b.name));

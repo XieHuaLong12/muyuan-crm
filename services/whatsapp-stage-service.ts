@@ -31,7 +31,7 @@ export async function updateWhatsAppStage(customerId: string) {
       await tx.stageHistory.create({ data: { customerId, fromStage: customer.stage, toStage: analysis.stage,
         changedBy: 'AI:DeepSeek', note: `WhatsApp AI (${analysis.confidence}%): ${analysis.reason}`.slice(0, 190) } });
     }
-    if (analysis.nextTask && analysis.confidence >= 80 && analysis.evidence && latest.content.includes(analysis.evidence)) {
+    if (!['LOST','INVALID','PAUSED'].includes(customer.stage) && analysis.stage !== 'LOST' && analysis.nextTask && analysis.confidence >= 80 && analysis.evidence && latest.content.includes(analysis.evidence)) {
       const task=analysis.nextTask;
       const existing=await tx.task.findFirst({where:{customerId,type:task.type,source:'AI',status:{not:'DONE'},deletedAt:null}});
       if(!existing)await automatedTask(tx,{customerId,createdBy:customer.ownerId,title:task.title,type:task.type,source:'AI',

@@ -19,7 +19,11 @@ async function resolveRule(tx: Prisma.TransactionClient, customerId: string, pre
 export async function syncCustomerWorkflow(customerId: string) {
   await db.$transaction(async tx => {
     const c = await tx.customer.findUnique({ where: { id: customerId } });
-    if (!c || c.deletedAt || ['LOST','INVALID','PAUSED'].includes(c.stage)) return;
+    if (!c) return;
+    if (c.deletedAt || ['LOST','INVALID','PAUSED'].includes(c.stage)) {
+      for (const rule of ['reply','quote','follow']) await resolveRule(tx,c.id,`${rule}:${c.id}:`);
+      return;
+    }
     const needsReply = c.lastInboundAt && (!c.lastOutboundAt || c.lastInboundAt > c.lastOutboundAt);
     const replyKey = needsReply ? `reply:${c.id}:${c.lastInboundAt!.getTime()}` : undefined;
     await resolveRule(tx, c.id, `reply:${c.id}:`, replyKey);
@@ -62,7 +66,7 @@ export async function getReminders(user: Actor) {
 export async function dismissReminder(id: string, user: Actor) {
   const r = await db.reminder.findFirst({ where: { id, task: taskScope(user) } });
   if (!r) throw new HttpError(404, '提醒不存在');
-  await db.reminder.update({ where: { id }, data: { status: 'DISMISSED' } });
+  await db.reminder.updateMany({ where: { taskId:r.taskId, remindAt:{lte:new Date()} }, data: { status: 'DISMISSED' } });
   return { dismissed: true };
 }
 export async function recordWorkflowEvent(input: unknown, user: Actor) {
@@ -73,7 +77,7 @@ export async function recordWorkflowEvent(input: unknown, user: Actor) {
   if (expectedAt < now) throw new HttpError(400, '预计时间不能早于现在');
   return db.$transaction(async tx => {
     const old = await tx.workflowEvent.findUnique({ where: { requestId: v.requestId } });
-    if (old) { if (old.customerId !== c.id) throw new HttpError(409, '请求编号已使用'); return old; }
+    if (old) { if (old.customerId !== c.id || old.kind !== v.kind || old.expectedAt?.getTime() !== expectedAt.getTime() || old.description !== v.description) throw new HttpError(409, '请求编号已使用'); return old; }
     const event = await tx.workflowEvent.create({ data: { ...v, expectedAt, happenedAt: now, createdBy: user.id } });
     const add = (title: string, type: string, dueDate: Date, key: string) => automatedTask(tx, { customerId: c.id, createdBy: c.ownerId, title, type, dueDate,
       description: v.description, automationKey: `event:${event.id}:${key}` });
