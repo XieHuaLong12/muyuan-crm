@@ -23,6 +23,9 @@ async function resolveRule(tx: Prisma.TransactionClient, customerId: string, pre
 }
 export async function syncCustomerWorkflow(customerId: string) {
   await retryTransaction(() => db.$transaction(async tx => {
+    // Serialize this customer's rule creation across tabs and server processes.
+    // Lock before snapshot reads so a waiter observes the previous commit.
+    await tx.$queryRaw`SELECT id FROM Customer WHERE id = ${customerId} FOR UPDATE`;
     const c = await tx.customer.findUnique({ where: { id: customerId } });
     if (!c) return;
     if (c.deletedAt || ['LOST','INVALID','PAUSED'].includes(c.stage)) {

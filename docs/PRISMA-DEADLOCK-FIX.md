@@ -13,8 +13,8 @@ Global search covered updateMany, task.updateMany, $transaction and Promise.all.
 ## Changes
 
 - Retry whole task/workflow/AI task transactions on Prisma P2034 only. Three total attempts: wait 500 ms after first failure, 1000 ms after second, throw original third error. No network provider call is replayed; validation/409/P2002 errors are not retried.
-- Resolve obsolete rules by sorted task primary keys, acquiring Task before Reminder; avoid broad relational reminder writes. Customer sweeps run sequentially. An in-flight sweep remains coalesced even after 60 seconds.
-- Home/task rendering and GET APIs are read-only. WorkspaceShell uses authenticated POST /api/workflows/sync at mount and 60 seconds after each completed request. Failures are isolated from page rendering; next interval retries. Event-triggered sync remains intact. This is an in-app catch-up mechanism, not a durable external job scheduler. Separate server processes can still overlap, protected by lock ordering and bounded retries.
+- Resolve obsolete rules by sorted task primary keys, acquiring Task before Reminder; avoid broad relational reminder writes. Customer sweeps run sequentially. A parameterized Customer primary-key FOR UPDATE lock precedes workflow snapshot reads, serializing the same customer across server processes and preventing concurrent automation-key creation. An in-flight sweep remains coalesced even after 60 seconds.
+- Home/task rendering and GET APIs are read-only. WorkspaceShell uses authenticated POST /api/workflows/sync at mount and 60 seconds after each completed request. Failures are isolated from page rendering; next interval retries. Event-triggered sync remains intact. This is an in-app catch-up mechanism, not a durable external job scheduler. Separate processes serialize same-customer sweeps with a database row lock; other task writers are protected by consistent lock ordering and bounded retries.
 - No schema migration or new environment variables required. No production database was modified by this repair.
 
 ## Validation
