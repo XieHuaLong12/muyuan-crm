@@ -6,11 +6,14 @@ import { accessible } from '@/services/customer-service';
 import { signedMediaUrl,mediaKind } from './whatsapp-media-service';
 import { syncCustomerWorkflow } from './workflow-service';
 import { normalizeWhatsApp } from '@/lib/whatsapp';
+import { decryptWhatsAppAccessToken } from './whatsapp-connect-service';
 
 export const sendMessageSchema = z.object({ customerId: z.string().min(1).max(191),
   content: z.string().trim().max(4096).default(''), mediaAssetId: z.string().min(1).optional(), requestId: z.string().uuid() }).refine(v=>v.content.length>0||!!v.mediaAssetId,'请输入消息或选择附件');
 export const messageSelect = { id: true, customerId: true, waMessageId: true, content: true,
   mediaUrl: true, mimeType: true, fileName: true, sender: true, direction: true, messageType: true, status: true, sentAt: true, createdAt: true, updatedAt: true } as const;
+
+const gupshupReady = () => !!(process.env.GUPSHUP_API_KEY?.trim() && normalizeWhatsApp(process.env.GUPSHUP_SOURCE) && process.env.GUPSHUP_APP_NAME?.trim());
 
 export async function listWhatsAppMessages(customerId: string, user: Actor, before?: string) {
   const customer = await accessible(customerId, user);
@@ -18,10 +21,13 @@ export async function listWhatsAppMessages(customerId: string, user: Actor, befo
   if (before && !cursor) throw new HttpError(400, '无效的聊天分页位置');
   const messages = await db.whatsAppMessage.findMany({ where: { customerId }, select: messageSelect,
     orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 51, ...(cursor ? { cursor: { id: cursor.id }, skip: 1 } : {}) });
+  const integration = await db.whatsAppIntegration.findUnique({ where: { id: 'primary' },
+    select: { status: true, phoneNumberId: true, encryptedAccessToken: true } });
   const hasMore = messages.length > 50;
   const page = messages.slice(0, 50);
+  const metaReady = integration?.status === 'CONNECTED' && !!integration.phoneNumberId && !!integration.encryptedAccessToken;
   return { messages: page.reverse(), nextCursor: hasMore ? page[0].id : null, stage: customer.stage,
-    lastInboundAt: customer.lastInboundAt, configured: !!(process.env.GUPSHUP_API_KEY && process.env.GUPSHUP_SOURCE && process.env.GUPSHUP_APP_NAME) };
+    lastInboundAt: customer.lastInboundAt, configured: metaReady || gupshupReady() };
 }
 
 export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: string) {
@@ -35,10 +41,39 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
     if (existing.customerId !== customerId || existing.content !== content || existing.mediaUrl !== mediaUrl) throw new HttpError(409, '发送请求编号已使用');
     return { message: existing };
   }
-  const apiKey = process.env.GUPSHUP_API_KEY?.trim();
-  const source = normalizeWhatsApp(process.env.GUPSHUP_SOURCE);
-  const appName = process.env.GUPSHUP_APP_NAME?.trim();
-  if (!apiKey || !source || !appName) throw new HttpError(503, '尚未配置 Gupshup 发送服务');
+
+  const integration = await db.whatsAppIntegration.findUnique({ where: { id: 'primary' } });
+  let transport: 'META' | 'GUPSHUP';
+  let source = '';
+  let accessToken = '';
+  let phoneNumberId = '';
+  let gupshupApiKey = '';
+  let gupshupAppName = '';
+
+  if (integration?.status === 'CONNECTED') {
+    if (!integration.phoneNumberId || !integration.encryptedAccessToken) {
+      throw new HttpError(503, 'Meta WhatsApp 连接信息不完整，请重新连接 WhatsApp');
+    }
+    if (integration.tokenExpiresAt && integration.tokenExpiresAt.getTime() <= Date.now()) {
+      throw new HttpError(503, 'WhatsApp 授权已过期，请重新连接 WhatsApp');
+    }
+    try {
+      accessToken = decryptWhatsAppAccessToken(integration.encryptedAccessToken);
+    } catch {
+      throw new HttpError(503, 'WhatsApp Access Token 无法解密，请重新连接 WhatsApp');
+    }
+    if (!accessToken) throw new HttpError(503, 'WhatsApp Access Token 为空，请重新连接 WhatsApp');
+    transport = 'META';
+    phoneNumberId = integration.phoneNumberId;
+    source = normalizeWhatsApp(integration.displayPhoneNumber) || phoneNumberId;
+  } else {
+    gupshupApiKey = process.env.GUPSHUP_API_KEY?.trim() || '';
+    source = normalizeWhatsApp(process.env.GUPSHUP_SOURCE);
+    gupshupAppName = process.env.GUPSHUP_APP_NAME?.trim() || '';
+    if (!gupshupApiKey || !source || !gupshupAppName) throw new HttpError(503, 'Meta WhatsApp 尚未连接，且未配置 Gupshup 发送服务');
+    transport = 'GUPSHUP';
+  }
+
   const destination = normalizeWhatsApp(customer.waId || customer.whatsapp || customer.phone);
   if (!/^[1-9]\d{6,14}$/.test(destination)) throw new HttpError(400, '客户 WhatsApp 号码需要有效国家码');
   if (!customer.lastInboundAt || Date.now() - customer.lastInboundAt.getTime() > 24 * 60 * 60 * 1000) {
@@ -48,6 +83,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
   if(asset && !mediaOrigin)throw new HttpError(503,'附件发送需要可访问的应用地址');
   const kind=asset?mediaKind(asset.mimeType):'text';
   if(kind==='audio'&&content)throw new HttpError(400,'语音附件不支持附带文字，请先清空输入框，文字可单独发送');
+
   let message;
   try {
     message = await db.whatsAppMessage.create({ data: { customerId, requestId, waId: destination,
@@ -60,28 +96,76 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
     }
     throw error;
   }
-  let response: Response;
-  let body: { status?: string; messageId?: string };
+
+  let providerMessageId = '';
   try {
-    response = await fetch('https://api.gupshup.io/wa/api/v1/msg', { method: 'POST',
-      headers: { apikey: apiKey, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ channel: 'whatsapp', source, destination, 'src.name': appName,
-        message: JSON.stringify(asset ? (kind==='image'?{type:kind,originalUrl:signedMediaUrl(asset.id,mediaOrigin!),previewUrl:signedMediaUrl(asset.id,mediaOrigin!),caption:content}:{type:kind,url:signedMediaUrl(asset.id,mediaOrigin!),...(kind==='file'?{filename:asset.fileName}:{}),...(kind!=='audio'?{caption:content}:{})}):{type:'text',text:content}) }), signal: AbortSignal.timeout(20_000) });
-    body = await response.json();
+    if (transport === 'META') {
+      const graphVersion = process.env.META_GRAPH_VERSION?.trim() || 'v26.0';
+      const endpoint = `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`;
+      let outbound: Record<string, unknown>;
+      if (!asset) {
+        outbound = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: destination,
+          type: 'text',
+          text: { body: content },
+        };
+      } else {
+        const link = signedMediaUrl(asset.id, mediaOrigin!);
+        const metaType = kind === 'file' ? 'document' : kind;
+        const media: Record<string, unknown> = { link };
+        if (metaType === 'document' && asset.fileName) media.filename = asset.fileName;
+        if (metaType !== 'audio' && content) media.caption = content;
+        outbound = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: destination,
+          type: metaType,
+          [metaType]: media,
+        };
+      }
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(outbound),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const body = await response.json().catch(() => ({})) as {
+        messages?: Array<{ id?: string }>;
+        error?: { message?: string; code?: number; error_subcode?: number };
+      };
+      providerMessageId = body.messages?.[0]?.id || '';
+      if (!response.ok || !providerMessageId) {
+        const code = body.error?.code ? ` [${body.error.code}]` : '';
+        const detail = body.error?.message || 'Meta WhatsApp 未接受此消息';
+        return { message: await db.whatsAppMessage.update({ where: { id: message.id }, data: { status: 'FAILED' } }),
+          error: `发送失败${code}：${detail}` };
+      }
+    } else {
+      const response = await fetch('https://api.gupshup.io/wa/api/v1/msg', { method: 'POST',
+        headers: { apikey: gupshupApiKey, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ channel: 'whatsapp', source, destination, 'src.name': gupshupAppName,
+          message: JSON.stringify(asset ? (kind==='image'?{type:kind,originalUrl:signedMediaUrl(asset.id,mediaOrigin!),previewUrl:signedMediaUrl(asset.id,mediaOrigin!),caption:content}:{type:kind,url:signedMediaUrl(asset.id,mediaOrigin!),...(kind==='file'?{filename:asset.fileName}:{}),...(kind!=='audio'?{caption:content}:{})}):{type:'text',text:content}) }),
+        signal: AbortSignal.timeout(20_000) });
+      const body = await response.json().catch(() => ({})) as { status?: string; messageId?: string };
+      if (!response.ok || body.status !== 'submitted' || typeof body.messageId !== 'string' || !body.messageId) {
+        return { message: await db.whatsAppMessage.update({ where: { id: message.id }, data: { status: 'FAILED' } }),
+          error: 'Gupshup 未接受此消息，请检查账号、号码与会话窗口。' };
+      }
+      providerMessageId = body.messageId;
+    }
   } catch {
     // A timeout cannot prove rejection: keep a durable record and never auto-resend.
     return { message: await db.whatsAppMessage.update({ where: { id: message.id }, data: { status: 'UNKNOWN' } }),
       error: '发送结果未知，请核对 WhatsApp 后再操作；系统不会自动重复发送。' };
   }
-  if (!response.ok || body.status !== 'submitted' || typeof body.messageId !== 'string' || !body.messageId) {
-    return { message: await db.whatsAppMessage.update({ where: { id: message.id }, data: { status: 'FAILED' } }),
-      error: 'Gupshup 未接受此消息，请检查账号、号码与会话窗口。' };
-  }
+
   const sentAt = new Date();
   // Keep persistence outside the network catch: a DB failure must not label an accepted message FAILED.
   const saved = await db.$transaction(async tx => {
     const saved = await tx.whatsAppMessage.update({ where: { id: message.id },
-      data: { status: 'SENT', providerMessageId: body.messageId, waMessageId: body.messageId, sentAt } });
+      data: { status: 'SENT', providerMessageId, waMessageId: providerMessageId, sentAt } });
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastContactAt: null }, { lastContactAt: { lt: sentAt } }] }, data: { lastContactAt: sentAt } });
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastWhatsAppAt: null }, { lastWhatsAppAt: { lt: sentAt } }] }, data: { lastWhatsAppAt: sentAt } });
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastOutboundAt: null }, { lastOutboundAt: { lt: sentAt } }] }, data: { lastOutboundAt: sentAt } });
