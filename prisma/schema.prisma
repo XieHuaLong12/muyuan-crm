@@ -76,6 +76,11 @@ model Customer {
  deals Deal[]
  submissions LeadSubmission[]
  whatsappMessages WhatsAppMessage[]
+ tasks Task[]
+ quotations Quotation[]
+ workflowEvents WorkflowEvent[]
+ mediaAssets MediaAsset[]
+ readStates WhatsAppReadState[]
  intelligence CustomerIntelligence?
  @@index([stage])
  @@index([source])
@@ -187,6 +192,9 @@ model WhatsAppMessage {
  direction String
  messageType String @default("TEXT")
  content String @map("text") @db.Text
+ mediaUrl String? @db.Text
+ mimeType String?
+ fileName String?
  status String @default("")
  sentAt DateTime
  raw String @db.LongText
@@ -255,4 +263,90 @@ model WhatsAppIntegration {
  updatedAt DateTime @updatedAt
  @@index([wabaId])
  @@index([phoneNumberId])
+}
+
+model Task {
+ id String @id @default(cuid())
+ customerId String?
+ customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ title String
+ description String @db.Text
+ type String @default("FOLLOW_UP")
+ priority String @default("MEDIUM")
+ status String @default("TODO")
+ dueDate DateTime
+ completedAt DateTime?
+ createdBy String
+ source String @default("MANUAL")
+ automationKey String? @unique
+ deletedAt DateTime?
+ reminderMinutes Int @default(30)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ reminders Reminder[]
+ @@index([createdBy, status, dueDate])
+ @@index([customerId, status])
+ @@index([status, dueDate])
+}
+model Reminder {
+ id String @id @default(cuid())
+ taskId String
+ task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+ remindAt DateTime
+ status String @default("PENDING")
+ kind String @default("EARLY")
+ createdAt DateTime @default(now())
+ @@unique([taskId, kind])
+ @@index([status, remindAt])
+}
+model WhatsAppReadState {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ userId String
+ readAt DateTime
+ @@unique([customerId, userId])
+}
+model Quotation {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ quoteNumber String @unique
+ product String
+ quantity Int
+ unitPrice Decimal @db.Decimal(14, 2)
+ currency String
+ incoterm String
+ notes String @db.Text
+ status String @default("DRAFT")
+ sentAt DateTime?
+ createdBy String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([customerId, createdAt])
+}
+model WorkflowEvent {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ kind String
+ happenedAt DateTime
+ expectedAt DateTime?
+ description String @db.Text
+ requestId String @unique
+ createdBy String
+ createdAt DateTime @default(now())
+ @@index([customerId, happenedAt])
+}
+model MediaAsset {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ createdBy String
+ fileName String
+ mimeType String
+ storageKey String @unique
+ size Int
+ createdAt DateTime @default(now())
+ @@index([customerId])
 }
