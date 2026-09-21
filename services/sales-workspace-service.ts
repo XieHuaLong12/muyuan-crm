@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { Actor, scope } from '@/lib/auth';
 import { dayKey } from '@/lib/time';
 import { listTasks, taskScope } from './task-service';
-import { getReminders, syncWorkflows } from './workflow-service';
+import { getReminders } from './workflow-service';
 
 export const workspaceBootstrap = cache(async (user: Actor) => ({ user,
   users: await db.user.findMany({ where: user.role === 'ADMIN' ? {} : { id: user.id }, select: { id: true, name: true, email: true, role: true } }),
@@ -34,7 +34,7 @@ export async function priorityCustomers(user: Actor) {
   }).sort((a,b)=>b.priorityScore-a.priorityScore || a.name.localeCompare(b.name));
 }
 export async function salesHome(user: Actor) {
-  await syncWorkflows(user);
+
   const [customers, tasks, notices, boot, overdueTasks, quotesWaiting] = await Promise.all([
     priorityCustomers(user), listTasks(user,{status:'OPEN',view:'TODAY'}),getReminders(user),workspaceBootstrap(user),
     db.task.count({where:{...taskScope(user),status:{not:'DONE'},dueDate:{lt:new Date()}}}),
