@@ -1,0 +1,33 @@
+# BOS changed files
+
+- `app/(command-center)/command-center/loading.tsx`
+- `app/(command-center)/command-center/page.tsx`
+- `app/(growth)/growth/loading.tsx`
+- `app/(growth)/growth/page.tsx`
+- `app/(sales)/sales/loading.tsx`
+- `app/(sales)/sales/page.tsx`
+- `app/api/bos/command-center/route.ts`
+- `app/api/bos/growth/route.ts`
+- `app/api/bos/sales/route.ts`
+- `app/bos.css`
+- `app/layout.tsx`
+- `app/login/page.tsx`
+- `components/bos/BOSShell.tsx`
+- `components/bos/CommandCenter.tsx`
+- `components/bos/GrowthCenter.tsx`
+- `components/bos/SalesOS.tsx`
+- `components/ui/Sidebar.tsx`
+- `components/ui/bos.tsx`
+- `components/workspace/WhatsAppWorkspace.tsx`
+- `components/workspace/WorkspaceShell.tsx`
+- `docs/bos/ARCHITECTURE.md`
+- `docs/bos/VALIDATION.md`
+- `lib/bos.ts`
+- `prisma/migrations/20260921090000_bos_growth_foundation/migration.sql`
+- `prisma/schema.prisma`
+- `services/bos-command-service.ts`
+- `services/bos-growth-service.ts`
+- `services/bos-sales-service.ts`
+- `tests/bos-integration.test.ts`
+- `tests/bos-unit.test.ts`
+- `docs/bos/CHANGED-FILES.md`

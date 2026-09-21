@@ -350,3 +350,46 @@ model MediaAsset {
  createdAt DateTime @default(now())
  @@index([customerId])
 }
+
+// BOS growth foundation. No external ad accounts are connected in Core v1.
+model LeadSource {
+ id String @id @default(cuid())
+ name String
+ channel String
+ externalId String?
+ createdBy String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ campaigns Campaign[]
+ @@index([createdBy, channel])
+}
+model Campaign {
+ id String @id @default(cuid())
+ name String
+ channel String
+ externalId String?
+ sourceId String?
+ source LeadSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+ currency String @default("USD")
+ status String @default("DRAFT")
+ createdBy String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ metrics MarketingMetric[]
+ @@index([createdBy, channel])
+ @@index([sourceId])
+}
+model MarketingMetric {
+ id String @id @default(cuid())
+ campaignId String
+ campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+ metricDate DateTime @db.Date
+ spend Decimal @db.Decimal(14, 2)
+ impressions Int @default(0)
+ clicks Int @default(0)
+ leads Int @default(0)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([campaignId, metricDate])
+ @@index([metricDate])
+}

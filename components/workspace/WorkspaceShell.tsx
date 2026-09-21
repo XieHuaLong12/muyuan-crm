@@ -6,7 +6,7 @@ import { Armchair,Sun,Users,MessageCircle,CheckSquare,BarChart3,Target,Settings,
 import { api } from '@/lib/client';
 import type { Bootstrap } from '@/lib/types';
 import type { Notice } from '@/lib/workspace-types';
-const links=[['/','Today',Sun],['/customers','客户 CRM',Users],['/whatsapp','WhatsApp',MessageCircle],['/tasks','任务中心',CheckSquare],['/funnel','销售漏斗',BarChart3],['/targets','目标管理',Target],['/analytics','数据分析',BarChart3],['/settings','设置',Settings]] as const;
+const links=[['/command-center','LVANJU BOS',Sun],['/','Today',Sun],['/customers','客户 CRM',Users],['/whatsapp','WhatsApp',MessageCircle],['/tasks','任务中心',CheckSquare],['/funnel','销售漏斗',BarChart3],['/targets','目标管理',Target],['/analytics','数据分析',BarChart3],['/settings','设置',Settings]] as const;
 export function WorkspaceShell({boot,children}:{boot:Bootstrap;children:React.ReactNode}){
  const path=usePathname(),router=useRouter();const [mobile,setMobile]=useState(false),[open,setOpen]=useState(false),[notices,setNotices]=useState<Notice[]>([]),[error,setError]=useState('');
  useEffect(()=>{
