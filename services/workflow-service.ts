@@ -1,3 +1,4 @@
+import { retryTransaction } from '@/lib/transaction-retry';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
@@ -13,11 +14,18 @@ export async function automatedTask(tx: Prisma.TransactionClient, data: { custom
 }
 async function resolveRule(tx: Prisma.TransactionClient, customerId: string, prefix: string, activeKey?: string) {
   const where = { customerId, status: { not: 'DONE' }, automationKey: { startsWith: prefix, ...(activeKey ? { not: activeKey } : {}) } };
-  await tx.reminder.updateMany({ where: { task: where }, data: { status: 'DISMISSED' } });
-  await tx.task.updateMany({ where, data: { status: 'DONE', completedAt: new Date() } });
+  const tasks = await tx.task.findMany({ where, select: { id: true }, orderBy: { id: 'asc' } });
+  // Match manual task updates: lock Task before Reminder, using primary keys.
+  for (const task of tasks) {
+    const changed = await tx.task.updateMany({ where: { id: task.id, status: { not: 'DONE' } }, data: { status: 'DONE', completedAt: new Date() } });
+    if (changed.count) await tx.reminder.updateMany({ where: { taskId: task.id }, data: { status: 'DISMISSED' } });
+  }
 }
 export async function syncCustomerWorkflow(customerId: string) {
-  await db.$transaction(async tx => {
+  await retryTransaction(() => db.$transaction(async tx => {
+    // Serialize this customer's rule creation across tabs and server processes.
+    // Lock before snapshot reads so a waiter observes the previous commit.
+    await tx.$queryRaw`SELECT id FROM Customer WHERE id = ${customerId} FOR UPDATE`;
     const c = await tx.customer.findUnique({ where: { id: customerId } });
     if (!c) return;
     if (c.deletedAt || ['LOST','INVALID','PAUSED'].includes(c.stage)) {
@@ -39,21 +47,23 @@ export async function syncCustomerWorkflow(customerId: string) {
     await resolveRule(tx, c.id, `follow:${c.id}:`, followKey);
     if (followKey) await automatedTask(tx, { customerId: c.id, createdBy: c.ownerId, title: `跟进 ${c.name}`, type: 'FOLLOW_UP',
       description: '来自客户的下次跟进安排。', dueDate: c.nextFollowUpAt!, automationKey: followKey });
-  });
+  }));
 }
-// Rule schedules are durable. Viewing the workspace also brings older V2 customers into the task center.
-const syncing = new Map<string, { at: number; work: Promise<void> }>();
+// Rule schedules are durable. The dedicated sync POST also brings older V2 customers into the task center.
+const syncing = new Map<string, { at: number; work: Promise<void>; running: boolean }>();
 export async function syncWorkflows(user: Actor) {
   const key = user.role === 'ADMIN' ? 'ADMIN' : user.id;
   const previous = syncing.get(key);
-  if (previous && Date.now() - previous.at < 60000) return previous.work;
+  if (previous && (previous.running || Date.now() - previous.at < 60000)) return previous.work;
   const work = syncAll(user);
-  syncing.set(key, { at: Date.now(), work });
-  try { await work; } catch (error) { syncing.delete(key); throw error; }
+  const entry = { at: Date.now(), work, running: true };
+  syncing.set(key, entry);
+  try { await work; entry.at = Date.now(); } catch (error) { syncing.delete(key); throw error; }
+  finally { entry.running = false; }
 }
 async function syncAll(user: Actor) {
   const customers = await db.customer.findMany({ where: { ...scope(user), OR: [{ lastInboundAt: { not: null } }, { quotedAt: { not: null } }, { nextFollowUpAt: { not: null } }] }, select: { id: true } });
-  for (let i = 0; i < customers.length; i += 4) await Promise.all(customers.slice(i,i+4).map(c => syncCustomerWorkflow(c.id)));
+  for (const customer of customers.sort((a, b) => a.id.localeCompare(b.id))) await syncCustomerWorkflow(customer.id);
 }
 export async function getReminders(user: Actor) {
   const now = new Date();
@@ -75,7 +85,7 @@ export async function recordWorkflowEvent(input: unknown, user: Actor) {
   const c = await accessible(v.customerId, user);
   const now = new Date(), expectedAt = new Date(v.expectedAt);
   if (expectedAt < now) throw new HttpError(400, '预计时间不能早于现在');
-  return db.$transaction(async tx => {
+  return retryTransaction(() => db.$transaction(async tx => {
     const old = await tx.workflowEvent.findUnique({ where: { requestId: v.requestId } });
     if (old) { if (old.customerId !== c.id || old.kind !== v.kind || old.expectedAt?.getTime() !== expectedAt.getTime() || old.description !== v.description) throw new HttpError(409, '请求编号已使用'); return old; }
     const event = await tx.workflowEvent.create({ data: { ...v, expectedAt, happenedAt: now, createdBy: user.id } });
@@ -89,5 +99,5 @@ export async function recordWorkflowEvent(input: unknown, user: Actor) {
       await add('确认发货与物流追踪', 'SHIPPING', expectedAt, 'shipping');
     }
     return event;
-  });
+  }));
 }

@@ -1,3 +1,4 @@
+import { retryTransaction } from '@/lib/transaction-retry';
 import { automatedTask } from './workflow-service';
 import { z } from 'zod';
 import { db } from '@/lib/db';
@@ -355,11 +356,11 @@ JSON 示例：
 
   if(analysis.confidence>=80 && analysis.nextAction){
     const type=analysis.suggestedStage==='QUOTED'?'QUOTATION':'FOLLOW_UP';
-    await db.$transaction(async tx=>{
+    await retryTransaction(() => db.$transaction(async tx=>{
       const existing=await tx.task.findFirst({where:{customerId,type,source:'AI',status:{not:'DONE'},deletedAt:null}});
       if(!existing)await automatedTask(tx,{customerId,createdBy:customer.ownerId,title:analysis.nextAction.slice(0,180),description:analysis.reason,
         type,source:'AI',dueDate:new Date(Date.now()+86400000),automationKey:`analysis:${customerId}:${customer.whatsappMessages[0]?.sentAt.toISOString()||now.toISOString().slice(0,10)}`});
-    });
+    }));
   }
 
   return {

@@ -1,3 +1,4 @@
+import { retryTransaction } from '@/lib/transaction-retry';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
@@ -26,15 +27,15 @@ export async function taskReminders(tx: Prisma.TransactionClient, taskId: string
 export async function createTask(input: unknown, user: Actor) {
   const v = taskInput.parse(input);
   if (v.customerId) await accessible(v.customerId, user);
-  return db.$transaction(async tx => {
+  return retryTransaction(() => db.$transaction(async tx => {
     const task = await tx.task.create({ data: { ...v, dueDate: new Date(v.dueDate), createdBy: user.id, completedAt: v.status === 'DONE' ? new Date() : null } });
     await taskReminders(tx, task.id, task.dueDate, task.reminderMinutes, task.status === 'DONE');
     return tx.task.findUniqueOrThrow({ where: { id: task.id }, include: taskInclude });
-  });
+  }));
 }
 export async function updateTask(id: string, input: unknown, user: Actor) {
   const { updatedAt, ...v } = patchInput.parse(input);
-  return db.$transaction(async tx => {
+  return retryTransaction(() => db.$transaction(async tx => {
     const old = await tx.task.findFirst({ where: { id, ...taskScope(user) } });
     if (!old) throw new HttpError(404, '任务不存在或无访问权限');
     const status = v.status || old.status;
@@ -46,7 +47,7 @@ export async function updateTask(id: string, input: unknown, user: Actor) {
       await taskReminders(tx, id, v.dueDate ? new Date(v.dueDate) : old.dueDate, v.reminderMinutes ?? old.reminderMinutes, status === 'DONE');
     }
     return tx.task.findUniqueOrThrow({ where: { id }, include: taskInclude });
-  });
+  }));
 }
 export async function deleteTask(id: string, user: Actor) {
   const result = await db.task.deleteMany({ where: { id, ...taskScope(user), source: 'MANUAL' } });

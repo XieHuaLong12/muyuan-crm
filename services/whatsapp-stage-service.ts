@@ -1,3 +1,4 @@
+import { retryTransaction } from '@/lib/transaction-retry';
 import { automatedTask } from './workflow-service';
 import { db } from '@/lib/db';
 import { analyzeConversation, ConversationAnalysis, getConversation } from './whatsapp-ai-service';
@@ -15,7 +16,7 @@ export async function updateWhatsAppStage(customerId: string) {
   const latest = customer.whatsappMessages.find(m => m.direction === 'INBOUND');
   if (!latest || latest.aiProcessedAt) return;
   const analysis = await analyzeConversation(customer);
-  await db.$transaction(async tx => {
+  await retryTransaction(() => db.$transaction(async tx => {
     // Optimistic concurrency: do not overwrite manual edits or analysis of newer messages.
     const updated = await tx.customer.updateMany({ where: { id: customerId, deletedAt: null,
       updatedAt: customer.updatedAt, stage: customer.stage }, data: {
@@ -38,5 +39,5 @@ export async function updateWhatsAppStage(customerId: string) {
         description:analysis.reason,dueDate:new Date(Date.now()+task.dueInDays*86400000),automationKey:`ai:${latest.id}:${task.type}`});
     }
     await tx.whatsAppMessage.update({ where: { id: latest.id }, data: { aiProcessedAt: new Date() } });
-  });
+  }));
 }

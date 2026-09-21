@@ -23,6 +23,19 @@ test('V3 tasks, reminders, scope, workflow lifecycle and media integration',asyn
  process.env.MEDIA_STORAGE_DIR=storage;
  try{
   const due=new Date(Date.now()+10*60000).toISOString();
+  // Concurrent tabs/webhooks must converge on one active task and two reminders.
+  await db.customer.update({where:{id:customerId},data:{lastInboundAt:new Date(Date.now()-2*86400000)}});
+  await Promise.all(Array.from({length:4},()=>syncCustomerWorkflow(customerId)));
+  const generated=await db.task.findFirstOrThrow({where:{customerId,automationKey:{startsWith:`reply:${customerId}:`}}});
+  assert.equal(await db.task.count({where:{customerId,status:'TODO'}}),1);
+  assert.equal(await db.reminder.count({where:{taskId:generated.id}}),2);
+  await db.customer.update({where:{id:customerId},data:{lastOutboundAt:new Date()}});
+  await Promise.all([syncCustomerWorkflow(customerId),updateTask(generated.id,{status:'DONE'},actor).catch(error=>{if(!(error instanceof Error)||!error.message.includes('任务已更新'))throw error;})]);
+  assert.equal((await db.task.findUniqueOrThrow({where:{id:generated.id}})).status,'DONE');
+  assert.equal(await db.reminder.count({where:{taskId:generated.id,status:'PENDING'}}),0);
+  await db.task.delete({where:{id:generated.id}});
+  await db.customer.update({where:{id:customerId},data:{lastInboundAt:null,lastOutboundAt:null}});
+
   const task=await createTask({customerId,title:'Send FOB quotation',dueDate:due,reminderMinutes:30,priority:'HIGH'},actor);
   assert.equal(task.reminders.length,2);assert.equal(task.status,'TODO');
   await assert.rejects(updateTask(task.id,{status:'DONE'},stranger),/访问权限/);
