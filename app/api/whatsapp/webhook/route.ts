@@ -11,363 +11,455 @@ import { ingestWhatsAppWebhook } from '@/services/whatsapp-webhook-service';
 export const dynamic = 'force-dynamic';
 
 
-function safeEqual(a:string,b:string){
+type JsonObject = Record<string, unknown>;
 
- const left = Buffer.from(a);
- const right = Buffer.from(b);
 
- return (
-   left.length === right.length &&
-   timingSafeEqual(left,right)
- );
+function safeEqual(a: string, b: string) {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+
+  return (
+    left.length === right.length &&
+    timingSafeEqual(left, right)
+  );
+}
+
+
+function isObject(
+  value: unknown
+): value is JsonObject {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value)
+  );
 }
 
 
 /**
- * GET verification
+ * Meta webhook verification
  */
-export async function GET(req:NextRequest){
+export async function GET(
+  req: NextRequest
+) {
 
- const mode =
- req.nextUrl.searchParams.get('hub.mode');
-
- const token =
- req.nextUrl.searchParams.get('hub.verify_token');
-
- const challenge =
- req.nextUrl.searchParams.get('hub.challenge');
-
- const expected =
- process.env.WHATSAPP_VERIFY_TOKEN;
-
-
- if(
-  mode==="subscribe" &&
-  expected &&
-  token &&
-  safeEqual(token,expected)
- ){
-
-  return new NextResponse(
-    challenge ?? '',
-    {
-      status:200,
-      headers:{
-       "Content-Type":"text/plain"
-      }
-    }
-  );
- }
-
-
- return NextResponse.json({
-  success:true,
-  message:"Webhook ready"
- });
-
-}
-
-
-
-/**
- * WhatsApp webhook receiver
- */
-export async function POST(req:NextRequest){
-
- const raw = await req.text();
-
-
- console.log(
-  "[WhatsApp Webhook] received",
-  new Date().toISOString()
- );
-
-
- console.log(
-  "[WhatsApp Webhook Body]",
-  raw.slice(0,2000)
- );
-
-
- let payload:any;
-
-
- try{
-
-  payload = JSON.parse(raw);
-
- }catch{
-
-  return NextResponse.json(
-   {
-    success:false,
-    error:"Invalid JSON"
-   },
-   {
-    status:400
-   }
-  );
-
- }
-
-
-
- /**
-  * Normalize Gupshup wrapper
-  *
-  * 支持:
-  * {
-  *  app:"",
-  *  payload:{}
-  * }
-  */
-
- if(
-  payload?.payload &&
-  typeof payload.payload==="object"
- ){
-
-   payload =
-   {
-    ...payload.payload,
-    app:payload.app
-   };
-
- }
-
-
-
- const isMetaWebhook =
- payload?.object ===
- "whatsapp_business_account";
-
-
-
-
- /**
-  * Gupshup security
-  */
-
- if(!isMetaWebhook){
-
-   const secret =
-   process.env.GUPSHUP_WEBHOOK_SECRET;
-
-
-   if(secret){
-
-    const token =
-    req.headers.get(
-      "x-webhook-secret"
-    )
-    ||
+  const mode =
     req.nextUrl.searchParams.get(
-      "token"
-    )
-    ||
-    "";
-
-
-    if(!safeEqual(token,secret)){
-
-      console.warn(
-       "Invalid Gupshup secret"
-      );
-
-      return NextResponse.json(
-       {
-        success:false,
-        error:"Invalid secret"
-       },
-       {
-        status:401
-       }
-      );
-
-    }
-
-   }
-
-
-
-   const app =
-   process.env.GUPSHUP_APP_NAME;
-
-
-   if(
-    app &&
-    payload?.app &&
-    payload.app !== app
-   ){
-
-    return NextResponse.json(
-     {
-      success:false,
-      error:"Invalid app"
-     },
-     {
-      status:400
-     }
+      'hub.mode'
     );
 
-   }
-
- }
-
-
-
- /**
-  * Meta signature
-  *
-  * 不阻断Gupshup
-  */
-
- if(isMetaWebhook){
-
-  const appSecret =
-  process.env.META_APP_SECRET;
-
-
-  const signature =
-  req.headers.get(
-   "x-hub-signature-256"
-  );
-
-
-  if(appSecret && signature){
-
-   const expected =
-   "sha256="+
-   createHmac(
-    "sha256",
-    appSecret
-   )
-   .update(raw)
-   .digest("hex");
-
-
-   if(!safeEqual(signature,expected)){
-
-    return NextResponse.json(
-     {
-      success:false,
-      error:"Invalid signature"
-     },
-     {
-      status:401
-     }
+  const token =
+    req.nextUrl.searchParams.get(
+      'hub.verify_token'
     );
 
-   }
+  const challenge =
+    req.nextUrl.searchParams.get(
+      'hub.challenge'
+    );
+
+
+  const expected =
+    process.env.WHATSAPP_VERIFY_TOKEN;
+
+
+  if (
+    mode === 'subscribe' &&
+    expected &&
+    token &&
+    safeEqual(token, expected)
+  ) {
+
+    return new NextResponse(
+      challenge ?? '',
+      {
+        status: 200,
+        headers:{
+          'Content-Type':
+            'text/plain; charset=utf-8',
+        },
+      }
+    );
 
   }
 
- }
+
+  return NextResponse.json({
+    success:true,
+    message:'Webhook ready',
+  });
+
+}
 
 
 
- try{
+/**
+ * Receive WhatsApp messages
+ */
+export async function POST(
+  req: NextRequest
+) {
 
 
-  const result =
-  await ingestWhatsAppWebhook(
-    payload
+  const raw =
+    await req.text();
+
+
+  console.log(
+    '[WhatsApp Webhook] Received:',
+    new Date().toISOString()
   );
+
+
+  console.log(
+    '[WhatsApp Webhook Payload]',
+    raw.slice(0,3000)
+  );
+
+
+  let payload: JsonObject;
+
+
+  try {
+
+    const parsed =
+      JSON.parse(raw);
+
+
+    if (!isObject(parsed)) {
+
+      return NextResponse.json(
+        {
+          success:false,
+          error:'Invalid payload',
+        },
+        {
+          status:400,
+        }
+      );
+
+    }
+
+
+    payload = parsed;
+
+
+  } catch {
+
+
+    return NextResponse.json(
+      {
+        success:false,
+        error:'Invalid JSON payload',
+      },
+      {
+        status:400,
+      }
+    );
+
+  }
 
 
 
   /**
-   * AI workflow
+   * Normalize Gupshup wrapper
+   *
+   * Example:
+   *
+   * {
+   *   app:"JasonCRM",
+   *   payload:{}
+   * }
+   *
    */
 
-  Promise.all(
-   result.customerIds.map(
-    async(customerId)=>{
+  if (
+    isObject(payload.payload)
+  ) {
 
-     try{
+    payload = {
 
-      await syncCustomerWorkflow(
-       customerId
-      );
+      ...(payload.payload),
 
+      app:
+        payload.app,
 
-      await updateWhatsAppStage(
-       customerId
-      );
-
-
-     }catch(error){
-
-      console.error(
-       "workflow failed",
-       customerId,
-       error
-      );
-
-     }
-
-    }
-   )
-  );
-
-
-
-  return NextResponse.json(
-   {
-    success:true,
-    received:true,
-    messages:
-     result.messages ?? 0,
-
-    customers:
-     result.customerIds.length
-   }
-  );
-
-
- }catch(error){
-
-
-  console.error(
-   "Webhook ingestion failed",
-   error
-  );
-
-
-  if(
-   error instanceof ZodError ||
-   error instanceof HttpError
-  ){
-
-   return NextResponse.json(
-    {
-     success:false,
-     error:
-      error.message
-    },
-    {
-     status:
-      error instanceof HttpError
-      ? error.status
-      :400
-    }
-   );
+    };
 
   }
 
 
 
-  return NextResponse.json(
-   {
-    success:false,
-    error:"Webhook processing failed"
-   },
-   {
-    status:500
-   }
-  );
+  const isMetaWebhook =
+    payload.object ===
+    'whatsapp_business_account';
 
 
- }
+
+  /**
+   * Gupshup verification
+   */
+
+  if (!isMetaWebhook) {
+
+
+    const secret =
+      process.env
+      .GUPSHUP_WEBHOOK_SECRET
+      ?.trim();
+
+
+
+    if (secret) {
+
+
+      const providedToken =
+        req.headers.get(
+          'x-webhook-secret'
+        )
+        ??
+        req.nextUrl.searchParams.get(
+          'token'
+        )
+        ??
+        '';
+
+
+
+      if (
+        !safeEqual(
+          providedToken,
+          secret
+        )
+      ) {
+
+        console.warn(
+          '[WhatsApp] Invalid webhook secret'
+        );
+
+
+        return NextResponse.json(
+          {
+            success:false,
+            error:'Invalid webhook token',
+          },
+          {
+            status:401,
+          }
+        );
+
+      }
+
+    }
+
+
+
+    const app =
+      process.env
+      .GUPSHUP_APP_NAME
+      ?.trim();
+
+
+
+    if (
+      app &&
+      payload.app &&
+      payload.app !== app
+    ) {
+
+      return NextResponse.json(
+        {
+          success:false,
+          error:'Unexpected Gupshup app',
+        },
+        {
+          status:400,
+        }
+      );
+
+    }
+
+  }
+
+
+
+
+  /**
+   * Meta signature validation
+   *
+   * Only validate when signature exists.
+   * Avoid blocking Gupshup.
+   */
+
+  if (isMetaWebhook) {
+
+
+    const appSecret =
+      process.env
+      .META_APP_SECRET
+      ?.trim();
+
+
+
+    const signature =
+      req.headers.get(
+        'x-hub-signature-256'
+      );
+
+
+
+    if (
+      appSecret &&
+      signature
+    ) {
+
+
+      const expectedSignature =
+        `sha256=${
+          createHmac(
+            'sha256',
+            appSecret
+          )
+          .update(raw)
+          .digest('hex')
+        }`;
+
+
+
+      if (
+        !safeEqual(
+          signature,
+          expectedSignature
+        )
+      ) {
+
+        return NextResponse.json(
+          {
+            success:false,
+            error:'Invalid webhook signature',
+          },
+          {
+            status:401,
+          }
+        );
+
+      }
+
+    }
+
+  }
+
+
+
+  try {
+
+
+    const result =
+      await ingestWhatsAppWebhook(
+        payload as Parameters<
+          typeof ingestWhatsAppWebhook
+        >[0]
+      );
+
+
+
+    await Promise.all(
+
+      result.customerIds.map(
+        async(customerId)=>{
+
+          try {
+
+            await syncCustomerWorkflow(
+              customerId
+            );
+
+
+            await updateWhatsAppStage(
+              customerId
+            );
+
+
+          } catch(error) {
+
+
+            console.error(
+              '[WhatsApp Workflow Failed]',
+              customerId,
+              error
+            );
+
+          }
+
+        }
+
+      )
+
+    );
+
+
+
+    return NextResponse.json(
+      {
+        success:true,
+
+        received:true,
+
+        messages:
+          result.messages ?? 0,
+
+        customers:
+          result.customerIds.length,
+
+      }
+    );
+
+
+  } catch(error) {
+
+
+    console.error(
+      '[WhatsApp Webhook Error]',
+      error
+    );
+
+
+
+    if (
+      error instanceof ZodError ||
+      error instanceof HttpError
+    ) {
+
+
+      return NextResponse.json(
+        {
+          success:false,
+          error:
+            error.message,
+        },
+        {
+          status:
+            error instanceof HttpError
+            ? error.status
+            :400,
+        }
+      );
+
+    }
+
+
+
+    return NextResponse.json(
+      {
+        success:false,
+        error:
+          'Webhook processing failed',
+      },
+      {
+        status:500,
+      }
+    );
+
+  }
 
 }
