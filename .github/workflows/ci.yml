@@ -82,6 +82,12 @@ jobs:
       - name: Seed product library
         run: pnpm db:seed:products
 
+      - name: Seed product library without .env (production parity)
+        run: |
+          mv .env .env.ci-backup
+          pnpm db:seed:products
+          mv .env.ci-backup .env
+
       - name: Verify product library
         run: |
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM Product")" = "28"
