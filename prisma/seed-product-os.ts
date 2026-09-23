@@ -35,6 +35,14 @@ const SEED_SOURCE = 'docs/product-os/source-extract.json';
 const SEED_SOURCE_CN = 'docs/product-os/source-extract-cn.json';
 
 /** 已确认的渠道 MOQ（业务规则，非文档数据）。 */
+/**
+ * 待核对原因分三类，避免把「数值算不通」和「两份资料不一致」混为一谈：
+ * 前者必须修，后者只需要业务决定以哪份为准。
+ */
+export const TAG_MATH = '[算术] ';
+export const TAG_SOURCE = '[来源] ';
+export const TAG_MISSING = '[资料缺失] ';
+
 /** 分类 code → 英文名，用于生成产品英文名。 */
 const CATEGORY_EN: Record<string, string> = {
   SERIES_Y_SOFA: 'Compressed Sofa',
@@ -155,7 +163,9 @@ async function main() {
   for (const conflict of data.conflicts ?? []) {
     if (conflict.status === 'OPEN' || conflict.status === 'BLOCKER') {
       for (const model of conflict.models) {
-        conflictByModel.set(model, [...(conflictByModel.get(model) ?? []), `${conflict.id}: ${conflict.detail}`]);
+        // C-03 / C-04 是数值自相矛盾（算术问题）；C-09 是图册未收录（资料缺失）
+        const tag = conflict.id === 'C-03' || conflict.id === 'C-04' ? TAG_MATH : conflict.id === 'C-09' ? TAG_MISSING : TAG_SOURCE;
+        conflictByModel.set(model, [...(conflictByModel.get(model) ?? []), `${tag}${conflict.id}: ${conflict.detail}`]);
       }
     }
   }
@@ -166,7 +176,7 @@ async function main() {
   for (const conflict of dataCn.conflicts ?? []) {
     if (conflict.type !== 'MODEL_NUMBER_SWAP') continue;
     for (const model of conflict.models) {
-      cnConflictByModel.set(model, [...(cnConflictByModel.get(model) ?? []), `${conflict.id}: ${conflict.detail}`]);
+      cnConflictByModel.set(model, [...(cnConflictByModel.get(model) ?? []), `${TAG_SOURCE}${conflict.id}: ${conflict.detail}`]);
     }
   }
 
@@ -401,17 +411,17 @@ async function main() {
         variant?.grossWeightKg ?? cnVariant?.[3] ?? weight.total ?? variant?.catalogGrossWeightKg ?? 0;
 
       const reviewNotes: string[] = [];
-      if (variant?.grossWeightKgMissing && cnVariant?.[3] == null) reviewNotes.push('中英文报价表均缺毛重');
-      if (variant?.catalogGrossWeightKgMissing) reviewNotes.push('图册缺毛重');
+      if (variant?.grossWeightKgMissing && cnVariant?.[3] == null) reviewNotes.push(`${TAG_MISSING}中英文报价表均缺毛重`);
+      if (variant?.catalogGrossWeightKgMissing) reviewNotes.push(`${TAG_MISSING}图册缺毛重`);
       if (variant?.grossWeightKg === undefined && cnVariant?.[3] != null) {
-        reviewNotes.push(`毛重取自中文报价表（${cnVariant[3]}kg）`);
+        reviewNotes.push(`${TAG_SOURCE}毛重取自中文报价表（${cnVariant[3]}kg）`);
       }
       if (cbmNeedsReview(authoritativeCbm, packing.computedCbm)) {
         reviewNotes.push(
-          `CBM 与包装不一致：采用 ${authoritativeCbm}，按包装推导 ${packing.computedCbm}`,
+          `${TAG_MATH}CBM 与包装不一致：采用 ${authoritativeCbm}，按包装推导 ${packing.computedCbm}`,
         );
       }
-      if (packing.notes.length) reviewNotes.push(...packing.notes);
+      if (packing.notes.length) reviewNotes.push(...packing.notes.map(n => `${TAG_MATH}${n}`));
 
       // 逐变体比对中英文报价表：只有该变体本身不一致才标记
       if (variant && cnVariant) {
@@ -434,12 +444,12 @@ async function main() {
           const enText = variant.dimensions.join('*');
           if (cnText !== enText) diffs.push(`尺寸 中文 ${cnText} / 英文 ${enText}`);
         }
-        if (diffs.length) reviewNotes.push(`中英文报价表不一致 —— ${diffs.join('；')}`);
+        if (diffs.length) reviewNotes.push(`${TAG_SOURCE}中英文报价表不一致 —— ${diffs.join('；')}`);
       }
 
       for (const conflict of conflictByModel.get(raw.model) ?? []) reviewNotes.push(conflict);
       for (const conflict of cnConflictByModel.get(raw.model) ?? []) reviewNotes.push(conflict);
-      if (variant?.note) reviewNotes.push(variant.note);
+      if (variant?.note) reviewNotes.push(`${TAG_SOURCE}${variant.note}`);
 
       if (dims && dims.length >= 3) dimList.push(dims.join('x'));
       const secondary = variant?.secondaryDimensions ?? null;

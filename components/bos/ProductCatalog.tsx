@@ -33,6 +33,7 @@ export type CatalogData = {
   total: number;
   libraryTotal: number;
   reviewCount: number;
+  reviewBreakdown: { math: number; source: number; missing: number };
   tree: {
     code: string;
     name: string;
@@ -113,8 +114,16 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
             <Typography as="h2" variant="heading">数据质量</Typography>
             <dl className="bos-quality">
               <div>
-                <dt>待核对变体</dt>
-                <dd className={data.reviewCount ? 'bos-danger-text' : ''}>{data.reviewCount}</dd>
+                <dt>算术疑点</dt>
+                <dd className={data.reviewBreakdown.math ? 'bos-danger-text' : ''}>{data.reviewBreakdown.math}</dd>
+              </div>
+              <div>
+                <dt>来源差异</dt>
+                <dd>{data.reviewBreakdown.source}</dd>
+              </div>
+              <div>
+                <dt>资料缺失</dt>
+                <dd>{data.reviewBreakdown.missing}</dd>
               </div>
               <div>
                 <dt>本页型号</dt>
@@ -122,8 +131,9 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
               </div>
             </dl>
             <p className="bos-footnote">
-              待核对表示该变体的报价表 CBM 与包装尺寸推导值偏差超过 15%，
-              或存在已登记的来源冲突。数值以报价表为准，未做自动修正。
+              <strong>算术疑点</strong>：数值自相矛盾（如 CBM 与包装尺寸算不通），需要修正。
+              <strong>来源差异</strong>：中英文报价表数值不一致，需要决定以哪份为准。
+              <strong>资料缺失</strong>：图册未收录。全部按报价表原值展示，未做自动修正。
             </p>
           </Card>
         </aside>

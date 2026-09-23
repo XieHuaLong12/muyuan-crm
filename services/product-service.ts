@@ -128,7 +128,7 @@ export async function productList(user: Actor, input: unknown = {}) {
     ...(query.review === 'NEEDS_REVIEW' ? { variants: { some: { needsReview: true, deletedAt: null } } } : {}),
   };
 
-  const [rows, total, categories, seriesList, reviewCount, libraryTotal] = await Promise.all([
+  const [rows, total, categories, seriesList, reviewCount, mathCount, sourceCount, missingCount, libraryTotal] = await Promise.all([
     db.product.findMany({
       where,
       include: {
@@ -148,6 +148,9 @@ export async function productList(user: Actor, input: unknown = {}) {
     db.productCategory.findMany({ where: { level: 1 }, orderBy: { sort: 'asc' }, include: { children: { orderBy: { sort: 'asc' } } } }),
     db.productSeries.findMany({ orderBy: { sort: 'asc' } }),
     db.productVariant.count({ where: { needsReview: true, deletedAt: null } }),
+    db.productVariant.count({ where: { needsReview: true, deletedAt: null, reviewNote: { startsWith: '[算术]' } } }),
+    db.productVariant.count({ where: { needsReview: true, deletedAt: null, reviewNote: { startsWith: '[来源]' } } }),
+    db.productVariant.count({ where: { needsReview: true, deletedAt: null, reviewNote: { startsWith: '[资料缺失]' } } }),
     // 未经过滤的总数，用于区分「产品库为空」与「筛选无结果」
     db.product.count({ where: { deletedAt: null } }),
   ]);
@@ -159,6 +162,7 @@ export async function productList(user: Actor, input: unknown = {}) {
     total,
     libraryTotal,
     reviewCount,
+    reviewBreakdown: { math: mathCount, source: sourceCount, missing: missingCount },
     tree: categories.map(root => ({
       code: root.code,
       name: pickName(root.nameCn, root.nameEn, lang),
