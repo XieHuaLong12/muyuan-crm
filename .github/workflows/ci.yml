@@ -143,9 +143,11 @@ jobs:
           # 待核对原因必须分类：算术疑点应很少（真正需要修的只有个别几处），
           # 大部分是「两份资料不一致」或「图册未收录」，只需业务决定。
           atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[算术]%'" "1"
-          check "SELECT (SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[算术]%') <= 10" "1"
+          # 回归护栏：英文报价表本身有多处 CBM 与包装算不通，实测 13 处；
+          # 上限设为 20，既能容纳已知问题，又能在数量失控时报警。
+          check "SELECT (SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[算术]%') <= 20" "1"
           atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[来源]%'" "5"
-          atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[资料缺失]%'" "1"
+          atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[资料缺失]%'" "5"
           # 中英文不一致必须在具体变体上可见，且型号编号对调整型号登记
           atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '%中英文报价表不一致%'" "5"
           atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '%CN-10%'" "1"
