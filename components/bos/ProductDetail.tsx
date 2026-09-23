@@ -57,7 +57,7 @@ export type ProductDetailData = {
   materials: { id: string; role: string; nameEn: string; nameCn: string; specEn: string }[];
   options: { id: string; kind: string; code: string; nameEn: string; nameCn: string }[];
   moqs: { channel: string; channelLabelCn: string; minQty: number }[];
-  media: { id: string; role: string; fileName: string }[];
+  media: { id: string; role: string; fileName: string; storageKey: string }[];
   aiProfile: { status: string; keywords: string[]; searchText: string } | null;
 };
 
@@ -81,6 +81,7 @@ function dims(v: Variant): string {
 
 export function ProductDetail({ data }: { data: ProductDetailData }) {
   const reviewVariants = data.variants.filter(v => v.needsReview);
+  const hero = data.media.find(m => m.role === 'HERO') ?? null;
 
   return (
     <>
@@ -94,6 +95,21 @@ export function ProductDetail({ data }: { data: ProductDetailData }) {
           </Link>
         }
       />
+
+      <Card className="bos-product-hero">
+        {hero ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/${hero.storageKey}`} alt={`${data.model} 产品图`} />
+            <p className="bos-footnote">产品图来自 2026 产品图册（{data.model}）。</p>
+          </>
+        ) : (
+          <div className="bos-product-hero-missing">
+            <strong>暂无产品图</strong>
+            <p>该型号未收录在图册中，需要单独提供照片。</p>
+          </div>
+        )}
+      </Card>
 
       {reviewVariants.length > 0 && (
         <Card className="bos-review-banner">

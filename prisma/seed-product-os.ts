@@ -14,7 +14,7 @@
  *
  * 运行：pnpm db:seed:products
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { parsePacking, parseGrossWeight, cbmNeedsReview } from '../lib/product-packing';
 
@@ -149,6 +149,7 @@ async function main() {
   let variantTotal = 0;
   let cartonTotal = 0;
   let flaggedTotal = 0;
+  const missingImages: string[] = [];
 
   for (const raw of data.products) {
     const categoryId = categories.get(raw.category);
@@ -241,6 +242,30 @@ async function main() {
         },
         update: { minQty: tier.minQty, channelLabelCn: tier.channelLabelCn },
       });
+    }
+
+    // ── 产品主图 ───────────────────────────────────────────
+    // 图片来自产品图册（每页印有 Model 号，已逐页核对），
+    // 缺图的型号不猜测、不占位，由界面提示补图。
+    const imageFile = `public/products/${raw.model}.jpg`;
+    if (existsSync(imageFile)) {
+      const storageKey = `products/${raw.model}.jpg`;
+      await db.productMedia.upsert({
+        where: { storageKey },
+        create: {
+          productId: product.id,
+          role: 'HERO',
+          storageKey,
+          mimeType: 'image/jpeg',
+          fileName: `${raw.model}.jpg`,
+          size: statSync(imageFile).size,
+          sort: 0,
+          createdBy: admin.id,
+        },
+        update: { productId: product.id, size: statSync(imageFile).size },
+      });
+    } else {
+      missingImages.push(raw.model);
     }
 
     // ── 变体 + 包装 + 价格 ─────────────────────────────────
@@ -407,6 +432,9 @@ async function main() {
     `Product OS seed 完成：${data.products.length} 个型号、${variantTotal} 个变体、` +
       `${cartonTotal} 条纸箱记录，其中 ${flaggedTotal} 个变体标记为待核对。`,
   );
+  if (missingImages.length) {
+    console.log(`Product OS：以下型号暂无产品图，需补充：${missingImages.join('、')}`);
+  }
 }
 
 main()
