@@ -79,6 +79,18 @@ jobs:
       - name: Seed test database
         run: pnpm db:seed
 
+      - name: Seed product library
+        run: pnpm db:seed:products
+
+      - name: Verify product library
+        run: |
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM Product")" = "28"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductVariant")" = "58"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductPrice WHERE incoterm='FOB'")" = "58"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductMoq WHERE channel='ONLINE' AND minQty=10")" = "28"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductMoq WHERE channel='OFFLINE' AND minQty=20")" = "28"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductVariant WHERE needsReview=1")" -gt "0"
+
       - name: Test
         run: pnpm test
 
