@@ -4,15 +4,10 @@ CREATE TABLE `ProductCategory` (
     `code` VARCHAR(32) NOT NULL,
     `nameEn` VARCHAR(191) NOT NULL,
     `nameCn` VARCHAR(191) NOT NULL DEFAULT '',
-    `level` INTEGER NOT NULL DEFAULT 1,
-    `codePrefix` VARCHAR(4) NOT NULL DEFAULT '',
     `sort` INTEGER NOT NULL DEFAULT 0,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
-    `parentId` VARCHAR(191) NULL,
 
     UNIQUE INDEX `ProductCategory_code_key`(`code`),
-    INDEX `ProductCategory_parentId_idx`(`parentId`),
-    INDEX `ProductCategory_level_sort_idx`(`level`, `sort`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -229,9 +224,6 @@ CREATE TABLE `ProductAiProfile` (
     UNIQUE INDEX `ProductAiProfile_productId_key`(`productId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- AddForeignKey
-ALTER TABLE `ProductCategory` ADD CONSTRAINT `ProductCategory_parentId_fkey` FOREIGN KEY (`parentId`) REFERENCES `ProductCategory`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Product` ADD CONSTRAINT `Product_categoryId_fkey` FOREIGN KEY (`categoryId`) REFERENCES `ProductCategory`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;

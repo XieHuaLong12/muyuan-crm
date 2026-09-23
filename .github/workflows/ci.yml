@@ -76,6 +76,22 @@ jobs:
       - name: Apply MySQL migrations
         run: pnpm exec prisma migrate deploy
 
+      - name: Upgrade a database that already has the previous migrations
+        env:
+          DATABASE_URL: mysql://root:root@127.0.0.1:3306/muyuan_reuse
+        run: |
+          # 复现生产升级路径：先应用除最新一条以外的全部迁移（等价于线上现状），
+          # 再应用最新一条。若最新一条重复创建了已存在的表，这一步会失败。
+          mysql -h127.0.0.1 -uroot -proot -e 'CREATE DATABASE muyuan_reuse'
+          NEWEST="$(ls -1d prisma/migrations/*/ | sort | tail -1)"
+          NEWEST="${NEWEST%/}"
+          echo "newest migration under test: $NEWEST"
+          mv "$NEWEST" /tmp/newest-migration
+          pnpm exec prisma migrate deploy
+          mv /tmp/newest-migration "$NEWEST"
+          pnpm exec prisma migrate deploy
+          echo "reused-deployment upgrade path OK"
+
       - name: Seed test database
         run: pnpm db:seed
 
