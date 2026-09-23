@@ -406,7 +406,7 @@ export async function POST(
         received:true,
 
         messages:
-          result.messages ?? 0,
+          result.received,
 
         customers:
           result.customerIds.length,
