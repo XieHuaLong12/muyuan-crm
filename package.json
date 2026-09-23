@@ -12,7 +12,7 @@
     "test": "node --env-file=.env node_modules/tsx/dist/cli.mjs --test tests/*.test.ts",
     "db:init": "node scripts/init-db.mjs",
     "test:smoke": "node --env-file=.env node_modules/tsx/dist/cli.mjs scripts/smoke.ts",
-    "db:seed:products": "node --env-file=.env node_modules/tsx/dist/cli.mjs prisma/seed-product-os.ts"
+    "db:seed:products": "node node_modules/tsx/dist/cli.mjs prisma/seed-product-os.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

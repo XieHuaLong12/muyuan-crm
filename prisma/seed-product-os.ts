@@ -14,9 +14,17 @@
  *
  * 运行：pnpm db:seed:products
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { parsePacking, parseGrossWeight, cbmNeedsReview } from '../lib/product-packing';
+
+// 本机开发时读 .env；生产环境（Hostinger 等）没有 .env，环境变量由平台注入。
+// 不要在这里用 `node --env-file=.env`：文件不存在时 node 会直接退出，导致静默失败。
+if (existsSync('.env')) process.loadEnvFile('.env');
+if (!process.env.DATABASE_URL) {
+  console.error('缺少 DATABASE_URL：无法连接数据库。请在环境中配置后重试。');
+  process.exit(1);
+}
 
 const db = new PrismaClient();
 
