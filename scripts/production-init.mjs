@@ -78,41 +78,43 @@ try {
     update: {},
   });
 
-  // Product OS：产品库或产品图缺失时才灌入种子（幂等，可安全重复执行）。
-  // 失败不影响启动：产品数据缺失不应阻断 CRM 运行，但必须在日志里说清楚原因。
+  // Product OS：每次都跑一遍种子。
+  //
+  // 种子本身完全幂等（按 Product.model / ProductVariant.sku / storageKey upsert），
+  // 所以重复执行是安全的，代价只是几秒。
+  //
+  // 之前用「产品库为空才跑」的条件，结果第一次部署后再改分类/加型号都不会生效 ——
+  // 这类「守卫条件过期」的 bug 已经发生过两次（空产品库、缺产品图），
+  // 因此这里不再做条件判断：宁可每次多花几秒，也不要再出现「部署成功但数据是旧的」。
   //
   // 注意：这里**不能**传 `--env-file=.env`。生产环境（Hostinger 等）没有 .env 文件，
   // 环境变量由平台注入；`node --env-file=<缺失文件>` 会直接以退出码 9 结束，
   // 造成「页面能用但没数据」的静默失败。环境变量已通过 env 继承。
   try {
-    const productCount = await db.product.count();
-    const productMediaCount = await db.productMedia.count();
-    if (productCount === 0 || productMediaCount === 0) {
-      const tsxCli = 'node_modules/tsx/dist/cli.mjs';
-      if (!fs.existsSync(tsxCli)) {
-        console.warn(`Product OS: 缺少 ${tsxCli}，跳过种子。请在服务器上运行 pnpm db:seed:products。`);
-      } else {
-        console.log(
-          `Product OS: seeding (products=${productCount}, images=${productMediaCount})...`,
-        );
-        const seed = spawnSync(process.execPath, [tsxCli, 'prisma/seed-product-os.ts'], {
-          stdio: 'inherit',
-          env: process.env,
-        });
-        if (seed.error) {
-          console.warn(`Product OS: 种子启动失败（${seed.error.message}）。请运行 pnpm db:seed:products。`);
-        } else if (seed.status !== 0) {
-          console.warn(`Product OS: 种子以退出码 ${seed.status} 结束。请运行 pnpm db:seed:products。`);
-        } else {
-          const seeded = await db.product.count();
-          const images = await db.productMedia.count();
-          console.log(`Product OS: 种子完成，当前 ${seeded} 个型号、${images} 张产品图。`);
-        }
-      }
+    const tsxCli = 'node_modules/tsx/dist/cli.mjs';
+    if (!fs.existsSync(tsxCli)) {
+      console.warn(`Product OS: 缺少 ${tsxCli}，跳过种子。请在服务器上运行 pnpm db:seed:products。`);
     } else {
-      console.log(
-        `Product OS: ${productCount} products and ${productMediaCount} images already present, skipping seed.`,
-      );
+      const before = await db.product.count();
+      console.log(`Product OS: seeding product library (currently ${before} products)...`);
+      const seed = spawnSync(process.execPath, [tsxCli, 'prisma/seed-product-os.ts'], {
+        stdio: 'inherit',
+        env: process.env,
+      });
+      if (seed.error) {
+        console.warn(`Product OS: 种子启动失败（${seed.error.message}）。请运行 pnpm db:seed:products。`);
+      } else if (seed.status !== 0) {
+        console.warn(`Product OS: 种子以退出码 ${seed.status} 结束。请运行 pnpm db:seed:products。`);
+      } else {
+        const [products, images, categories] = await Promise.all([
+          db.product.count(),
+          db.productMedia.count(),
+          db.productCategory.count(),
+        ]);
+        console.log(
+          `Product OS: 种子完成，当前 ${products} 个型号、${images} 张产品图、${categories} 个分类。`,
+        );
+      }
     }
   } catch (error) {
     console.warn('Product OS seed skipped:', error instanceof Error ? error.message : error);
