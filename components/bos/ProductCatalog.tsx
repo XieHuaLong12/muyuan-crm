@@ -30,6 +30,7 @@ export type CatalogData = {
   query: { q: string; category: string; series: string; status: string; review: string; page: number };
   pageSize: number;
   total: number;
+  libraryTotal: number;
   reviewCount: number;
   categories: { code: string; nameCn: string; nameEn: string }[];
   series: { code: string; nameEn: string }[];
@@ -167,13 +168,18 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
               ))}
             </Table>
 
-            {!data.products.length && (
+            {!data.products.length && (data.libraryTotal === 0 ? (
+              <EmptyState
+                title="产品库还没有数据"
+                description="11 张产品表已经建好，但种子没有运行。部署时若产品库为空会自动灌入一次；如果这里仍然是空的，说明种子执行失败——请查看部署日志里的 “Product OS” 行，或在服务器上运行 pnpm db:seed:products。"
+              />
+            ) : (
               <EmptyState
                 title="没有匹配的型号"
                 description="试试其他型号关键词，或清除分类与状态筛选。"
                 action={<Link href="/products" className="bos-button">清除筛选</Link>}
               />
-            )}
+            ))}
 
             <div className="bos-pagination">
               <span>

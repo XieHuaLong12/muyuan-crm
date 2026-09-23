@@ -107,7 +107,7 @@ export async function productList(user: Actor, input: unknown = {}) {
     ...(query.review === 'NEEDS_REVIEW' ? { variants: { some: { needsReview: true, deletedAt: null } } } : {}),
   };
 
-  const [rows, total, categories, seriesList, reviewCount] = await Promise.all([
+  const [rows, total, categories, seriesList, reviewCount, libraryTotal] = await Promise.all([
     db.product.findMany({
       where,
       include: {
@@ -126,12 +126,15 @@ export async function productList(user: Actor, input: unknown = {}) {
     db.productCategory.findMany({ orderBy: { sort: 'asc' } }),
     db.productSeries.findMany({ orderBy: { sort: 'asc' } }),
     db.productVariant.count({ where: { needsReview: true, deletedAt: null } }),
+    // 未经过滤的总数，用于区分「产品库为空」与「筛选无结果」
+    db.product.count({ where: { deletedAt: null } }),
   ]);
 
   return {
     query,
     pageSize: PAGE_SIZE,
     total,
+    libraryTotal,
     reviewCount,
     categories: categories.map(c => ({ code: c.code, nameCn: c.nameCn, nameEn: c.nameEn })),
     series: seriesList.map(s => ({ code: s.code, nameEn: s.nameEn })),
