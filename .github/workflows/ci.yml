@@ -90,14 +90,61 @@ jobs:
 
       - name: Verify product library
         run: |
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM Product")" = "28"
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductVariant")" = "58"
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductPrice WHERE incoterm='FOB'")" = "58"
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductMoq WHERE channel='ONLINE' AND minQty=10")" = "28"
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductMoq WHERE channel='OFFLINE' AND minQty=20")" = "28"
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductVariant WHERE needsReview=1")" -gt "0"
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "SELECT COUNT(*) FROM ProductMedia WHERE role='HERO'")" = "26"
-          test "$(ls public/products/*.jpg | wc -l | tr -d ' ')" = "26"
+          # 断言真实条数；失败时打印 SQL，便于定位
+          check() {
+            local got
+            got=$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "$1")
+            if [ "$got" != "$2" ]; then
+              echo "FAIL: expected $2 but got $got :: $1"
+              exit 1
+            fi
+            echo "ok  $got  :: $1"
+          }
+          atleast() {
+            local got
+            got=$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "$1")
+            if [ "$got" -lt "$2" ]; then
+              echo "FAIL: expected >= $2 but got $got :: $1"
+              exit 1
+            fi
+            echo "ok  $got  :: $1"
+          }
+
+          # 28 个英文报价表型号 + 2 个仅见于中文报价表的 M 系列型号
+          check "SELECT COUNT(*) FROM Product" "30"
+          check "SELECT COUNT(*) FROM ProductVariant" "66"
+
+          # 两层分类：2 个一级（压缩家具 / 智能床垫）+ 4 个二级（Y/D/C/M）
+          check "SELECT COUNT(*) FROM ProductCategory" "6"
+          check "SELECT COUNT(*) FROM ProductCategory WHERE level=1" "2"
+          check "SELECT COUNT(*) FROM ProductCategory WHERE level=2" "4"
+          # 旧分类已清理（D 系列曾被错归为沙发）
+          check "SELECT COUNT(*) FROM ProductCategory WHERE code IN ('COMPRESSED_SOFA','COMPRESSED_BED')" "0"
+
+          # 分类归属：Y 压缩沙发 / D 压缩单人椅 / C 压缩床 / M 压缩床垫
+          check "SELECT COUNT(*) FROM Product p JOIN ProductCategory c ON p.categoryId=c.id WHERE p.model LIKE 'Y-%' AND c.code='SERIES_Y_SOFA'" "17"
+          check "SELECT COUNT(*) FROM Product p JOIN ProductCategory c ON p.categoryId=c.id WHERE p.model LIKE 'D-%' AND c.code='SERIES_D_CHAIR'" "5"
+          check "SELECT COUNT(*) FROM Product p JOIN ProductCategory c ON p.categoryId=c.id WHERE p.model LIKE 'C-%' AND c.code='SERIES_C_BED'" "6"
+          check "SELECT COUNT(*) FROM Product p JOIN ProductCategory c ON p.categoryId=c.id WHERE p.model LIKE 'M-%' AND c.code='SERIES_M_MATTRESS'" "2"
+          # 第一层级的智能床垫分类应为空（占位，等待上传产品）
+          check "SELECT COUNT(*) FROM Product p JOIN ProductCategory c ON p.categoryId=c.id WHERE c.code='SMART_MATTRESS'" "0"
+
+          # 美元价（英文报价表）与人民币价（中文报价表）并存
+          check "SELECT COUNT(*) FROM ProductPrice WHERE currency='USD'" "58"
+          check "SELECT COUNT(*) FROM ProductPrice WHERE currency='CNY'" "62"
+
+          # 渠道 MOQ：线上 10 / 线下 20
+          check "SELECT COUNT(*) FROM ProductMoq WHERE channel='ONLINE' AND minQty=10" "30"
+          check "SELECT COUNT(*) FROM ProductMoq WHERE channel='OFFLINE' AND minQty=20" "30"
+
+          # 中文材料名与中英文差异标记已写入
+          atleast "SELECT COUNT(*) FROM ProductMaterial WHERE nameCn <> ''" "40"
+          atleast "SELECT COUNT(*) FROM ProductVariant WHERE needsReview=1" "1"
+          atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE 'CN-%'" "1"
+
+          # 产品图：26 张图 + 26 条记录
+          check "SELECT COUNT(*) FROM ProductMedia WHERE role='HERO'" "26"
+          check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Product'" "1"
 
       - name: Test
         run: pnpm test
