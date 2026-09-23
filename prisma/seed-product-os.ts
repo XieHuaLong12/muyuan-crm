@@ -125,7 +125,7 @@ type RawCnData = {
     empty?: boolean;
   }[];
   modelCategory: Record<string, string>;
-  conflicts?: { id: string; models: string[]; detail: string }[];
+  conflicts?: { id: string; type: string; models: string[]; detail: string }[];
 };
 
 /** 依据材料名称判定分层角色（支持英文与中文写法）。 */
@@ -160,8 +160,11 @@ async function main() {
     }
   }
   // 中文报价表与英文报价表的差异：只登记，不自动改写英文表的数值。
+  // 只有「型号编号整体对调」这种必须整个型号提示的才在型号级登记；
+  // 其余差异逐变体精确比对，避免把整型号的变体全部标红（那会让标记失去意义）。
   const cnConflictByModel = new Map<string, string[]>();
   for (const conflict of dataCn.conflicts ?? []) {
+    if (conflict.type !== 'MODEL_NUMBER_SWAP') continue;
     for (const model of conflict.models) {
       cnConflictByModel.set(model, [...(cnConflictByModel.get(model) ?? []), `${conflict.id}: ${conflict.detail}`]);
     }
@@ -409,6 +412,31 @@ async function main() {
         );
       }
       if (packing.notes.length) reviewNotes.push(...packing.notes);
+
+      // 逐变体比对中英文报价表：只有该变体本身不一致才标记
+      if (variant && cnVariant) {
+        const diffs: string[] = [];
+        const cnCbm = cnVariant[2];
+        const cnWeight = cnVariant[3];
+        const cnPacking = cnVariant[1];
+        const cnDims = cnVariant[0];
+        if (typeof cnCbm === 'number' && Math.abs(cnCbm - authoritativeCbm) > 0.005) {
+          diffs.push(`CBM 中文 ${cnCbm} / 英文 ${authoritativeCbm}`);
+        }
+        if (cnWeight != null && variant.grossWeightKg != null && Math.abs(cnWeight - variant.grossWeightKg) > 0.05) {
+          diffs.push(`毛重 中文 ${cnWeight} / 英文 ${variant.grossWeightKg}`);
+        }
+        if (cnPacking && variant.packingRaw && cnPacking !== variant.packingRaw) {
+          diffs.push(`包装 中文 ${cnPacking} / 英文 ${variant.packingRaw}`);
+        }
+        if (cnDims && variant.dimensions) {
+          const cnText = cnDims.join('*');
+          const enText = variant.dimensions.join('*');
+          if (cnText !== enText) diffs.push(`尺寸 中文 ${cnText} / 英文 ${enText}`);
+        }
+        if (diffs.length) reviewNotes.push(`中英文报价表不一致 —— ${diffs.join('；')}`);
+      }
+
       for (const conflict of conflictByModel.get(raw.model) ?? []) reviewNotes.push(conflict);
       for (const conflict of cnConflictByModel.get(raw.model) ?? []) reviewNotes.push(conflict);
       if (variant?.note) reviewNotes.push(variant.note);
