@@ -160,6 +160,8 @@ model Setting {
  companyName String @default("木远家具贸易")
  currency String @default("CNY")
  timezone String @default("Asia/Shanghai")
+ // 美元/人民币汇率。默认 6.70 取自 2026 中英文两份报价表之间的隐含汇率（54 组中 44 组精确为 6.70）。
+ usdCnyRate Decimal @default(6.70) @db.Decimal(10, 4)
 }
 
 model LeadSubmission {
@@ -499,6 +501,7 @@ model ProductVariant {
   cartons PackingCarton[]
   prices ProductPrice[]
   media ProductMedia[]
+  costs ProductCost[]
   @@index([productId, status])
   @@index([deletedAt])
   @@index([needsReview])
@@ -617,4 +620,33 @@ model ProductAiProfile {
   reviewedBy String?
   reviewedAt DateTime?
   updatedAt DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════
+// 产品成本与毛利
+//
+// 工厂成本与采购成本是**两种供货方式**，不是相加的分项：
+//   - 工厂成本：我们自己工厂做出来的基本成本
+//   - 采购成本：从其他工厂采购同款的价格
+// 每个尺寸变体通常只会填其中一个（没做的产品就是外购的）。
+//
+// 成本不含国内运费与报关，因此算出来的是「生产毛利」，界面须如实标注。
+// 成本属于敏感数据：所有读写接口仅限管理员，且不得出现在非管理员的产品查询结果中。
+// ═══════════════════════════════════════════════════════════
+model ProductCost {
+  id String @id @default(cuid())
+  variantId String
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  currency String @default("CNY") @db.VarChar(3)
+  factoryCost Decimal? @db.Decimal(14, 2)
+  purchaseCost Decimal? @db.Decimal(14, 2)
+  effectiveFrom DateTime @default(now())
+  effectiveTo DateTime?
+  status String @default("ACTIVE") @db.VarChar(16)
+  note String @db.Text
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([variantId, status])
+  @@index([effectiveFrom])
 }

@@ -84,3 +84,22 @@
 .bos-sidebar.is-collapsed .bos-legacy>span{display:none}
 .bos-sidebar.is-collapsed .bos-account{flex-direction:column;gap:9px;padding:17px 0 0}
 .bos-sidebar.is-collapsed .bos-account>div,.bos-sidebar.is-collapsed .bos-presence{display:none}
+
+/* ── Product OS：成本与毛利 ── */
+.bos-cost-note{display:flex;align-items:flex-start;gap:16px;background:#faf1e6;border-color:#f0e0cd;margin-bottom:24px}
+.bos-cost-note svg{color:#85521b;flex:none;margin-top:2px}
+.bos-cost-note strong{font-size:14px}
+.bos-cost-note p{font-size:12px;color:#6e5a44;line-height:1.8;margin-top:6px}
+.bos-rate-form{display:flex;align-items:center;gap:10px;font-size:12px;color:#6e6e73}
+.bos-rate-form label{display:flex;align-items:center;gap:6px}
+.bos-rate-form input{width:88px;padding:8px 10px;border:1px solid var(--bos-border);border-radius:10px;font-size:13px}
+.bos-cost-form{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
+.bos-cost-form label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:#86868b}
+.bos-cost-form input{width:92px;padding:7px 9px;border:1px solid var(--bos-border);border-radius:9px;font-size:12px;font-variant-numeric:tabular-nums}
+.bos-cost-form button{font-size:11px;padding:6px 9px;min-height:32px;gap:5px}
+.bos-cost-empty{font-size:11px;color:#a0a0a6}
+.bos-cost-message{margin-top:12px;font-size:12px;color:var(--bos-green)}
+.bos-cost-error{margin-top:12px;font-size:12px;color:#a44b36}
+.bos-margin-low strong{color:#85521b}
+.bos-margin-negative strong{color:#a44b36}
+@media(max-width:900px){.bos-rate-form{flex-wrap:wrap}.bos-cost-form input{width:78px}}
