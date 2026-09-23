@@ -14,7 +14,6 @@ export type CatalogProduct = {
   name: string;
   categoryCode: string;
   categoryName: string;
-  seriesName: string;
   status: string;
   lengthLabel: string;
   isModular: boolean;
@@ -41,7 +40,6 @@ export type CatalogData = {
     nameEn: string;
     children: { code: string; name: string; nameCn: string; nameEn: string; prefix: string }[];
   }[];
-  series: { code: string; nameEn: string }[];
   products: CatalogProduct[];
 };
 
@@ -163,7 +161,7 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
 
             <Table
               caption="产品库"
-              headings={['产品图', '型号', '分类', '系列', '变体', '最低 CBM', '40HQ 可装', '起价', '状态']}
+              headings={['产品图', '型号', '分类', '变体', '最低 CBM', '40HQ 可装', '起价', '状态']}
             >
               {data.products.map(product => (
                 <tr key={product.id}>
@@ -184,7 +182,6 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
                     </Link>
                   </td>
                   <td>{product.categoryName}</td>
-                  <td>{product.seriesName || '—'}</td>
                   <td>
                     {product.variantCount}
                     {product.reviewCount > 0 && (
