@@ -128,12 +128,11 @@ export async function productList(user: Actor, input: unknown = {}) {
     ...(query.review === 'NEEDS_REVIEW' ? { variants: { some: { needsReview: true, deletedAt: null } } } : {}),
   };
 
-  const [rows, total, categories, seriesList, reviewCount, mathCount, sourceCount, missingCount, libraryTotal] = await Promise.all([
+  const [rows, total, categories, reviewCount, mathCount, sourceCount, missingCount, libraryTotal] = await Promise.all([
     db.product.findMany({
       where,
       include: {
         category: { select: { code: true, nameCn: true, nameEn: true } },
-        series: { select: { code: true, nameEn: true } },
         variants: {
           where: { deletedAt: null },
           select: { id: true, sku: true, cbm: true, needsReview: true, prices: { where: { status: 'ACTIVE' }, select: { unitPrice: true, currency: true, incoterm: true } } },
@@ -146,7 +145,6 @@ export async function productList(user: Actor, input: unknown = {}) {
     }),
     db.product.count({ where }),
     db.productCategory.findMany({ where: { level: 1 }, orderBy: { sort: 'asc' }, include: { children: { orderBy: { sort: 'asc' } } } }),
-    db.productSeries.findMany({ orderBy: { sort: 'asc' } }),
     db.productVariant.count({ where: { needsReview: true, deletedAt: null } }),
     db.productVariant.count({ where: { needsReview: true, deletedAt: null, reviewNote: { startsWith: '[算术]' } } }),
     db.productVariant.count({ where: { needsReview: true, deletedAt: null, reviewNote: { startsWith: '[来源]' } } }),
@@ -176,7 +174,6 @@ export async function productList(user: Actor, input: unknown = {}) {
         prefix: child.codePrefix,
       })),
     })),
-    series: seriesList.map(s => ({ code: s.code, nameEn: s.nameEn })),
     products: rows.map(p => {
       const prices = p.variants.flatMap(v => v.prices);
       const cbmValues = p.variants.map(v => Number(v.cbm)).filter(v => v > 0);
@@ -186,7 +183,6 @@ export async function productList(user: Actor, input: unknown = {}) {
         name: pickName(p.nameCn, p.nameEn, lang),
         categoryCode: p.category.code,
         categoryName: pickName(p.category.nameCn, p.category.nameEn, lang),
-        seriesName: p.series?.nameEn ?? '',
         status: p.status,
         lengthLabel: p.lengthLabel,
         isModular: p.isModular,
