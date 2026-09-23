@@ -38,6 +38,45 @@ if (needsBaseline) {
 }
 
 const prismaCli = 'node_modules/prisma/build/index.js';
+
+// ── 解除「失败且文件已不存在」的迁移记录 ──────────────────────
+// 背景：某个 migration 已被部署过，之后又被改名或重写，Prisma 会留下一条
+// finished_at 为空的失败记录。这条记录会让后续所有迁移永久报 P3009 而无法应用。
+//
+// 只在**本地已无该 migration 文件**时才自动解除 —— 那种记录必然是历史遗留。
+// 如果文件还在，说明是真的迁移失败，交给人处理，不擅自改动。
+const migrationProbe = new PrismaClient();
+try {
+  const failed = await migrationProbe.$queryRaw`
+    SELECT migration_name AS name
+    FROM _prisma_migrations
+    WHERE finished_at IS NULL AND rolled_back_at IS NULL`;
+  for (const row of failed) {
+    const file = `prisma/migrations/${row.name}/migration.sql`;
+    if (fs.existsSync(file)) {
+      console.warn(`Prisma: 迁移 ${row.name} 失败但文件仍在，需要人工检查，未自动处理。`);
+      continue;
+    }
+    console.warn(`Prisma: 迁移 ${row.name} 失败且本地已无对应文件，标记为已回滚以解除阻塞。`);
+    const resolved = spawnSync(
+      process.execPath,
+      [prismaCli, 'migrate', 'resolve', '--rolled-back', row.name],
+      { stdio: 'inherit', env: process.env },
+    );
+    if (resolved.status !== 0) {
+      console.error(
+        `Prisma: 自动解除失败。请在服务器上运行：npx prisma migrate resolve --rolled-back ${row.name}`,
+      );
+      process.exit(resolved.status ?? 1);
+    }
+  }
+} catch (error) {
+  // _prisma_migrations 尚未建立时跳过（全新数据库）
+  if (!/doesn't exist|Unknown table|no such table/i.test(String(error))) throw error;
+} finally {
+  await migrationProbe.$disconnect();
+}
+
 const push = spawnSync(process.execPath, [prismaCli, 'migrate', 'deploy'], {
   stdio: 'inherit',
   env: process.env,

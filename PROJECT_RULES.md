@@ -142,6 +142,32 @@ pnpm test
 - 新增枚举语义优先用 `String` + 应用层 `z.enum`（与现状一致），**不要**引入数据库原生 enum，避免与既有 String 列风格分裂。
 - 迁移必须**可在已有生产数据的库上直接 deploy**：不允许 `NOT NULL` 无默认值的新列、不允许依赖空表假设。
 
+### 2.2.1 已经进入主干或可能被部署的迁移，绝不允许改写（2026-09-23 生产事故）
+
+**教训**：Product OS 的 `20260923102151_product_os_core` 部署成功后，我为了让分类支持两层结构，
+**删掉了这个迁移文件并重新生成了一份同名不同时间戳的迁移**。结果线上已经存在这些表，
+新迁移又去 `CREATE TABLE`，报 MySQL 1050 `Table already exists`，**构建失败、部署中断**。
+
+而且失败会在 `_prisma_migrations` 里留下一条 `finished_at` 为空的记录，
+它会以 P3009 永久阻塞后续**所有**迁移 —— 比一次构建失败更难恢复。
+
+**铁律**：
+
+- 迁移一旦可能被部署过（尤其已合并进主干），**只能在其后追加新迁移**，永不改写、永不删除
+- 需要修正表结构时，用**增量迁移**（`ALTER TABLE ... ADD COLUMN`），
+  生成方法是以上一个**已部署的 schema** 为基线做 diff：
+  ```sh
+  git show <上一个已部署的提交>:prisma/schema.prisma > /tmp/schema-deployed.prisma
+  pnpm exec prisma migrate diff --from-schema-datamodel /tmp/schema-deployed.prisma \
+    --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/<新时间戳>_<名称>/migration.sql
+  ```
+  生成后**必须检查 `CREATE TABLE` 数量为 0**（除非确实要建新表）
+- 判断"是否已部署"不能凭感觉：查 `git log origin/main -- prisma/migrations`，
+  或看 CI 是否已经跑过该迁移。**"PR 还没合并"不等于"没人部署过"** —— 本项目的
+  Hostinger 会对 main 自动部署，而 main 可能在我工作期间就被合并
+- CI 已有 `Upgrade a database that already has the previous migrations` 步骤专门复现这条路径：
+  先应用除最新一条外的全部迁移，再应用最新一条。重复建表会在这里失败
+
 ### 2.3 部署链路不变式
 
 `pnpm build` / `pnpm start` 都会先跑 `scripts/production-init.mjs`（自动 baseline → `migrate deploy` → upsert admin/Setting）。新迁移必须能通过这条链路，**不要新增必须人工执行的手工步骤**；确实需要人工介入的，写进 `docs/` 并在提交说明中显著标注。
