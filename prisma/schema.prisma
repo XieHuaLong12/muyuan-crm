@@ -404,7 +404,7 @@ model MarketingMetric {
 
 model ProductCategory {
   id String @id @default(cuid())
-  code String @unique
+  code String @unique @db.VarChar(32)
   nameEn String
   nameCn String @default("")
   sort Int @default(0)
@@ -414,7 +414,7 @@ model ProductCategory {
 
 model ProductSeries {
   id String @id @default(cuid())
-  code String @unique
+  code String @unique @db.VarChar(32)
   nameEn String
   nameCn String @default("")
   descriptionEn String @db.Text
@@ -426,14 +426,14 @@ model ProductSeries {
 
 model Product {
   id String @id @default(cuid())
-  model String @unique
+  model String @unique @db.VarChar(64)
   nameEn String
   nameCn String @default("")
   categoryId String
   category ProductCategory @relation(fields: [categoryId], references: [id])
   seriesId String?
   series ProductSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
-  status String @default("ACTIVE")
+  status String @default("ACTIVE") @db.VarChar(16)
   lengthLabel String @default("")
   isModular Boolean @default(false)
   isSofaBed Boolean @default(false)
@@ -463,8 +463,8 @@ model ProductVariant {
   id String @id @default(cuid())
   productId String
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sku String @unique
-  variantType String @default("CONFIGURATION")
+  sku String @unique @db.VarChar(80)
+  variantType String @default("CONFIGURATION") @db.VarChar(16)
   labelEn String @default("")
   labelCn String @default("")
   lengthCm Int?
@@ -484,7 +484,7 @@ model ProductVariant {
   grossWeightRaw String @default("")
   needsReview Boolean @default(false)
   reviewNote String @db.Text
-  status String @default("ACTIVE")
+  status String @default("ACTIVE") @db.VarChar(16)
   createdBy String
   deletedAt DateTime?
   createdAt DateTime @default(now())
@@ -516,7 +516,7 @@ model ProductMaterial {
   id String @id @default(cuid())
   productId String
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  role String
+  role String @db.VarChar(16)
   nameEn String
   nameCn String @default("")
   specEn String @default("")
@@ -528,7 +528,7 @@ model ProductOption {
   id String @id @default(cuid())
   productId String
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  kind String
+  kind String @db.VarChar(16)
   code String @default("")
   nameEn String
   nameCn String @default("")
@@ -541,7 +541,7 @@ model ProductMoq {
   id String @id @default(cuid())
   productId String
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  channel String
+  channel String @db.VarChar(24)
   channelLabelCn String @default("")
   minQty Int
   note String @db.Text
@@ -555,18 +555,18 @@ model ProductPrice {
   id String @id @default(cuid())
   variantId String
   variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  priceListKey String @default("LVANJU-2026")
-  currency String @default("USD")
-  incoterm String @default("FOB")
+  priceListKey String @default("LVANJU-2026") @db.VarChar(24)
+  currency String @default("USD") @db.VarChar(3)
+  incoterm String @default("FOB") @db.VarChar(8)
   includesFreight Boolean @default(false)
-  customerTier String @default("ALL")
+  customerTier String @default("ALL") @db.VarChar(24)
   minQty Int @default(1)
   maxQty Int?
   unitPrice Decimal @db.Decimal(14, 2)
   cost Decimal? @db.Decimal(14, 2)
   effectiveFrom DateTime
   effectiveTo DateTime?
-  status String @default("ACTIVE")
+  status String @default("ACTIVE") @db.VarChar(16)
   createdBy String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -581,7 +581,7 @@ model ProductMedia {
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   variantId String?
   variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
-  role String @default("GALLERY")
+  role String @default("GALLERY") @db.VarChar(16)
   storageKey String @unique
   mimeType String
   fileName String
@@ -606,7 +606,7 @@ model ProductAiProfile {
   recommendedMarketJson String @db.Text
   keywordsJson String @db.Text
   searchText String @db.Text
-  status String @default("DRAFT")
+  status String @default("DRAFT") @db.VarChar(16)
   reviewedBy String?
   reviewedAt DateTime?
   updatedAt DateTime @updatedAt
