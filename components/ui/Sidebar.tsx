@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CircleGauge,Layers3,PanelLeft,Users,MessageCircle,CheckSquare,ArrowLeft } from 'lucide-react';
-const core=[['/command-center','老板驾驶舱',CircleGauge],['/growth','运营中心',Layers3],['/sales','销售工作台',PanelLeft]] as const;
+import { CircleGauge,Layers3,PanelLeft,Users,MessageCircle,CheckSquare,ArrowLeft,Package } from 'lucide-react';
+const core=[['/command-center','老板驾驶舱',CircleGauge],['/growth','运营中心',Layers3],['/sales','销售工作台',PanelLeft],['/products','产品库',Package]] as const;
 const tools=[['/customers','客户 CRM',Users],['/whatsapp','WhatsApp',MessageCircle],['/tasks','任务中心',CheckSquare]] as const;
 export function Sidebar({name,role}:{name:string;role:string}){const path=usePathname();return <aside className="bos-sidebar"><Link href="/command-center" className="bos-brand"><span className="bos-brand-mark">L</span><span>LVANJU<small>BUSINESS OS</small></span></Link><div className="bos-nav-group"><span>工作空间</span><nav aria-label="BOS 核心模块">{core.map(([url,label,Icon])=><Link aria-current={path===url?'page':undefined} href={url} key={url}><Icon size={18} strokeWidth={1.6}/><span>{label}</span></Link>)}</nav></div><div className="bos-nav-group"><span>日常工具</span><nav aria-label="CRM 工具">{tools.map(([url,label,Icon])=><Link href={url} key={url}><Icon size={18} strokeWidth={1.6}/><span>{label}</span></Link>)}</nav></div><div className="bos-sidebar-bottom"><Link href="/" className="bos-legacy"><ArrowLeft size={15}/>原 CRM 首页</Link><div className="bos-account"><span className="bos-avatar">{name.slice(0,1)}</span><div><strong>{name}</strong><small>{role==='ADMIN'?'管理员':'销售顾问'}</small></div><span className="bos-presence" aria-label="已登录"/></div></div></aside>;}

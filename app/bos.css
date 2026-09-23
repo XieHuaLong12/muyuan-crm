@@ -11,3 +11,39 @@
 .bos a.bos-button-primary{background:var(--bos-green);color:white;border-color:transparent}.bos a.bos-button-primary:hover{background:#205f4b}
 @media(min-width:1251px){.bos-sales-grid{height:calc(100dvh - 278px);min-height:610px}.bos-sales-queue{height:100%;max-height:100%;position:static}.bos-sales-workspace{height:100%;display:flex;flex-direction:column}.bos-sales-chat{flex:1;min-height:0}.bos-sales-chat .v3-whatsapp-workspace{height:100%;min-height:0}.bos-sales-assistant{height:100%;max-height:100%;overflow:auto;position:static}.bos-sales-workspace>.bos-profile,.bos-sales-workspace>.v3-quotation-panel,.bos-sales-workspace>.v3-task-center{overflow:auto;min-height:0;flex:1}.bos-sales-customer,.bos-quick-actions,.bos-sales-tabs{flex-shrink:0}}
 .bos-lead-filter select{width:auto;min-width:180px}.bos-lead-filter .bos-search{flex:1;max-width:440px}
+
+/* ── Product OS：产品库三栏（复用既有 token，不新增颜色变量） ── */
+.bos-products-grid{display:grid;grid-template-columns:212px minmax(0,1fr) 250px;gap:16px;align-items:start}
+.bos-products-aside{display:grid;gap:16px}
+.bos-products-main{min-width:0}
+.bos-products-assistant{position:sticky;top:18px}
+.bos-product-tree{display:grid;gap:2px;margin-top:14px}
+.bos-product-tree a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;font-size:13px;color:#5d5d63;transition:background .16s}
+.bos-product-tree a:hover{background:#f2f2f4}
+.bos-product-tree a[aria-current=page]{background:#edf4ef;color:var(--bos-green);font-weight:600}
+.bos-product-tree a span{margin-left:auto;font-size:11px;color:#86868b}
+.bos-quality{display:grid;gap:12px;margin:16px 0 0}
+.bos-quality div{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.bos-quality dt{font-size:12px;color:#6e6e73}
+.bos-quality dd{margin:0;font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.bos-danger-text{color:#a44b36!important}
+.bos-row-review td{background:#fdf9f6}
+.bos-review-banner{display:flex;align-items:flex-start;gap:16px;background:#faf1e6;border-color:#f0e0cd;margin-bottom:24px}
+.bos-review-banner svg{color:#85521b;flex:none;margin-top:2px}
+.bos-review-banner strong{font-size:14px}
+.bos-review-banner p{font-size:12px;color:#6e5a44;line-height:1.8;margin-top:6px}
+.bos-review-detail{margin-top:16px;font-size:12px;color:#6e6e73}
+.bos-review-detail summary{cursor:pointer;padding:8px 0}
+.bos-review-detail ul{margin:8px 0 0;padding-left:18px;display:grid;gap:6px;line-height:1.8}
+.bos-product-columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:16px;align-items:start}
+.bos-moq-list{display:grid;gap:10px;margin-top:16px}
+.bos-moq-list div{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--bos-border);padding-bottom:10px}
+.bos-moq-list dt{font-size:13px;color:#6e6e73}
+.bos-moq-list dd{margin:0;font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+.bos-option-list{display:grid;gap:10px;margin-top:14px;list-style:none;padding:0}
+.bos-option-list li{display:flex;align-items:center;gap:9px;font-size:13px}
+.bos-search-text{display:block;margin-top:8px;padding:12px;border-radius:10px;background:#f7f7f8;font-size:11px;line-height:1.8;overflow-wrap:anywhere;color:#55555b}
+@media(min-width:1600px){.bos-products-grid{grid-template-columns:230px minmax(0,1fr) 280px}}
+@media(max-width:1250px){.bos-products-grid{grid-template-columns:190px minmax(0,1fr)}.bos-products-assistant{grid-column:2;position:static}.bos-product-columns{grid-template-columns:1fr 1fr}}
+@media(max-width:900px){.bos-product-columns{grid-template-columns:1fr}}
+@media(max-width:760px){.bos-products-grid{display:flex;flex-direction:column}.bos-products-aside,.bos-products-assistant{width:100%}}

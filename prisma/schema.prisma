@@ -393,3 +393,221 @@ model MarketingMetric {
  @@unique([campaignId, metricDate])
  @@index([metricDate])
 }
+
+// ═══════════════════════════════════════════════════════════
+// Product OS — 产品中心（V1）
+// 加性变更：仅新增表，不修改任何现有表结构。
+// 权威规则（业务确认 2026-09-22）：
+//   - 规格 / 包装 / CBM / 毛重 / 价格 一律以报价表为准
+//   - 报价为 FOB；MOQ 按渠道分档（线上 10 / 线下 20）
+// ═══════════════════════════════════════════════════════════
+
+model ProductCategory {
+  id String @id @default(cuid())
+  code String @unique @db.VarChar(32)
+  nameEn String
+  nameCn String @default("")
+  sort Int @default(0)
+  createdAt DateTime @default(now())
+  products Product[]
+}
+
+model ProductSeries {
+  id String @id @default(cuid())
+  code String @unique @db.VarChar(32)
+  nameEn String
+  nameCn String @default("")
+  descriptionEn String @db.Text
+  descriptionCn String @db.Text
+  sort Int @default(0)
+  createdAt DateTime @default(now())
+  products Product[]
+}
+
+model Product {
+  id String @id @default(cuid())
+  model String @unique @db.VarChar(64)
+  nameEn String
+  nameCn String @default("")
+  categoryId String
+  category ProductCategory @relation(fields: [categoryId], references: [id])
+  seriesId String?
+  series ProductSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  status String @default("ACTIVE") @db.VarChar(16)
+  lengthLabel String @default("")
+  isModular Boolean @default(false)
+  isSofaBed Boolean @default(false)
+  seatCount Int?
+  pillowCount Int?
+  backrestCount Int?
+  leadTimeDays Int @default(15)
+  qaMonths Int @default(12)
+  descriptionEn String @db.Text
+  descriptionCn String @db.Text
+  createdBy String
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  variants ProductVariant[]
+  materials ProductMaterial[]
+  options ProductOption[]
+  moqs ProductMoq[]
+  media ProductMedia[]
+  aiProfile ProductAiProfile?
+  @@index([categoryId, status])
+  @@index([seriesId])
+  @@index([deletedAt])
+}
+
+model ProductVariant {
+  id String @id @default(cuid())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku String @unique @db.VarChar(80)
+  variantType String @default("CONFIGURATION") @db.VarChar(16)
+  labelEn String @default("")
+  labelCn String @default("")
+  lengthCm Int?
+  widthCm Int?
+  heightCm Int?
+  secondaryLabelEn String @default("")
+  secondaryLabelCn String @default("")
+  secondaryLengthCm Int?
+  secondaryWidthCm Int?
+  secondaryHeightCm Int?
+  bedSizeCm String @default("")
+  packingRaw String @default("")
+  cartonCount Int @default(1)
+  cbm Decimal @db.Decimal(8, 4) @default(0)
+  cbmComputed Decimal? @db.Decimal(8, 4)
+  grossWeightKg Decimal @db.Decimal(8, 2) @default(0)
+  grossWeightRaw String @default("")
+  needsReview Boolean @default(false)
+  reviewNote String @db.Text
+  status String @default("ACTIVE") @db.VarChar(16)
+  createdBy String
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cartons PackingCarton[]
+  prices ProductPrice[]
+  media ProductMedia[]
+  @@index([productId, status])
+  @@index([deletedAt])
+  @@index([needsReview])
+}
+
+model PackingCarton {
+  id String @id @default(cuid())
+  variantId String
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  label String @default("")
+  lengthCm Int
+  widthCm Int
+  heightCm Int
+  cartonCount Int @default(1)
+  piecesPerCarton Int @default(1)
+  grossWeightKg Decimal? @db.Decimal(8, 2)
+  sort Int @default(0)
+  @@index([variantId, sort])
+}
+
+model ProductMaterial {
+  id String @id @default(cuid())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  role String @db.VarChar(16)
+  nameEn String
+  nameCn String @default("")
+  specEn String @default("")
+  sort Int @default(0)
+  @@index([productId, role])
+}
+
+model ProductOption {
+  id String @id @default(cuid())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  kind String @db.VarChar(16)
+  code String @default("")
+  nameEn String
+  nameCn String @default("")
+  isDefault Boolean @default(false)
+  sort Int @default(0)
+  @@index([productId, kind])
+}
+
+model ProductMoq {
+  id String @id @default(cuid())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  channel String @db.VarChar(24)
+  channelLabelCn String @default("")
+  minQty Int
+  note String @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([productId, channel])
+  @@index([channel])
+}
+
+model ProductPrice {
+  id String @id @default(cuid())
+  variantId String
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  priceListKey String @default("LVANJU-2026") @db.VarChar(24)
+  currency String @default("USD") @db.VarChar(3)
+  incoterm String @default("FOB") @db.VarChar(8)
+  includesFreight Boolean @default(false)
+  customerTier String @default("ALL") @db.VarChar(24)
+  minQty Int @default(1)
+  maxQty Int?
+  unitPrice Decimal @db.Decimal(14, 2)
+  cost Decimal? @db.Decimal(14, 2)
+  effectiveFrom DateTime
+  effectiveTo DateTime?
+  status String @default("ACTIVE") @db.VarChar(16)
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([variantId, priceListKey, currency, incoterm, customerTier, minQty])
+  @@index([variantId, status])
+  @@index([effectiveFrom])
+}
+
+model ProductMedia {
+  id String @id @default(cuid())
+  productId String
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String?
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  role String @default("GALLERY") @db.VarChar(16)
+  storageKey String @unique
+  mimeType String
+  fileName String
+  width Int?
+  height Int?
+  size Int
+  sort Int @default(0)
+  createdBy String
+  createdAt DateTime @default(now())
+  @@index([productId, role])
+  @@index([variantId])
+}
+
+model ProductAiProfile {
+  id String @id @default(cuid())
+  productId String @unique
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sellingPointsJson String @db.Text
+  advantagesJson String @db.Text
+  useCasesJson String @db.Text
+  bestCustomerJson String @db.Text
+  recommendedMarketJson String @db.Text
+  keywordsJson String @db.Text
+  searchText String @db.Text
+  status String @default("DRAFT") @db.VarChar(16)
+  reviewedBy String?
+  reviewedAt DateTime?
+  updatedAt DateTime @updatedAt
+}
