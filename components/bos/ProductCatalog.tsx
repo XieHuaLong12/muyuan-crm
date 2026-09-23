@@ -24,6 +24,7 @@ export type CatalogProduct = {
   minCbm: number | null;
   minUnitsPer40HQ: number | null;
   startingPrice: { amount: string; currency: string; incoterm: string } | null;
+  image: string | null;
 };
 
 export type CatalogData = {
@@ -131,10 +132,20 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
 
             <Table
               caption="产品库"
-              headings={['型号', '分类', '系列', '变体', '最低 CBM', '40HQ 可装', '起价', '状态']}
+              headings={['产品图', '型号', '分类', '系列', '变体', '最低 CBM', '40HQ 可装', '起价', '状态']}
             >
               {data.products.map(product => (
                 <tr key={product.id}>
+                  <td>
+                    <Link href={`/products/${product.id}`} className="bos-product-thumb">
+                      {product.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={`/${product.image}`} alt={`${product.model} 产品图`} loading="lazy" width={84} height={60} />
+                      ) : (
+                        <span className="bos-product-thumb-missing" title="暂无产品图">待补图</span>
+                      )}
+                    </Link>
+                  </td>
                   <td>
                     <Link href={`/products/${product.id}`}>
                       <strong>{product.model}</strong>

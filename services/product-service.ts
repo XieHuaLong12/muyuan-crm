@@ -117,6 +117,7 @@ export async function productList(user: Actor, input: unknown = {}) {
           where: { deletedAt: null },
           select: { id: true, sku: true, cbm: true, needsReview: true, prices: { where: { status: 'ACTIVE' }, select: { unitPrice: true, currency: true, incoterm: true } } },
         },
+        media: { where: { role: 'HERO' }, select: { storageKey: true }, orderBy: { sort: 'asc' }, take: 1 },
       },
       orderBy: [{ category: { sort: 'asc' } }, { model: 'asc' }],
       skip: (query.page - 1) * PAGE_SIZE,
@@ -157,6 +158,7 @@ export async function productList(user: Actor, input: unknown = {}) {
         minCbm: cbmValues.length ? Math.min(...cbmValues) : null,
         minUnitsPer40HQ: cbmValues.length ? unitsPer40HQ(Math.max(...cbmValues)) : null,
         startingPrice: lowestPrice(prices),
+        image: p.media[0]?.storageKey ?? null,
       };
     }),
   };
