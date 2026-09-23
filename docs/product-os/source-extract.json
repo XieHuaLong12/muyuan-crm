@@ -1,0 +1,422 @@
+{
+  "_meta": {
+    "purpose": "LVANJU Product OS 源数据抽取结果。用于 Prisma seed 与数据冲突核对。",
+    "sourceDocuments": [
+      {
+        "id": "QUOTATION-2026",
+        "title": "LVANJU 2026 Price List for Compressed Furniture Series",
+        "file": "LVANJU_Compressed_Sofa_2026_Quotation.pdf",
+        "pages": 3,
+        "textExtractable": true,
+        "createdDate": "2026-08-14",
+        "modifiedDate": "2026-09-17",
+        "authorityFor": ["unitPrice", "currency", "packing", "cbm", "grossWeight", "commercialTerms"]
+      },
+      {
+        "id": "CATALOG-2026",
+        "title": "LVANJU 2026 Compactor Sofa Product Catalog",
+        "file": "2026 Compactor Sofa Product Catalog_LVANJU.pdf",
+        "pages": 25,
+        "textExtractable": false,
+        "extractionMethod": "page-image + vision reading",
+        "authorityFor": ["series", "materialsCn", "materialsEn", "seatConfigurationLabel", "colourCode", "sellingPoints", "heroImage"]
+      }
+    ],
+    "extractedAt": "2026-09-22",
+    "currency": "USD",
+    "note": "报价表与图册在多个型号上数据不一致，详见 conflicts。报价表为商业权威来源；图册为产品/系列权威来源。"
+  },
+
+  "commercialTerms": {
+    "paymentTerms": "30% deposit, 70% balance before shipment",
+    "leadTime": "7-15 days after receiving the deposit (depending on order quantity)",
+    "packingStandard": "Standard export carton / compressed packing",
+    "qualityAssurance": "12 months",
+    "priceRemarks": "Prices do not include customs duties or shipping costs",
+    "priceIncludesFreight": false,
+    "incoterm": "FOB",
+    "incotermConfirmed": true,
+    "incotermConfirmedNote": "业务确认：报价表为 FOB 报价。与 priceRemarks（不含关税与运费）一致。",
+    "currency": "USD",
+    "moq": {
+      "policy": "CHANNEL_BASED",
+      "confirmed": true,
+      "tiers": [
+        { "channel": "ONLINE", "label": "线上", "minQty": 10 },
+        { "channel": "OFFLINE", "label": "线下交谈", "minQty": 20 }
+      ],
+      "note": "业务确认：线上 MOQ 10 件，线下洽谈 MOQ 20 件。报价表未列出，属业务规则而非文档数据。"
+    },
+    "authorityRule": {
+      "confirmed": true,
+      "rule": "规格 / 包装 / CBM / 毛重 / 价格 一律以报价表（QUOTATION-2026）为准",
+      "confirmedNote": "业务确认：所有型号以报价表为准。",
+      "exceptions": ["C-03 D-612 CBM", "C-04 Y-611 尺寸"],
+      "exceptionReason": "这两处报价表值与算术推导/物理常识矛盾（见 conflicts），已单独列出待确认，未直接采用。"
+    },
+    "supplier": {
+      "factoryNameEn": "Huayue Furniture Co., Ltd.",
+      "address": "Lecong Town, Shunde District, Foshan City, Guangdong Province, China",
+      "contact": "Mr. Xie",
+      "whatsapp": "+86 15815694430"
+    },
+    "brand": { "nameEn": "LVANJU", "nameCn": "绿安居", "positioning": "18 Years Furniture Source Factory", "location": "Guangdong Foshan" },
+    "incotermUnconfirmed": true,
+    "moqNotStated": true
+  },
+
+  "categories": [
+    { "code": "COMPRESSED_SOFA", "nameEn": "Compressed Sofa", "nameCn": "压缩沙发", "models": ["Y-601","Y-602","Y-603","Y-604","Y-605","Y-606","Y-607","Y-608","Y-609","Y-610","Y-611","Y-612","Y-613","Y-614","Y-615","Y-616","Y-617","D-608","D-609","D-610","D-611","D-612"] },
+    { "code": "COMPRESSED_BED", "nameEn": "Compressed Bed", "nameCn": "压缩床", "models": ["C-301","C-302","C-303","C-304","C-305","C-306"] }
+  ],
+
+  "series": [
+    {
+      "code": "WARM_HOME",
+      "nameEn": "WARM HOME",
+      "nameCn": "暖巢系列（待确认中文名）",
+      "catalogModels": ["Y-601","Y-602","Y-603","Y-605","Y-606","Y-607","Y-608","Y-609","Y-610","Y-611","Y-612","Y-613","Y-614","Y-615","D-608","D-609","D-610","D-611","D-612","C-301","C-302","C-303","C-304","C-305","C-306"],
+      "note": "图册 25 页全部标注 WARM HOME；报价表中未出现系列字段。Y-604 / Y-616 / Y-617 未在图册中出现。"
+    }
+  ],
+
+  "products": [
+    { "model": "Y-601", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "2.0 METER",
+      "materials": { "layers": ["High-Density Foam"], "cover": "Cloud Velvet Fabric",
+        "catalogCn": "抗压高分子可压缩海绵+180T有氧绵+羽丝绵+压缩专用灯芯绒布",
+        "catalogEn": "PRESSURE-RESISTANT HIGH POLYMER COMPRESSIBLE SPONGE+180T AEROBIC COTTON+FEATHER SILK COTTON+CORDUROY",
+        "conflict": "报价表封面为 Cloud Velvet Fabric，图册为 CORDUROY" },
+      "variants": [
+        { "label": null, "dimensions": [180,90,66], "packingRaw": "102*28*28 2pc", "cbm": 0.16, "grossWeightKg": 40, "unitPriceUsd": 134.33 },
+        { "label": null, "dimensions": [270,90,66], "packingRaw": "96*96*30", "cbm": 0.28, "grossWeightKg": 57, "unitPriceUsd": 194.03 },
+        { "label": null, "dimensions": [270,180,66], "packingRaw": "96*96*35", "cbm": 0.32, "grossWeightKg": 72, "unitPriceUsd": 246.27 }
+      ],
+      "catalogPackingTableDiffers": true },
+
+    { "model": "Y-602", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "2.0 METER",
+      "materials": { "layers": ["High-Density Foam"], "cover": "Chenille Fabric",
+        "catalogEn": "PRESSURE-RESISTANT HIGH POLYMER COMPRESSIBLE SPONGE+180T AEROBIC COTTON+FEATHER SILK COTTON+CORDUROY",
+        "conflict": "报价表为 Chenille Fabric，图册为 CORDUROY" },
+      "variants": [
+        { "label": null, "dimensions": [150,100,70], "packingRaw": "64*34*112", "cbm": 0.35, "grossWeightKg": 37, "unitPriceUsd": 156.72 },
+        { "label": null, "dimensions": [180,100,70], "packingRaw": "67*34*112", "cbm": 0.35, "grossWeightKg": 43, "unitPriceUsd": 171.64 },
+        { "label": null, "dimensions": [200,100,70], "packingRaw": "67*37*112", "cbm": 0.35, "grossWeightKg": 47, "unitPriceUsd": 186.57 }
+      ],
+      "catalogPackingTableDiffers": true,
+      "catalogPackingTableIdenticalTo": "Y-601" },
+
+    { "model": "Y-603", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "2.67 METER",
+      "materials": { "layers": ["High-Density Foam"], "cover": "Corduroy Fabric",
+        "catalogNote": "FOUR ARRANGEMENTS 四种摆放方式" },
+      "variants": [
+        { "label": "210 wide", "dimensions": [210,92,70], "packingRaw": "115*40*40", "cbm": 0.18, "grossWeightKg": 35, "unitPriceUsd": 149.25 },
+        { "label": "267 wide 2 seats", "dimensions": [267,92,70], "packingRaw": "115*30*30 2pc", "cbm": 0.21, "grossWeightKg": 40, "unitPriceUsd": 205.97 },
+        { "label": "2 SEATS+CHAISE", "dimensions": [267,175,70], "packingRaw": "100*40*70", "cbm": 0.39, "grossWeightKg": 60, "unitPriceUsd": 231.34 }
+      ],
+      "catalogPackingTableDiffers": true,
+      "catalogSeatLabels": ["2 SEATS+CHAISE 267*175*70 (LOUNGE 贵妃175)", "3 SEATS 267*92*70", "2 SEATS 210*92*70"],
+      "catalogPillowCount": "2 PILLOWS 抱枕 + 2~3 BACKRESTS 靠包" },
+
+    { "model": "Y-604", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogPresent": false,
+      "materials": { "layers": ["High-Density Foam"], "cover": "Compression-Resistant Plush Fabric" },
+      "variants": [
+        { "label": null, "dimensions": [120,110,66], "packingRaw": "125*35*35", "cbm": 0.2, "grossWeightKg": 19, "unitPriceUsd": 126.87 },
+        { "label": null, "dimensions": [280,102,66], "packingRaw": "125*35*35*2", "cbm": 0.4, "grossWeightKg": 36, "unitPriceUsd": 223.88 },
+        { "label": null, "dimensions": [340,102,66], "packingRaw": "125*40*40*2", "cbm": 0.45, "grossWeightKg": 44, "unitPriceUsd": 320.90 }
+      ] },
+
+    { "model": "Y-605", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "2.75 METER",
+      "materials": { "layers": ["High-Density Foam"], "cover": "Chenille Fabric",
+        "catalogEn": "PRESSURE-RESISTANT HIGH POLYMER COMPRESSIBLE SPONGE+180T AEROBIC COTTON+FEATHER SILK COTTON+FLANNEL",
+        "catalogFootNote": "Fabric面料: chenille fabric雪尼尔面料 / sponge海绵: Compressible sponge可压缩海绵" },
+      "variants": [
+        { "label": "SINGLE ARM REST SINGLE SEAT 单扶手单人位", "dimensions": [90,96,68], "catalogDimensions": [92,100,70], "packingRaw": "28*28*98", "catalogPackingRaw": "34*34*98", "cbm": 0.12, "grossWeightKg": 17, "unitPriceUsd": 74.63 },
+        { "label": "DUAL ARM REST DOUBLE SEAT 双扶手双人位", "dimensions": [182,96,68], "catalogDimensions": [184,100,70], "packingRaw": "28*28*98=2pc", "catalogPackingRaw": "34*34*98=2件", "cbm": 0.24, "grossWeightKg": 34, "unitPriceUsd": 149.25 },
+        { "label": "3 SEATS 三人位", "dimensions": [275,96,68], "catalogDimensions": [275,100,70], "packingRaw": "28*28*98=3pc", "catalogPackingRaw": "34*34*98=3件", "cbm": 0.36, "grossWeightKg": 51.9, "unitPriceUsd": 223.88 }
+      ] },
+
+    { "model": "Y-606", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogPresent": false,
+      "materials": { "layers": ["High-Density Foam"], "cover": "Cloud Velvet Fabric" },
+      "variants": [
+        { "label": null, "dimensions": [92,100,68], "packingRaw": "31*31*102", "cbm": 0.1, "grossWeightKg": 16, "unitPriceUsd": 97.01 },
+        { "label": null, "dimensions": [198,100,68], "packingRaw": "43*45*114", "cbm": 0.22, "grossWeightKg": 32.9, "unitPriceUsd": 194.03 },
+        { "label": null, "dimensions": [288,100,68], "packingRaw": "31*31*102+43*45*114", "cbm": 0.32, "grossWeightKg": 48.9, "unitPriceUsd": 291.04 }
+      ] },
+
+    { "model": "Y-607", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "2.0 METER",
+      "materials": { "layers": ["High-Density Foam"], "cover": "Linen", "catalogEn": "...+FEATHER SILK COTTON+LINEN" },
+      "variants": [
+        { "label": "2 SEATS 双人位", "dimensions": [220,100,62], "catalogDimensions": [220,96,68], "packingRaw": "35*35*106*2pc", "catalogPackingRaw": "35*35*106*2CTNS", "cbm": 0.27, "catalogCbm": 0.26, "grossWeightKg": 40, "catalogGrossWeightKg": 41.5, "unitPriceUsd": 231.34 },
+        { "label": "2 SEATS (BIG) 大双人位", "dimensions": [260,100,62], "catalogDimensions": [280,96,68], "packingRaw": "35*35*106*2pc", "catalogPackingRaw": "40*40*106*2CTNS", "cbm": 0.31, "catalogCbm": 0.34, "grossWeightKg": 45, "catalogGrossWeightKg": 48.6, "unitPriceUsd": 262.69 },
+        { "label": "3 SEATS 三人位", "dimensions": [300,100,62], "catalogDimensions": [300,96,68], "packingRaw": "32*32*95+35*35*106*2pc", "catalogPackingRaw": "32*32*95+35*35*106*2CTNS", "cbm": 0.4, "catalogCbm": 0.37, "grossWeightKg": 50, "catalogGrossWeightKg": 58.5, "unitPriceUsd": 297.01 }
+      ],
+      "dimensionConflict": true },
+
+    { "model": "Y-608", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "3.92 METER", "modular": true,
+      "materials": { "layers": ["Compression Resistant High-Density Compressible Sponge","Crushed Sponge Particles","Feather Silk Sponge"], "cover": "Flannel",
+        "quotationEn": "High-Density Compression-Resistant Compressible Foam + 180T Aerated Foam + Feather Fiber Filling",
+        "conflict": "报价表与图册填充材料描述不一致" },
+      "variants": [
+        { "label": "196 wide", "dimensions": [196,98,65], "packingRaw": "32*32*108 2pc", "cbm": 0.22, "grossWeightKg": 29, "unitPriceUsd": 328.36 },
+        { "label": "294 wide", "dimensions": [294,98,65], "packingRaw": "32*32*108 2pc+30*30*108", "cbm": 0.33, "grossWeightKg": 46, "unitPriceUsd": 485.08 },
+        { "label": "294 wide corner", "dimensions": [294,196,65], "packingRaw": "32*32*108 2pc+30*30*108 2pc", "cbm": 0.41, "grossWeightKg": 59, "unitPriceUsd": 611.95 }
+      ],
+      "catalogModulePacking": [
+        { "label": "SINGLE WITH BACKREST 带靠背单人位", "dimensions": [98,98,65], "packingRaw": "32*32*108", "cbm": 0.11, "grossWeightKg": 14.1 },
+        { "label": "SINGLE WITH ARM REST + BACKREST 带扶手带靠背单人位", "dimensions": [98,98,65], "packingRaw": "32*32*108", "cbm": 0.11, "grossWeightKg": 17.7 },
+        { "label": "OTTOMAN 脚踏", "dimensions": [98,98,35], "packingRaw": "28*28*108", "cbm": 0.08, "grossWeightKg": 12.9 }
+      ],
+      "note": "报价表按整组配置报价，图册按模块件报价/包装。两者是不同粒度，需同时支持。" },
+
+    { "model": "Y-609", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "2.0 METER",
+      "materials": { "layers": ["High-Density Foam"], "cover": "Flannel", "catalogEn": "...+FLANNEL" },
+      "variants": [
+        { "label": "2 SEATS (BIG SIZE) 大双人位", "dimensions": [200,130,76], "packingRaw": "41*41*150", "cbm": 0.25, "grossWeightKg": 48.7, "unitPriceUsd": 205.97 },
+        { "label": "2 SEATS 双人位", "dimensions": [200,100,66], "packingRaw": "38*38*115", "cbm": 0.17, "grossWeightKg": 30, "unitPriceUsd": 161.19 }
+      ],
+      "consistent": true },
+
+    { "model": "Y-610", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "2.2 METER", "dualDimension": true,
+      "materials": { "layers": ["High-Density Foam"], "cover": "Flannel", "catalogEn": "...+FLANNEL" },
+      "variants": [
+        { "label": "PERIPHERAL 外围 / INTERNAL SPACE 内空", "dimensions": [220,180,28], "secondaryDimensions": [160,120,20],
+          "packingRaw": "25*25*128+42*42*117", "catalogPackingRaw": "25*25*128+42*40*117", "cbm": 0.28, "grossWeightKg": 45.8,
+          "catalogGrossWeightRaw": "16.8+29", "unitPriceUsd": 250.75 }
+      ],
+      "note": "沙发床，可在 sofa / bed / 平铺三种形态间转换。" },
+
+    { "model": "Y-611", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "3.0 METER",
+      "materials": { "layers": ["High-Density Foam"], "cover": "Mesh Fabric", "catalogEn": "...+MESH FABRIC" },
+      "variants": [
+        { "label": null, "dimensions": [300,106,68], "quotationDimensionsRaw": "300*16*68", "packingRaw": "39*39*114+39*39*114", "catalogPackingRaw": "39*39*114*2CTNS", "cbm": 0.35, "grossWeightKg": 58, "unitPriceUsd": 425.37 }
+      ],
+      "note": "报价表尺寸原文 300*16*68 应为 300*106*68（图册确认为 300*106*68）。已由交叉核对修正。" },
+
+    { "model": "Y-612", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "2.2 METER",
+      "materials": { "layers": ["High-Density Foam"], "cover": "Flannel", "catalogEn": "...+FLANNEL" },
+      "variants": [
+        { "label": "2 SEATS 双人位", "dimensions": [220,100,74], "packingRaw": "34*34*110*2CTNS", "cbm": 0.26, "grossWeightRaw": "23.8*2", "grossWeightKg": 47.6, "unitPriceUsd": 246.27 },
+        { "label": "2 SEATS (BIG SIZE) 大双人位", "dimensions": [240,100,74], "packingRaw": "34*34*125*2CTNS", "cbm": 0.28, "grossWeightRaw": "24.8*2", "grossWeightKg": 49.6, "unitPriceUsd": 265.67 },
+        { "label": "3 SEATS 三人位", "dimensions": [300,100,74], "packingRaw": "34*34*118*2CTNS+30*30*90", "cbm": 0.34, "grossWeightRaw": "23.8*2+16.8", "grossWeightKg": 64.4, "unitPriceUsd": 343.28 }
+      ],
+      "consistent": true },
+
+    { "model": "Y-613", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "2.0 METER",
+      "materials": { "layers": ["High-Density Foam"], "cover": "Flannel" },
+      "variants": [
+        { "label": null, "dimensions": [200,90,66], "packingRaw": "115*45*45", "cbm": 0.23, "grossWeightKgMissing": true, "unitPriceUsd": 208.96 }
+      ],
+      "colourCode": "K3115-12",
+      "note": "图册有色号 K3115-12；图册缺毛重。" },
+
+    { "model": "Y-614", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "1.5 METER",
+      "materials": { "layers": ["High-Density Foam"], "cover": "Corduroy" },
+      "variants": [
+        { "label": null, "dimensions": [150,100,70], "packingRaw": "113*75*35", "catalogPackingRaw": "64*34*112", "cbm": 0.3, "catalogCbm": 0.24, "grossWeightKg": 37, "catalogGrossWeightKg": 41.1, "unitPriceUsd": 213.00 },
+        { "label": null, "dimensions": [180,100,70], "packingRaw": "113*75*38", "catalogPackingRaw": "67*34*112", "cbm": 0.32, "catalogCbm": 0.24, "grossWeightKg": 43, "catalogGrossWeightKg": 45.5, "unitPriceUsd": 255.76 },
+        { "label": null, "dimensions": [200,100,70], "packingRaw": "113*75*41", "catalogPackingRaw": "67*37*112", "cbm": 0.35, "catalogCbm": 0.27, "grossWeightKg": 47, "catalogGrossWeightKg": 48.7, "unitPriceUsd": 273.30 }
+      ],
+      "bothInternallyConsistent": true,
+      "note": "两来源各自 CBM 与包装尺寸算术自洽，属真实包装版本差异，非录入错误。" },
+
+    { "model": "Y-615", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "1.0 METER", "modular": true,
+      "materials": { "layers": ["High-Density Foam"], "cover": "Flannel" },
+      "variants": [
+        { "label": "as quoted (3-seat module)", "dimensions": [290,95,85], "packingRaw": "115*40*40 2pec", "cbm": 0.37, "grossWeightKg": 76, "unitPriceUsd": 261.19 }
+      ],
+      "catalogModulePacking": [
+        { "label": "1 SEATS (BIG SIZE) 大单人位", "dimensions": [100,100,70], "packingRaw": "33*33*110", "cbm": 0.12, "grossWeightKg": 19.2 },
+        { "label": "1 SEATS (SMALL SIZE) 单人位", "dimensions": [85,85,70], "packingRaw": "33*33*95", "cbm": 0.1, "grossWeightKg": 16 }
+      ],
+      "colourCode": "3115-18",
+      "conflict": "报价表与图册尺寸/包装/CBM 均不一致，粒度可能不同（整组 vs 模块）。" },
+
+    { "model": "Y-616", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogPresent": false,
+      "materials": { "layers": ["High-Density Foam"], "cover": "Compression-Resistant Plush Fabric" },
+      "variants": [
+        { "label": null, "dimensions": [105,105,87], "packingRaw": "110*30*30", "cbm": 0.1, "grossWeightKg": 15, "unitPriceUsd": 97.01 },
+        { "label": null, "dimensions": [150,105,87], "packingRaw": "160*30*30", "cbm": 0.15, "grossWeightKg": 28, "unitPriceUsd": 141.79 },
+        { "label": null, "dimensions": [210,105,87], "packingRaw": "215*30*30", "cbm": 0.2, "grossWeightKg": 35, "unitPriceUsd": 179.10 }
+      ] },
+
+    { "model": "Y-617", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogPresent": false, "molded": true,
+      "materials": { "layers": ["One-Piece Molded Foam"], "cover": null },
+      "variants": [
+        { "label": null, "dimensions": [120,113,71], "packingRaw": "39*39*126", "cbm": 0.19, "grossWeightKg": 30, "unitPriceUsd": 261.19 },
+        { "label": null, "dimensions": [190,113,77], "packingRaw": "50*45*126", "cbm": 0.29, "grossWeightKg": 44, "unitPriceUsd": 447.76 },
+        { "label": null, "dimensions": [240,113,80], "packingRaw": "55*55*126", "cbm": 0.38, "grossWeightKg": 60, "unitPriceUsd": 559.70 }
+      ] },
+
+    { "model": "D-608", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "0.83 METER", "modular": true,
+      "materials": { "layers": ["High-Polymer Powder-Free Compressible Foam","Glue-Free Cotton"], "cover": "Compression-Resistant Plush Fabric",
+        "catalogEn": "PRESSURE-RESISTANT HIGH POLYMER COMPRESSIBLE SPONGE+180T AEROBIC COTTON+FEATHER SILK COTTON+CHENILLE VELVET" },
+      "variants": [
+        { "label": null, "dimensions": [85,100,73], "packingRaw": "105*30*30", "cbm": 0.1, "grossWeightKg": 15, "unitPriceUsd": 89.55 },
+        { "label": null, "dimensions": [155,100,73], "packingRaw": "160*30*30", "cbm": 0.15, "grossWeightKg": 30, "unitPriceUsd": 179.10 },
+        { "label": null, "dimensions": [80,75,42], "packingRaw": "29*29*93", "cbm": 0.08, "grossWeightKg": 11.4, "unitPriceUsd": 58.21 }
+      ],
+      "catalogModulePacking": [
+        { "label": "FOOTSTOOL 脚踏", "dimensions": [80,60,45], "packingRaw": "33*33*88", "cbm": 0.1, "grossWeightKg": 11 },
+        { "label": "1 SEATS 单人位", "dimensions": [83,95,74], "packingRaw": "38*37*96", "cbm": 0.14, "grossWeightKg": 16.5 },
+        { "label": "2 SEATS 双人位", "dimensions": [160,95,74], "packingRaw": "39*35*115", "cbm": 0.16, "grossWeightKg": 30.8 }
+      ],
+      "catalogTableIdenticalTo": "D-611" },
+
+    { "model": "D-609", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "0.85 METER",
+      "materials": { "layers": ["High-Polymer Powder-Free Compressible Foam","Glue-Free Cotton"], "cover": "Stretch Fabric" },
+      "variants": [
+        { "label": null, "dimensions": [90,100,75], "packingRaw": "105*30*30", "cbm": 0.1, "grossWeightKg": 15, "unitPriceUsd": 82.09 },
+        { "label": null, "dimensions": [130,100,75], "packingRaw": "135*30*30", "cbm": 0.15, "grossWeightKg": 26, "unitPriceUsd": 143.28 }
+      ],
+      "catalogModulePacking": [
+        { "label": "OTTOMAN 脚踏", "dimensions": [80,60,35], "packingRaw": "28*28*88", "cbm": 0.07, "grossWeightKg": 7.5 },
+        { "label": "1 SEAT 单人位", "dimensions": [85,101,75], "packingRaw": "28*28*95", "cbm": 0.07, "grossWeightKg": 14.4 },
+        { "label": "1 SEATS+OTTOMAN 单人位+脚踏", "dimensions": null, "packingRaw": "34*34*106", "cbm": 0.12, "grossWeightKg": 21 },
+        { "label": "2 SEATS 双人位", "dimensions": [125,101,75], "packingRaw": "30*30*125", "cbm": 0.11, "grossWeightKg": 20 }
+      ] },
+
+    { "model": "D-610", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "0.7 & 1.01 METER",
+      "materials": { "layers": ["High-Polymer Compression-Resistant Compressible Molded Foam","180T Aerated Foam"], "cover": "Mesh Fabric" },
+      "variants": [
+        { "label": "1.01 METER", "dimensions": [119,101,94], "packingRaw": "52*52*107", "cbm": 0.29, "grossWeightKg": 31, "unitPriceUsd": 205.97 },
+        { "label": "0.7 METER", "dimensions": [79,70,63], "packingRaw": "33*33*88", "cbm": 0.07, "grossWeightKg": 12, "unitPriceUsd": 146.27 }
+      ],
+      "colourName": "蓝黄色 BLUE YELLOW",
+      "consistent": true },
+
+    { "model": "D-611", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "0.83 METER",
+      "materials": { "layers": ["High-Polymer Powder-Free Compressible Foam","Glue-Free Cotton"], "cover": "Compression-Resistant Corduroy Fabric" },
+      "variants": [
+        { "label": null, "dimensions": [83,95,73], "packingRaw": "105*30*30", "cbm": 0.1, "grossWeightKg": 15, "unitPriceUsd": 89.55 },
+        { "label": null, "dimensions": [160,95,73], "packingRaw": "165*30*30", "cbm": 0.18, "grossWeightKg": 30, "unitPriceUsd": 179.10 }
+      ],
+      "catalogModulePacking": [
+        { "label": "FOOTSTOOL 脚踏", "dimensions": [80,60,45], "packingRaw": "33*33*88", "cbm": 0.1, "grossWeightKg": 11 },
+        { "label": "1 SEATS 单人位", "dimensions": [83,95,74], "packingRaw": "38*37*96", "cbm": 0.14, "grossWeightKg": 16.5 },
+        { "label": "2 SEATS 双人位", "dimensions": [160,95,74], "packingRaw": "39*35*115", "cbm": 0.16, "grossWeightKg": 30.8 }
+      ],
+      "catalogTableIdenticalTo": "D-608",
+      "note": "图册 D-608 与 D-611 包装表完全相同，疑似模板复制未更新。" },
+
+    { "model": "D-612", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "0.8 METER",
+      "materials": { "layers": ["High-Density Compression-Resistant Compressible Foam","180T Aerated Foam","Feather Fiber Filling"], "cover": "Flannel" },
+      "variants": [
+        { "label": null, "dimensions": [80,95,73], "packingRaw": "33*33*91", "cbm": 0.23, "catalogCbm": 0.1, "grossWeightKgMissing": true, "catalogGrossWeightKg": 18, "unitPriceUsd": 131.34 }
+      ],
+      "cbmArithmetic": { "computedFromPacking": 0.0991, "verdict": "图册 0.1 正确；报价表 0.23 与包装尺寸矛盾" } },
+
+    { "model": "C-301", "category": "COMPRESSED_BED", "series": "WARM_HOME", "catalogLengthLabel": "1.8 METER", "dualDimension": true,
+      "materials": { "layers": ["Carbon Steel Frame","High-Density Compression-Resistant Foam","Compressible Foam Structure"], "cover": "Compression Special Fabric",
+        "catalogEn": "PRESSURE-RESISTANT HIGH POLYMER COMPRESSIBLE SPONGE+180T AEROBIC COTTON+FEATHER SILK COTTON+COMPRESSION SPECIAL FABRIC",
+        "conflict": "报价表含 Carbon Steel Frame，图册未提及钢架" },
+      "variants": [
+        { "label": "BED OUTER 外围 228*169*96 / BED 180*200CM", "dimensions": [228,169,96], "bedSizeCm": [180,200],
+          "packingRaw": "100*29*20+101*21*13+110*30*33", "cbm": 0.2, "grossWeightKg": 55.9, "grossWeightRaw": "20.3+17.9+17.7 TOTAL:55.9", "unitPriceUsd": 220.90 }
+      ] },
+
+    { "model": "C-302", "category": "COMPRESSED_BED", "series": "WARM_HOME", "catalogLengthLabel": "1.8 METER", "dualDimension": true,
+      "materials": { "layers": ["Carbon Steel Frame","High-Density Compression-Resistant Foam","Compressible Foam Structure"], "cover": "Compression Special Fabric" },
+      "variants": [
+        { "label": "BED OUTER 外围 227*170*96 / BED 180*200CM", "dimensions": [227,170,96], "bedSizeCm": [180,200],
+          "packingRaw": "100*29*20+101*21*13+110*30*33", "cbm": 0.2, "grossWeightKg": 55.9, "unitPriceUsd": 220.90 }
+      ] },
+
+    { "model": "C-303", "category": "COMPRESSED_BED", "series": "WARM_HOME", "catalogLengthLabel": "1.8 METER", "dualDimension": true,
+      "materials": { "layers": ["Carbon Steel Frame","High-Density Compression-Resistant Foam","Compressible Foam Structure"], "cover": "Compression Special Fabric" },
+      "variants": [
+        { "label": "BED OUTER 外围 226*175*108 / BED 180*200CM", "dimensions": [226,175,108], "bedSizeCm": [180,200],
+          "packingRaw": "100*29*20+101*21*13+110*30*33", "cbm": 0.2, "grossWeightKg": 55.9, "unitPriceUsd": 220.90 }
+      ] },
+
+    { "model": "C-304", "category": "COMPRESSED_BED", "series": "WARM_HOME", "catalogLengthLabel": "1.5 METER", "dualDimension": true,
+      "materials": { "layers": ["Carbon Steel Frame","High-Density Compression-Resistant Foam","Compressible Foam Structure"], "cover": "Compression Special Fabric" },
+      "variants": [
+        { "label": "BED OUTER 外围 225*171*99 / BED 150*200CM", "dimensions": [225,171,99], "bedSizeCm": [150,200],
+          "packingRaw": "100*29*20+101*21*13+110*30*33", "cbm": 0.2, "grossWeightKg": 55.9, "unitPriceUsd": 220.90 }
+      ] },
+
+    { "model": "C-305", "category": "COMPRESSED_BED", "series": "WARM_HOME", "catalogLengthLabel": "1.5 METER", "dualDimension": true,
+      "materials": { "layers": ["Carbon Steel Frame","High-Density Compression-Resistant Foam","Compressible Foam Structure"], "cover": "Compression Special Fabric" },
+      "variants": [
+        { "label": "BED OUTER 外围 231*169*101 / BED 150*200CM", "dimensions": [231,169,101], "bedSizeCm": [150,200],
+          "packingRaw": "100*29*20+101*21*13+110*30*33", "cbm": 0.2, "grossWeightKg": 55.9, "unitPriceUsd": 220.90 }
+      ] },
+
+    { "model": "C-306", "category": "COMPRESSED_BED", "series": "WARM_HOME", "catalogLengthLabel": "0.9 METER", "dualDimension": true,
+      "materials": { "layers": ["Carbon Steel Frame","High-Density Compression-Resistant Foam","Compressible Foam Structure"], "cover": "Compression Special Fabric" },
+      "variants": [
+        { "label": "BED OUTER 外围 222*115*93 / BED 90*200CM", "dimensions": [222,115,93], "bedSizeCm": [90,200],
+          "packingRaw": "100*29*20+101*21*13+110*30*33", "cbm": 0.2, "grossWeightKg": 55.9, "unitPriceUsd": 194.03 }
+      ] }
+  ],
+
+  "conflicts": [
+    { "id": "C-01", "type": "TEMPLATE_COPY_PASTE", "models": ["Y-601","Y-602"], "field": "catalogPackingTable",
+      "detail": "图册中 Y-601 与 Y-602 的 COMPRESSION PACKING 表完全相同（150/180/200*100*70），且与两型号的报价表数据均不符。疑似模板未更新。",
+      "recommendedAuthority": "QUOTATION-2026",
+      "status": "RESOLVED", "resolution": "按业务规则『以报价表为准』采用报价表包装与 CBM/毛重；图册值作为观察值保留。" },
+    { "id": "C-02", "type": "TEMPLATE_COPY_PASTE", "models": ["D-608","D-611"], "field": "catalogPackingTable",
+      "detail": "图册中 D-608 与 D-611 的包装表完全相同。疑似模板未更新。",
+      "recommendedAuthority": "QUOTATION-2026",
+      "status": "RESOLVED", "resolution": "按业务规则『以报价表为准』采用报价表值。" },
+    { "id": "C-03", "type": "ARITHMETIC_ERROR", "models": ["D-612"], "field": "cbm",
+      "detail": "报价表 CBM=0.23，但包装 33*33*91 = 0.0991 m³。图册 CBM=0.1 正确。",
+      "recommendedAuthority": "CATALOG-2026",
+      "status": "BLOCKER", "severity": "BLOCKER",
+      "resolution": "PENDING_BUSINESS_EXCEPTION",
+      "exceptionNote": "业务规则为『以报价表为准』，但严格执行将写入 CBM=0.23，与包装尺寸推导值 0.0991 相差 2.3 倍，会直接导致 40HQ 装载量与运费估算错误。建议例外采用 0.1。待确认。" },
+    { "id": "C-04", "type": "TYPO", "models": ["Y-611"], "field": "dimensions",
+      "detail": "报价表尺寸 300*16*68，图册为 300*106*68。应为 300*106*68。",
+      "recommendedAuthority": "CATALOG-2026",
+      "status": "BLOCKER", "severity": "BLOCKER",
+      "resolution": "PENDING_BUSINESS_EXCEPTION",
+      "exceptionNote": "业务规则为『以报价表为准』，但严格执行将写入 300*16*68（高 16cm 的沙发不成立）。建议例外采用 300*106*68。待确认。" },
+    { "id": "C-05", "type": "GENUINE_VERSION_DIFF", "models": ["Y-614"], "field": "packing,cbm,grossWeight",
+      "detail": "报价表包装 113*75*35（CBM 0.3）与图册 64*34*112（CBM 0.24）差异显著，但各自与自身 CBM 算术自洽。属真实包装方案版本差异。",
+      "recommendedAuthority": "QUOTATION-2026",
+      "status": "RESOLVED", "resolution": "业务确认：Y-614 现行包装为 113*75*35，采用报价表值。" },
+    { "id": "C-06", "type": "GRANULARITY_DIFF", "models": ["Y-608","Y-615","D-608","D-609"], "field": "variantGranularity",
+      "detail": "报价表按整组配置（assembled configuration）报价，图册按模块件（module）包装。两者粒度不同，非单纯错误。需同时支持模块与配置两种粒度。",
+      "recommendedAuthority": "BOTH" },
+    { "id": "C-06", "type": "GRANULARITY_DIFF", "models": ["Y-608","Y-615","D-608","D-609"], "field": "variantGranularity",
+      "detail": "报价表按整组配置（assembled configuration）报价，图册按模块件（module）包装。两者粒度不同，非单纯错误。需同时支持模块与配置两种粒度。",
+      "recommendedAuthority": "BOTH",
+      "status": "RESOLVED", "resolution": "非冲突。以 variantType 区分 CONFIGURATION 与 MODULE 两种粒度并存；报价与 AI 报价只使用 CONFIGURATION。" },
+    { "id": "C-07", "type": "MATERIAL_DIFF", "models": ["Y-601","Y-602","Y-608","C-301"], "field": "materials",
+      "detail": "报价表面料/填充描述与图册不一致；C 系列报价表含 Carbon Steel Frame 而图册未提及；图册普遍多出 180T 有氧绵与羽丝绵层。",
+      "recommendedAuthority": "QUOTATION-2026",
+      "status": "RESOLVED", "resolution": "按业务规则『以报价表为准』：报价表材料为权威值（canonical）。图册中英文材料名作为知识库补充保留（不覆盖报价表值），用于 AI 话术与对外描述。" },
+    { "id": "C-08", "type": "MISSING_DATA", "models": ["D-612","Y-613"], "field": "grossWeightKg",
+      "detail": "报价表 D-612 毛重缺失；图册 Y-613 毛重缺失。",
+      "recommendedAuthority": "MERGE_BOTH",
+      "status": "RESOLVED", "resolution": "两来源互补：D-612 采用图册 18kg；Y-613 采用报价表 37kg。均标记来源。" },
+    { "id": "C-09", "type": "COVERAGE_GAP", "models": ["Y-604","Y-606","Y-616","Y-617"], "field": "catalogPresence",
+      "detail": "这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。",
+      "recommendedAuthority": "NEEDS_INPUT",
+      "status": "OPEN", "resolution": "待业务补充图片与系列归属；系列字段暂留空并标记数据不完整。" },
+    { "id": "C-10", "type": "BUSINESS_UNCONFIRMED", "models": [], "field": "incoterm,moq,priceTiers",
+      "detail": "报价表未标明贸易术语、未标 MOQ、无数量分档价。",
+      "recommendedAuthority": "NEEDS_INPUT",
+      "status": "PARTIALLY_RESOLVED",
+      "resolution": "已确认：贸易术语 = FOB；MOQ = 线上 10 件 / 线下 20 件（按渠道分档）。仍待确认：是否需要数量分档价。" }
+  ],
+
+  "confirmedDecisions": [
+    { "id": "A-01", "question": "报价表价格属于 EXW 还是 FOB？", "answer": "FOB", "date": "2026-09-22" },
+    { "id": "A-02", "question": "各型号 MOQ 是多少？", "answer": "线上 10 件；线下交谈 20 件（按渠道分档）", "date": "2026-09-22" },
+    { "id": "A-03", "question": "Y-614 现行包装以哪个为准？", "answer": "113*75*35（报价表）；且所有型号一律以报价表为准", "date": "2026-09-22" }
+  ],
+
+  "pendingQuestions": [
+    { "priority": "BLOCKER", "question": "D-612 的 CBM 是否例外采用 0.1？（业务规则为『以报价表为准』，但报价表 0.23 与包装 33*33*91 推导值 0.0991 相差 2.3 倍，会直接影响 40HQ 装载量与运费）" },
+    { "priority": "BLOCKER", "question": "Y-611 的尺寸是否例外采用 300*106*68？（业务规则为『以报价表为准』，但报价表 300*16*68 的高 16cm 不成立）" },
+    { "priority": "NORMAL", "question": "是否需要数量分档价（如 1-10 / 11-50 / 50+）？" },
+    { "priority": "NORMAL", "question": "『线上 / 线下』之外是否还有其他 MOQ 渠道（Alibaba、独立站、展会）？" },
+    { "priority": "NORMAL", "question": "WARM HOME 是否有正式中文系列名？" },
+    { "priority": "NORMAL", "question": "Y-604 / Y-606 / Y-616 / Y-617 的实物图与系列归属？" },
+    { "priority": "NORMAL", "question": "智能床垫（Smart Mattress）产品线资料何时提供？是否纳入本期 Product OS？" },
+    { "priority": "NORMAL", "question": "色号体系（K3115-12 / 3115-18）是否需要作为独立可选项管理？" },
+    { "priority": "NORMAL", "question": "40HQ 可用容积按 68 m³ 估算是否可接受？" },
+    { "priority": "NORMAL", "question": "Customer.productModel 与产品库如何关联：加 nullable 外键还是独立关联表？" }
+  ]
+}
