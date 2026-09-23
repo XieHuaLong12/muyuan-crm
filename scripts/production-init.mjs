@@ -78,6 +78,27 @@ try {
     update: {},
   });
 
+  // Product OS：产品库为空时才灌入种子（幂等，只在首次部署执行一次）。
+  // 失败不影响启动：产品数据缺失不应阻断 CRM 运行。
+  try {
+    const productCount = await db.product.count();
+    if (productCount === 0) {
+      console.log('Product OS: product library is empty, seeding from the 2026 price list...');
+      const seed = spawnSync(
+        process.execPath,
+        ['--env-file=.env', 'node_modules/tsx/dist/cli.mjs', 'prisma/seed-product-os.ts'],
+        { stdio: 'inherit', env: process.env },
+      );
+      if (seed.status !== 0) {
+        console.warn('Product OS seed did not finish. Run `pnpm db:seed:products` manually.');
+      }
+    } else {
+      console.log(`Product OS: ${productCount} products already present, skipping seed.`);
+    }
+  } catch (error) {
+    console.warn('Product OS seed skipped:', error instanceof Error ? error.message : error);
+  }
+
   console.log('Production database is ready.');
 } finally {
   await db.$disconnect();

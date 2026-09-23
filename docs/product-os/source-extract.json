@@ -204,7 +204,7 @@
     { "model": "Y-613", "category": "COMPRESSED_SOFA", "series": "WARM_HOME", "catalogLengthLabel": "2.0 METER",
       "materials": { "layers": ["High-Density Foam"], "cover": "Flannel" },
       "variants": [
-        { "label": null, "dimensions": [200,90,66], "packingRaw": "115*45*45", "cbm": 0.23, "grossWeightKgMissing": true, "unitPriceUsd": 208.96 }
+        { "label": null, "dimensions": [200,90,66], "packingRaw": "115*45*45", "cbm": 0.23, "catalogGrossWeightKgMissing": true, "grossWeightKg": 37, "unitPriceUsd": 208.96 }
       ],
       "colourCode": "K3115-12",
       "note": "图册有色号 K3115-12；图册缺毛重。" },
