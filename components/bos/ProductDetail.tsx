@@ -47,15 +47,16 @@ export type ProductDetailData = {
   nameEn: string;
   status: string;
   lengthLabel: string;
-  category: { code: string; nameCn: string; nameEn: string };
+  lang: 'zh' | 'en';
+  category: { code: string; name: string; path: string };
   series: { code: string; nameEn: string } | null;
   isModular: boolean;
   isSofaBed: boolean;
   leadTimeDays: number;
   qaMonths: number;
   variants: Variant[];
-  materials: { id: string; role: string; nameEn: string; nameCn: string; specEn: string }[];
-  options: { id: string; kind: string; code: string; nameEn: string; nameCn: string }[];
+  materials: { id: string; role: string; name: string; nameEn: string; nameCn: string; specEn: string }[];
+  options: { id: string; kind: string; code: string; name: string; nameEn: string; nameCn: string }[];
   moqs: { channel: string; channelLabelCn: string; minQty: number }[];
   media: { id: string; role: string; fileName: string; storageKey: string }[];
   aiProfile: { status: string; keywords: string[]; searchText: string } | null;
@@ -86,7 +87,7 @@ export function ProductDetail({ data }: { data: ProductDetailData }) {
   return (
     <>
       <Header
-        eyebrow={`产品库 · ${data.category.nameCn || data.category.nameEn}`}
+        eyebrow={`产品库 · ${data.category.path}`}
         title={`${data.model} ${data.series ? `· ${data.series.nameEn}` : ''}`}
         description={`${data.lengthLabel || data.nameEn} · ${data.variants.length} 个尺寸变体 · 交期 ${data.leadTimeDays} 天 · 质保 ${data.qaMonths} 个月`}
         actions={
@@ -202,7 +203,7 @@ export function ProductDetail({ data }: { data: ProductDetailData }) {
             {data.materials.map(material => (
               <tr key={material.id}>
                 <td><Badge>{ROLE_LABEL[material.role] ?? material.role}</Badge></td>
-                <td>{material.nameEn}{material.nameCn && <small>{material.nameCn}</small>}</td>
+                <td>{material.name}{material.name !== material.nameCn && material.nameCn && <small>{material.nameCn}</small>}</td>
                 <td>{material.specEn || '—'}</td>
               </tr>
             ))}
@@ -239,7 +240,7 @@ export function ProductDetail({ data }: { data: ProductDetailData }) {
                   <Badge tone={option.kind === 'FABRIC' ? 'green' : 'neutral'}>
                     {option.kind === 'FABRIC' ? '面料' : '颜色'}
                   </Badge>
-                  <span>{option.nameEn}{option.code && ` (${option.code})`}</span>
+                  <span>{option.name}{option.code && ` (${option.code})`}</span>
                 </li>
               ))}
             </ul>

@@ -11,7 +11,7 @@ import { Header,Card,Table,Badge,EmptyState,Typography } from '@/components/ui/b
 export type CatalogProduct = {
   id: string;
   model: string;
-  nameEn: string;
+  name: string;
   categoryCode: string;
   categoryName: string;
   seriesName: string;
@@ -28,12 +28,19 @@ export type CatalogProduct = {
 };
 
 export type CatalogData = {
-  query: { q: string; category: string; series: string; status: string; review: string; page: number };
+  query: { q: string; category: string; series: string; status: string; review: string; lang: 'zh' | 'en'; page: number };
   pageSize: number;
   total: number;
   libraryTotal: number;
   reviewCount: number;
-  categories: { code: string; nameCn: string; nameEn: string }[];
+  reviewBreakdown: { math: number; source: number; missing: number };
+  tree: {
+    code: string;
+    name: string;
+    nameCn: string;
+    nameEn: string;
+    children: { code: string; name: string; nameCn: string; nameEn: string; prefix: string }[];
+  }[];
   series: { code: string; nameEn: string }[];
   products: CatalogProduct[];
 };
@@ -46,6 +53,7 @@ function buildUrl(query: CatalogData['query'], patch: Partial<CatalogData['query
   if (next.series) params.set('series', next.series);
   if (next.status !== 'ACTIVE') params.set('status', next.status);
   if (next.review !== 'ALL') params.set('review', next.review);
+  if (next.lang === 'en') params.set('lang', 'en');
   if (next.page > 1) params.set('page', String(next.page));
   const text = params.toString();
   return text ? `/products?${text}` : '/products';
@@ -61,10 +69,16 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
         title="产品库"
         description={`${data.total} 个型号 · 价格与包装以报价表为准（FOB）`}
         actions={
-          <Link href="/products?review=NEEDS_REVIEW" className="bos-button">
-            <AlertTriangle size={15} />
-            待核对 {data.reviewCount}
-          </Link>
+          <>
+            <span className="bos-lang-switch" role="group" aria-label="语言">
+              <Link href={buildUrl(data.query, { lang: 'zh' })} aria-current={data.query.lang === 'zh' ? 'page' : undefined}>中文</Link>
+              <Link href={buildUrl(data.query, { lang: 'en' })} aria-current={data.query.lang === 'en' ? 'page' : undefined}>EN</Link>
+            </span>
+            <Link href={buildUrl(data.query, { review: 'NEEDS_REVIEW', page: 1 })} className="bos-button">
+              <AlertTriangle size={15} />
+              待核对 {data.reviewCount}
+            </Link>
+          </>
         }
       />
 
@@ -76,14 +90,22 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
               <Link href={buildUrl(data.query, { category: '', series: '' })} aria-current={!data.query.category && !data.query.series ? 'page' : undefined}>
                 <Layers3 size={15} /> 全部产品 <span>{data.total}</span>
               </Link>
-              {data.categories.map(category => (
-                <Link
-                  key={category.code}
-                  href={buildUrl(data.query, { category: category.code, series: '' })}
-                  aria-current={data.query.category === category.code ? 'page' : undefined}
-                >
-                  <Package size={15} /> {category.nameCn || category.nameEn}
-                </Link>
+              {data.tree.map(root => (
+                <div className="bos-tree-group" key={root.code}>
+                  <p className="bos-tree-root">{root.name}</p>
+                  {root.children.map(child => (
+                    <Link
+                      key={child.code}
+                      href={buildUrl(data.query, { category: child.code, series: '' })}
+                      aria-current={data.query.category === child.code ? 'page' : undefined}
+                    >
+                      <Package size={15} />
+                      {child.prefix && <em className="bos-tree-prefix">{child.prefix}</em>}
+                      {child.name}
+                    </Link>
+                  ))}
+                  {!root.children.length && <p className="bos-tree-empty">待上架</p>}
+                </div>
               ))}
             </nav>
           </Card>
@@ -92,8 +114,16 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
             <Typography as="h2" variant="heading">数据质量</Typography>
             <dl className="bos-quality">
               <div>
-                <dt>待核对变体</dt>
-                <dd className={data.reviewCount ? 'bos-danger-text' : ''}>{data.reviewCount}</dd>
+                <dt>算术疑点</dt>
+                <dd className={data.reviewBreakdown.math ? 'bos-danger-text' : ''}>{data.reviewBreakdown.math}</dd>
+              </div>
+              <div>
+                <dt>来源差异</dt>
+                <dd>{data.reviewBreakdown.source}</dd>
+              </div>
+              <div>
+                <dt>资料缺失</dt>
+                <dd>{data.reviewBreakdown.missing}</dd>
               </div>
               <div>
                 <dt>本页型号</dt>
@@ -101,8 +131,9 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
               </div>
             </dl>
             <p className="bos-footnote">
-              待核对表示该变体的报价表 CBM 与包装尺寸推导值偏差超过 15%，
-              或存在已登记的来源冲突。数值以报价表为准，未做自动修正。
+              <strong>算术疑点</strong>：数值自相矛盾（如 CBM 与包装尺寸算不通），需要修正。
+              <strong>来源差异</strong>：中英文报价表数值不一致，需要决定以哪份为准。
+              <strong>资料缺失</strong>：图册未收录。全部按报价表原值展示，未做自动修正。
             </p>
           </Card>
         </aside>
@@ -149,7 +180,7 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
                   <td>
                     <Link href={`/products/${product.id}`}>
                       <strong>{product.model}</strong>
-                      <small>{product.lengthLabel || product.nameEn}</small>
+                      <small>{product.lengthLabel || product.name}</small>
                     </Link>
                   </td>
                   <td>{product.categoryName}</td>
