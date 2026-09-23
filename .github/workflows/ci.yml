@@ -168,6 +168,13 @@ jobs:
           atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '%中英文报价表不一致%'" "5"
           atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '%CN-10%'" "1"
 
+          # 成本与毛利：新表 + Setting 汇率列，且默认值为 6.70
+          check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='ProductCost'" "1"
+          check "SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Setting' AND COLUMN_NAME='usdCnyRate'" "1"
+          check "SELECT CAST(usdCnyRate AS CHAR) FROM Setting WHERE id='system'" "6.7000"
+          check "SELECT COUNT(*) FROM ProductCost" "0"
+          # 成本绝不出现在普通产品列表接口的返回结构里（由 tests/product-cost.test.ts 断言）
+
           # 产品图：26 张图 + 26 条记录
           check "SELECT COUNT(*) FROM ProductMedia WHERE role='HERO'" "26"
           check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Product'" "1"
