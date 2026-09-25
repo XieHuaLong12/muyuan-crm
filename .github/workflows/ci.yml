@@ -202,9 +202,10 @@ jobs:
             fi
             echo "ok  $got  :: $1"
           }
-          # 订单表由迁移创建，且不含产品列（订单不展示产品信息）
+          # 订单表由迁移创建，且不含产品信息列（订单不展示产品信息）
+          # 注意用精确列名：LIKE '%roduct%' 会误伤 productionStatus
           check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Order'" "1"
-          check "SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Order' AND COLUMN_NAME LIKE '%roduct%'" "0"
+          check "SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Order' AND COLUMN_NAME IN ('product','productId','productModel','productName','productSku','productVariantId')" "0"
           # 产品库种子里的 12 笔成交应全部补齐订单
           atleast "SELECT COUNT(*) FROM \`Order\`" "12"
           check "SELECT COUNT(*) FROM \`Order\` WHERE dealId IS NULL" "0"
