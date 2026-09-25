@@ -128,3 +128,96 @@
 .bos-analytics table{width:100%;border-collapse:collapse;font-size:13px}
 .bos-analytics .two-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 @media(max-width:900px){.bos-analytics .two-columns{grid-template-columns:1fr}}
+
+/* ═══════════════ 订单管理 Order Management ═══════════════
+   独立模块，不引用驾驶舱内容。
+   颜色沿用 BOS 现有 token（与需求给的 #145C45 / #F7F8FA / #E5E7EB 肉眼无差），
+   保持整套系统一个色系。 */
+.bos-order-actions{display:flex;gap:10px;align-items:center}
+
+/* 状态页签：选中＝绿底白字，其余＝白底灰字 */
+.bos-order-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 16px}
+.bos-order-tabs a{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border:1px solid var(--bos-border);border-radius:12px;background:#fff;color:#6e6e73;font-size:13px;font-weight:500;transition:background .15s,color .15s,border-color .15s}
+.bos-order-tabs a:hover{border-color:#cfd4d8;color:var(--bos-ink)}
+.bos-order-tabs a[aria-current=page]{background:var(--bos-green);border-color:var(--bos-green);color:#fff}
+.bos-order-tabs a b{font-size:12px;font-weight:600;padding:1px 7px;border-radius:99px;background:#f0f1f3;color:#6e6e73}
+.bos-order-tabs a[aria-current=page] b{background:rgba(255,255,255,.22);color:#fff}
+
+/* 筛选行 */
+.bos-order-filter{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:20px}
+.bos-order-filter .bos-input{min-width:260px}
+.bos-order-filter select{padding:10px 12px;border:1px solid var(--bos-border);border-radius:12px;background:#fff;font-size:13px;color:var(--bos-ink)}
+.bos-order-dates{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--bos-border);border-radius:12px;background:#fff}
+.bos-order-dates span{font-size:12px;color:#86868b}
+.bos-order-dates input{border:0;background:transparent;font-size:13px;color:var(--bos-ink);padding:4px 0}
+.bos-order-dash{color:#c7c7cc}
+
+/* 列表 + 右侧提醒 */
+.bos-order-layout{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:20px;align-items:start}
+.bos-order-table-card{overflow-x:auto}
+.bos-order-amount{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.bos-order-progress{min-width:250px}
+.bos-overdue{color:#a44b36;font-weight:600}
+.bos-order-view{display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--bos-green);white-space:nowrap}
+.bos-row-review{background:#fdfaf5}
+
+/* 横向进度：绿点＝已完成，绿线＝已经过阶段，灰点＝未完成 */
+.bos-timeline{display:flex;align-items:flex-start;min-width:236px}
+.bos-timeline-step{flex:1;display:flex;flex-direction:column;align-items:center;position:relative;padding-top:2px}
+.bos-timeline-step::before,.bos-timeline-step::after{content:'';position:absolute;top:6px;height:2px;background:#e2e4e8}
+.bos-timeline-step::before{left:0;right:50%}
+.bos-timeline-step::after{left:50%;right:0}
+.bos-timeline-step:first-child::before{display:none}
+.bos-timeline-step:last-child::after{display:none}
+.bos-timeline-step.is-done::before{background:var(--bos-green)}
+.bos-timeline-step.is-linked::after{background:var(--bos-green)}
+.bos-timeline-dot{position:relative;z-index:1;width:10px;height:10px;border-radius:50%;background:#d6d9dd;box-shadow:0 0 0 3px #fff}
+.bos-timeline-step.is-done .bos-timeline-dot{background:var(--bos-green)}
+.bos-timeline-step small{margin-top:6px;font-size:10px;line-height:1.2;color:#a0a0a6;white-space:nowrap}
+.bos-timeline-step.is-done small{color:#6e6e73}
+.bos-timeline-cancelled{font-size:12px;color:#a44b36}
+
+/* 状态徽标 */
+.bos-status{display:inline-block;padding:4px 11px;border-radius:99px;font-size:12px;font-weight:500;background:#f0f1f3;color:#4b4b50;white-space:nowrap}
+.bos-status-pending{background:#fdf3e7;color:#85521b}
+.bos-status-producing{background:#eaf3ef;color:#14503b}
+.bos-status-shipped{background:#e8f0f6;color:#2c5b7d}
+.bos-status-transit{background:#eceefb;color:#3f4a8a}
+.bos-status-done{background:#e7f4ec;color:#1c6b41}
+.bos-status-cancelled{background:#f2f2f4;color:#86868b}
+
+/* 提醒卡 */
+.bos-reminder-list{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:2px}
+.bos-reminder-list li{display:flex;align-items:center;justify-content:space-between;padding:13px 2px;border-bottom:1px solid var(--bos-border)}
+.bos-reminder-list li:last-child{border-bottom:0}
+.bos-reminder-list span{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#6e6e73}
+.bos-reminder-list span.is-active{color:#85521b}
+.bos-reminder-list b{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--bos-ink)}
+
+/* 详情页 */
+.bos-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-bottom:20px}
+.bos-detail-list{margin:14px 0 0;display:flex;flex-direction:column;gap:0}
+.bos-detail-list>div{display:flex;align-items:baseline;gap:16px;padding:11px 0;border-bottom:1px solid var(--bos-border)}
+.bos-detail-list>div:last-child{border-bottom:0}
+.bos-detail-list dt{flex:none;width:104px;font-size:12px;color:#86868b}
+.bos-detail-list dd{margin:0;font-size:13px;color:var(--bos-ink);line-height:1.6}
+.bos-detail-amount{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+.bos-flow{list-style:none;margin:18px 0 0;padding:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.bos-flow li{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:4px}
+.bos-flow li::before{content:'';position:absolute;top:9px;left:0;right:50%;height:2px;background:#e2e4e8}
+.bos-flow li::after{content:'';position:absolute;top:9px;left:50%;right:0;height:2px;background:#e2e4e8}
+.bos-flow li:first-child::before,.bos-flow li:last-child::after{display:none}
+.bos-flow li.is-done::before,.bos-flow li.is-done::after{background:var(--bos-green)}
+.bos-flow-dot{position:relative;z-index:1;width:12px;height:12px;border-radius:50%;background:#d6d9dd;box-shadow:0 0 0 3px #fff}
+.bos-flow li.is-done .bos-flow-dot{background:var(--bos-green)}
+.bos-flow li strong{font-size:12px;font-weight:600}
+.bos-flow li small{font-size:11px;color:#a0a0a6}
+.bos-flow li.is-done small{color:var(--bos-green)}
+.bos-quote-list{list-style:none;margin:14px 0 0;padding:0}
+.bos-quote-list li{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--bos-border)}
+.bos-quote-list li:last-child{border-bottom:0}
+.bos-quote-list small{display:block;font-size:12px;color:#86868b;margin-top:3px}
+.bos-quote-list>li>span{font-size:13px;font-variant-numeric:tabular-nums;font-weight:600}
+
+@media(max-width:1180px){.bos-order-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:760px){.bos-detail-grid{grid-template-columns:1fr}.bos-flow{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:18px}}
