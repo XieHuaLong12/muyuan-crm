@@ -84,12 +84,14 @@ function queryString(query: OrdersData['query'], patch: Partial<OrdersData['quer
 /** 横向进度：绿点=已完成，绿线=已经过阶段，灰点=未完成。 */
 function Timeline({ progress }: { progress: OrderRow['progress'] }) {
   if (progress.cancelled) return <span className="bos-timeline-cancelled">已取消</span>;
+  // 最后一个已完成节点＝当前所处阶段，给它绿色光晕脉冲
+  const current = progress.done.lastIndexOf(true);
   return (
     <div className="bos-timeline" role="img" aria-label={`已完成 ${progress.done.filter(Boolean).length} / ${ORDER_STAGES.length} 个阶段`}>
       {ORDER_STAGES.map((stage, index) => (
         <div
           key={stage}
-          className={`bos-timeline-step${progress.done[index] ? ' is-done' : ''}${progress.done[index + 1] ? ' is-linked' : ''}`}
+          className={`bos-timeline-step${progress.done[index] ? ' is-done' : ''}${progress.done[index + 1] ? ' is-linked' : ''}${index === current ? ' is-current' : ''}`}
         >
           <span className="bos-timeline-dot" />
           <small>{stage}</small>
@@ -128,7 +130,7 @@ export function OrderManagement({ data }: { data: OrdersData }) {
         }
       />
 
-      <nav className="bos-order-tabs" aria-label="订单状态">
+      <nav className="bos-order-tabs motion-in" style={{ '--motion-delay': '100ms' } as React.CSSProperties} aria-label="订单状态">
         {ORDER_TABS.map(([key, label]) => {
           const count = key === 'ALL' ? data.allCount : tabs.find(t => t.key === key)?.count ?? 0;
           return (
@@ -140,7 +142,7 @@ export function OrderManagement({ data }: { data: OrdersData }) {
         })}
       </nav>
 
-      <form className="bos-order-filter" action="/orders">
+      <form className="bos-order-filter motion-in" style={{ '--motion-delay': '200ms' } as React.CSSProperties} action="/orders">
         <input className="bos-input" type="search" name="q" aria-label="搜索订单号、客户名称或国家" placeholder="搜索订单号 / 客户名称 / 国家" defaultValue={query.q} />
         <select name="country" aria-label="国家" defaultValue={query.country}>
           <option value="">全部国家</option>
@@ -164,8 +166,8 @@ export function OrderManagement({ data }: { data: OrdersData }) {
         <Link className="bos-button" href="/orders">重置</Link>
       </form>
 
-      <div className="bos-order-layout">
-        <Card className="bos-order-table-card">
+      <div className="bos-order-layout motion-in" style={{ '--motion-delay': '400ms' } as React.CSSProperties}>
+        <Card className="bos-order-table-card" data-motion={data.orders.length > 50 ? 'off' : 'on'}>
           <Table
             caption="订单列表"
             headings={['订单号', '客户名称', '国家', '订单金额', '下单日期', '预计到货', '当前状态', '订单进度', '操作']}
