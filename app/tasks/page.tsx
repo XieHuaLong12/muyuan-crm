@@ -1,4 +1,4 @@
-import { WorkspaceShell } from '@/components/workspace/WorkspaceShell';
+import { BOSShell } from '@/components/bos/BOSShell';
 import { TaskCenter } from '@/components/workspace/TaskCenter';
 import { workspacePage,jsonForClient } from '@/services/workspace-page';
 import { listTasks,taskInclude,taskScope } from '@/services/task-service';
@@ -10,5 +10,5 @@ export default async function Page({searchParams}:{searchParams:Promise<Record<s
  const {user,boot}=await workspacePage();const query=await searchParams;const view=['TODAY','OVERDUE','DONE','ALL'].includes(query.view||'')?query.view!:'OPEN';
  const [initial,customers,editing]=await Promise.all([listTasks(user,{status:view==='DONE'?'DONE':view==='ALL'?'ALL':'OPEN',view,customerId:query.customer}),
  db.customer.findMany({where:scope(user),select:{id:true,name:true},orderBy:{name:'asc'}}),query.task?db.task.findFirst({where:{id:query.task,...taskScope(user)},include:taskInclude}):null]);
- return <WorkspaceShell boot={boot}><TaskCenter initial={jsonForClient<TaskPage>(initial)} customers={customers} timezone={boot.settings.timezone} customerId={query.customer} initialView={view} initialEditor={editing?jsonForClient<TaskItem>(editing):query.new==='1'?null:undefined}/></WorkspaceShell>;
+ return <BOSShell boot={boot}><div className="v3-shell bos-embed"><TaskCenter initial={jsonForClient<TaskPage>(initial)} customers={customers} timezone={boot.settings.timezone} customerId={query.customer} initialView={view} initialEditor={editing?jsonForClient<TaskItem>(editing):query.new==='1'?null:undefined}/></div></BOSShell>;
 }

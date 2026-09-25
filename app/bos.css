@@ -103,3 +103,28 @@
 .bos-margin-low strong{color:#85521b}
 .bos-margin-negative strong{color:#a44b36}
 @media(max-width:900px){.bos-rate-form{flex-wrap:wrap}.bos-cost-form input{width:78px}}
+
+/* ── 统一外壳：把原深绿 V3 内容嵌进白色 BOS 外壳 ── */
+.bos .bos-embed{min-height:0}
+.bos-embed .v3-content{padding:0}
+.bos .bos-embed .v3-shell{min-height:0}
+/* 嵌入时不显示 V3 自带的侧栏/顶栏（若有残留） */
+.bos-embed>.v3-sidebar,.bos-embed>.v3-topbar,.bos-embed .v3-main>.v3-topbar,.bos-embed .v3-main>.v3-sidebar{display:none}
+/* 嵌入后内容不再需要 V3 的左边距 */
+.bos-embed .v3-main{margin-left:0}
+/* 账号区的退出按钮 */
+.bos-icon-button{flex:none;display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:9px;background:transparent;color:#86868b}
+.bos-icon-button:hover{background:#e6e6e9;color:var(--bos-primary)}
+.bos-sidebar.is-collapsed .bos-icon-button{margin:0 auto}
+
+/* ── 统一外壳：驾驶舱内的「销售分析」（承接原数据分析 / 销售漏斗两页） ── */
+.bos-segmented{display:inline-flex;flex-wrap:wrap;border:1px solid var(--bos-border);border-radius:10px;overflow:hidden;background:#fff}
+.bos-segmented a{padding:8px 12px;font-size:12px;color:#6e6e73;border-right:1px solid var(--bos-border)}
+.bos-segmented a:last-child{border-right:0}
+.bos-segmented a[aria-current=page]{background:var(--bos-green);color:#fff;font-weight:600}
+.bos-analytics .card{border:1px solid var(--bos-border);border-radius:16px;background:#fff;box-shadow:var(--bos-shadow);padding:24px;margin-bottom:16px}
+.bos-analytics h3{font-size:16px;font-weight:600;margin:0 0 4px}
+.bos-analytics .muted,.bos-analytics .footnote{font-size:12px;color:#86868b}
+.bos-analytics table{width:100%;border-collapse:collapse;font-size:13px}
+.bos-analytics .two-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media(max-width:900px){.bos-analytics .two-columns{grid-template-columns:1fr}}
