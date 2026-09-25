@@ -159,7 +159,7 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown) 
   const fields: LeadField[] = lead.lead.field_data.flatMap(item =>
     item.values.map(value => ({ name: item.name, label: item.name, value })),
   );
-  const mapped = mapLeadFields(fields);
+  const mapped = mapLeadFields(fields, { leadgenId: event.leadgenId, formId: event.formId });
   const actor = await defaultActor();
 
   // 已有同邮箱/同电话的客户 → 关联而不新建（需求第六步）

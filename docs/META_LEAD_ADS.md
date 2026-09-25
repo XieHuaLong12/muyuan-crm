@@ -18,7 +18,7 @@ Facebook 广告表单
 
 | 变量 | 必填 | 说明 |
 |---|---|---|
-| `META_LEAD_VERIFY_TOKEN` | ✅ | 专用于 Meta Webhook 验证。**不要复用 `WEBHOOK_SECRET`** |
+| `META_LEAD_WEBHOOK_SECRET` | ✅ | 专用于 Meta Webhook 验证。**不要复用 `WEBHOOK_SECRET`** |
 | `META_PAGE_ACCESS_TOKEN` | ✅ | 读取 leadgen 详情的 Page Access Token |
 | `META_APP_SECRET` | ✅ | 校验 `X-Hub-Signature-256`。**不配则拒绝一切推送** |
 | `META_GRAPH_VERSION` | ➖ | 已存在，默认 `v26.0`。Meta 约两年废弃一次版本，到期只改这个变量，不用改代码 |
@@ -29,7 +29,7 @@ Facebook 广告表单
 
 1. **developers.facebook.com → 你的 App → Webhooks → Page**
 2. **Callback URL**：`https://你的域名/api/leads/webhook`
-3. **Verify Token**：填 `META_LEAD_VERIFY_TOKEN` 的值（必须完全一致）
+3. **Verify Token**：填 `META_LEAD_WEBHOOK_SECRET` 的值（必须完全一致）
 4. 点 **Verify and Save**
 5. **订阅字段**：勾选 **`leadgen`**
 6. 到 **Page → Lead Access**，确认该 Page 已授权给你的 App
@@ -40,11 +40,11 @@ Facebook 广告表单
 ### 1. 浏览器验证（最快）
 
 ```
-https://你的域名/api/leads/webhook?hub.mode=subscribe&hub.verify_token=<TOKEN>&hub.challenge=test123
+https://avenee.online/api/leads/webhook?hub.mode=subscribe&hub.verify_token=<TOKEN>&hub.challenge=test123
 ```
 
 - 页面显示 **`test123`** → 通过
-- 返回 `forbidden` → `META_LEAD_VERIFY_TOKEN` 不匹配或未配置
+- 返回 `forbidden` → `META_LEAD_WEBHOOK_SECRET` 不匹配或未配置
 
 ### 2. 用 Meta 的测试工具推送
 
@@ -103,3 +103,39 @@ FROM MetaLeadEvent ORDER BY createdAt DESC LIMIT 10;
 
 - 带 `x-webhook-secret` 的 POST → 行为与之前**完全一致**（仍调用 `importLead`）
 - 不带该头 → 走 Meta 签名校验流程
+
+---
+
+## 为什么 GET 必须完全独立（线上故障记录）
+
+**症状**：Meta 后台点 Verify 报 `ERR_CONNECTION_CLOSED`。
+
+**原因**：Next.js 在**模块加载期**就执行所有顶层 import。原来的 `route.ts` 顶层引了
+`lead-import-service` 与 `meta-lead-service`，那条链会拉起 Prisma 客户端与整棵依赖图。
+只要初始化失败或冷启动超时，**连不需要数据库的 GET 验证也会一起挂掉** ——
+连接被直接关闭，Meta 看到的就是 `ERR_CONNECTION_CLOSED`。
+
+**修法**：
+
+| | 做法 |
+|---|---|
+| GET | 只 import `next/server` + `node:crypto`，不查库、不调 service、不调 Graph API |
+| POST | service 一律用 `await import(...)` **动态加载**，只有真的收到推送才付出加载成本 |
+
+`tests/meta-lead.test.ts` 里有一条断言把这条路钉死：**顶层一旦出现 service / Prisma import 就测试失败**。
+
+## 排查顺序（如果 Verify 仍然失败）
+
+1. **确认已重新部署** —— 改动不部署等于没改
+2. 在服务器上直接 curl：
+
+```bash
+curl -i "https://avenee.online/api/leads/webhook?hub.mode=subscribe&hub.verify_token=<TOKEN>&hub.challenge=test123"
+```
+
+| 现象 | 说明 |
+|---|---|
+| 返回 `test123` | 代码与变量都对，问题在 Meta 后台填的 token |
+| 返回 `403 forbidden` | 变量名或值不对（注意是 `META_LEAD_WEBHOOK_SECRET`） |
+| 仍然连接被关闭 | **不再是代码问题**：Hostinger 代理 / WAF / SSL / 域名解析层拦截 |
+| 返回 404 | 部署的还是旧版本，该路由不存在 |
