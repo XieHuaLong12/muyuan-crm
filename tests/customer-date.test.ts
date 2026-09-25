@@ -76,6 +76,8 @@ test('历史询盘归因、日期修改、默认值、删除恢复及订单统�
   }finally{
     await db.followUp.deleteMany({where:{customerId:{in:ids}}});
     await db.deal.deleteMany({where:{customerId:{in:ids}}});
+    // 订单随成交产生，且外键为 RESTRICT，必须先清掉
+    await db.order.deleteMany({where:{customerId:{in:ids}}});
     await db.stageHistory.deleteMany({where:{customerId:{in:ids}}});
     await db.customer.deleteMany({where:{id:{in:ids}}});
     await db.$disconnect();
