@@ -132,4 +132,9 @@ test('Webhook 路由顶部不得引入 service / Prisma —— 否则 GET 会被
   assert.ok(source.includes("await import('@/services/lead-import-service')"));
   // 验证成功必须原样返回 challenge 的纯文本
   assert.ok(source.includes("new Response(challenge, {"));
+  // 变量优先级：新名在前，旧名回退在后（改名不能让已部署的环境静默失效）
+  const secretLine = source.split('\n').find(line => line.includes('const expected ='));
+  assert.ok(secretLine, '未找到 token 读取语句');
+  assert.ok(secretLine.includes('META_LEAD_WEBHOOK_SECRET'), '必须先读 META_LEAD_WEBHOOK_SECRET');
+  assert.ok(secretLine.indexOf('META_LEAD_WEBHOOK_SECRET') < secretLine.indexOf('META_LEAD_VERIFY_TOKEN'), 'META_LEAD_WEBHOOK_SECRET 必须优先于 META_LEAD_VERIFY_TOKEN');
 });
