@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import Link from 'next/link';
 import { usePathname,useRouter } from 'next/navigation';
-import { CircleGauge,Layers3,PanelLeft,Users,MessageCircle,CheckSquare,ArrowLeft,Package,PanelLeftClose,PanelLeftOpen,Percent,Sun,BarChart3,Target,Settings as SettingsIcon,Table2,LogOut } from 'lucide-react';
+import { CircleGauge,Layers3,PanelLeft,Users,MessageCircle,CheckSquare,ArrowLeft,Package,PanelLeftClose,PanelLeftOpen,Percent,Sun,Target,Settings as SettingsIcon,Table2,LogOut } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api } from '@/lib/client';
 
@@ -14,7 +14,8 @@ import { api } from '@/lib/client';
  */
 const workspace:readonly (readonly [string,string,LucideIcon])[]=[['/sales','销售工作台',PanelLeft],['/command-center','老板驾驶舱',CircleGauge],['/growth','运营中心',Layers3],['/products','产品库',Package]];
 const tools:readonly (readonly [string,string,LucideIcon])[]=[['/','Today',Sun],['/customers','客户 CRM',Users],['/whatsapp','WhatsApp',MessageCircle],['/tasks','任务中心',CheckSquare]];
-const analysis:readonly (readonly [string,string,LucideIcon])[]=[['/funnel','销售漏斗',BarChart3],['/targets','目标管理',Target],['/analytics','数据分析',BarChart3],['/customer-directory','客户批量管理',Table2],['/settings','设置',SettingsIcon]];
+// 销售漏斗与数据分析已并入老板驾驶舱的「销售分析」；客户批量管理改为客户页的表格视图
+const settingsGroup:readonly (readonly [string,string,LucideIcon])[]=[['/targets','目标管理',Target],['/customers?view=table','客户批量管理',Table2],['/settings','设置',SettingsIcon]];
 // 成本是敏感数据，仅管理员可见
 const adminOnly:readonly (readonly [string,string,LucideIcon])[]=[['/products/margin','成本毛利',Percent]];
 
@@ -43,13 +44,14 @@ export function Sidebar({name,role}:{name:string;role:string}){
  }
 
  function group(label:string,items:readonly (readonly [string,string,LucideIcon])[],aria:string){
-  const all=[...workspace,...tools,...analysis,...(role==='ADMIN'?adminOnly:[])];
+  const all=[...workspace,...tools,...settingsGroup,...(role==='ADMIN'?adminOnly:[])];
   return <div className="bos-nav-group"><span>{label}</span><nav aria-label={aria}>{items.map(([url,text,Icon])=>{
    const exact=url==='/';
+   const isView=url.includes('?');
    // 最长前缀优先：/products/margin 命中时 /products 不应同时高亮
    const matches=all.filter(([other])=>exact?path==='/':path===other||path.startsWith(`${other}/`));
    const best=matches.sort((a,b)=>b[0].length-a[0].length)[0]?.[0];
-   const current=best===url||(exact&&path==='/');
+   const current=!isView&&(best===url||(exact&&path==='/'));
    return <Link aria-current={current?'page':undefined} href={url} key={url} title={collapsed?text:undefined}><Icon size={18} strokeWidth={1.6}/><span>{text}</span></Link>;
   })}</nav></div>;
  }
@@ -62,7 +64,7 @@ export function Sidebar({name,role}:{name:string;role:string}){
   {group('工作空间',workspace,'BOS 核心模块')}
   {group('日常工具',tools,'CRM 工具')}
   {role==='ADMIN'&&group('管理',adminOnly,'管理员功能')}
-  {group('分析与设置',analysis,'分析与设置')}
+  {group('设置与管理',settingsGroup,'设置与管理')}
   <div className="bos-sidebar-bottom">
    <Link href="/" className="bos-legacy" title={collapsed?'返回 Today':undefined}><ArrowLeft size={15}/><span>返回 Today</span></Link>
    <div className="bos-account">

@@ -1,5 +1,3 @@
-import { BOSShell } from '@/components/bos/BOSShell';
-import { Workspace } from '@/components/workspace';
-import { workspacePage } from '@/services/workspace-page';
-export const dynamic='force-dynamic';
-export default async function Page(){const {boot}=await workspacePage();return <BOSShell boot={boot}><Workspace initialBoot={boot} pageOverride="customers" embedded/></BOSShell>;}
+import { redirect } from 'next/navigation';
+// 已改为客户页的「表格视图」，不再单独占一个页面
+export default function Page(){redirect('/customers?view=table');}
