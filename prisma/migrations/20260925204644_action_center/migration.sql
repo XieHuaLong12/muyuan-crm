@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE `Task` ADD COLUMN `aiReason` TEXT NULL,
+    ADD COLUMN `amount` DECIMAL(14, 2) NULL,
+    ADD COLUMN `orderId` VARCHAR(191) NULL;
+
+-- AddForeignKey
+ALTER TABLE `Task` ADD CONSTRAINT `Task_orderId_fkey` FOREIGN KEY (`orderId`) REFERENCES `Order`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+

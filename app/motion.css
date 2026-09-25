@@ -202,3 +202,93 @@
 
 /* ── 大列表性能分层（组件通过 data-motion="off" 声明）───── */
 [data-motion='off'] .v3-task-row.priority-high { animation: none; }
+
+/* ═══════════════ AI 行动中心 ═══════════════ */
+.bos-action-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin:24px 0}
+.bos-action-stat{padding:18px 20px}
+.bos-action-stat span{font-size:12px;color:#86868b}
+.bos-action-stat strong{display:block;font-size:30px;font-weight:600;line-height:1.2;margin-top:6px;font-variant-numeric:tabular-nums}
+.bos-action-stat.is-high strong{color:#a4522b}
+.bos-action-stat.is-overdue strong{color:#a44b36}
+.bos-action-stat.is-done strong{color:var(--bos-green)}
+
+/* AI 建议卡 */
+.bos-ai-card{background:linear-gradient(180deg,#f7fbf9,#fff);border-color:#dbe8e2;margin-bottom:20px}
+.bos-ai-card-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:18px}
+.bos-ai-card-head h2{font-size:17px}
+.bos-ai-card-head p{font-size:13px;color:#6e6e73;margin-top:6px}
+.bos-reco-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.bos-reco-list li{display:flex;gap:14px;align-items:center;padding:14px 16px;background:#fff;border:1px solid var(--bos-border);border-radius:14px}
+.bos-reco-mark{font-size:17px;flex:none}
+.bos-reco-body{flex:1;min-width:0}
+.bos-reco-body strong{font-size:14px;display:block}
+.bos-reco-body small{display:block;font-size:12px;color:#86868b;margin-top:4px}
+.bos-reco-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.bos-reco-actions .bos-button{font-size:12px;min-height:34px;padding:7px 11px}
+
+/* 视图 / 来源切换 */
+.bos-action-tabs{display:flex;flex-wrap:wrap;gap:20px;margin:26px 0 14px}
+.bos-action-tabs nav{display:flex;flex-wrap:wrap;gap:6px}
+.bos-action-tabs a{padding:7px 12px;border-radius:10px;font-size:12px;color:#6e6e73;border:1px solid transparent}
+.bos-action-tabs a:hover{background:#f2f3f5}
+.bos-action-tabs a[aria-current=page]{background:var(--bos-green);color:#fff;font-weight:600}
+
+/* 任务卡 */
+.bos-action-list{display:flex;flex-direction:column;gap:12px;margin-bottom:24px}
+.bos-task-card{display:flex;align-items:center;gap:16px;padding:18px 20px;background:#fff;border:1px solid var(--bos-border);border-radius:16px;transition:box-shadow var(--motion-fast) var(--motion-ease),border-color var(--motion-fast) var(--motion-ease)}
+.bos-task-card:hover{box-shadow:0 8px 22px rgba(16,24,40,.06)}
+.bos-task-card.is-high{border-color:rgba(164,82,43,.45);animation:motionBorderBreathe var(--motion-pulse) ease-in-out infinite}
+.bos-task-card.is-high:hover{animation:none;border-color:rgba(164,82,43,.85)}
+.bos-task-card.is-overdue{background:#fffdfa}
+.bos-task-main{flex:1;min-width:0}
+.bos-task-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bos-task-title button{background:none;border:0;padding:0;font-size:14px;font-weight:600;color:var(--bos-ink);text-align:left}
+.bos-task-title button:hover{color:var(--bos-green);text-decoration:underline}
+.bos-task-priority{font-size:11px;padding:2px 8px;border-radius:7px;background:#f1f1f3;color:#6e6e73}
+.bos-task-priority.priority-high{background:#fbeee8;color:#a4522b}
+.bos-task-priority.priority-medium{background:#eef2f7;color:#3f5a75}
+.bos-source-tag{font-size:11px;padding:2px 8px;border-radius:7px;font-weight:500}
+.source-crm{background:#eaf3ef;color:#14503b}
+.source-order{background:#e8f0f6;color:#2c5b7d}
+.source-finance{background:#fdf3e7;color:#85521b}
+.source-ads{background:#f0ecf9;color:#5b4a86}
+.source-ai{background:#efe9fb;color:#59429b}
+.source-manual{background:#f1f1f3;color:#6e6e73}
+.bos-task-meta{display:flex;flex-wrap:wrap;gap:14px;margin-top:9px;font-size:12px;color:#6e6e73}
+.bos-task-meta span{display:inline-flex;align-items:center;gap:4px}
+.bos-task-reason{display:flex;align-items:center;gap:5px;margin-top:9px;font-size:12px;color:#85521b}
+.bos-task-open{flex:none;display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--bos-green);background:none;border:0}
+.bos-task-create{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px}
+.bos-task-create .bos-input{flex:1;min-width:200px}
+.bos-task-create select,.bos-task-create input[type=date]{padding:10px 12px;border:1px solid var(--bos-border);border-radius:12px;background:#fff;font-size:13px}
+.bos-action-performance{margin-bottom:24px}
+
+/* 详情抽屉 */
+.bos-drawer-scrim{position:fixed;inset:0;background:rgba(16,24,40,.28);border:0;z-index:40;animation:motionFadeIn var(--motion-fast) var(--motion-ease) both}
+.bos-drawer{position:fixed;top:0;right:0;height:100vh;width:min(460px,94vw);background:#fff;border-left:1px solid var(--bos-border);z-index:41;display:flex;flex-direction:column;box-shadow:-16px 0 40px rgba(16,24,40,.12);animation:motionSlideLeft var(--motion-base) var(--motion-ease) both}
+@keyframes motionSlideLeft{from{transform:translateX(24px);opacity:0}to{transform:translateX(0);opacity:1}}
+.bos-drawer>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:22px 22px 16px;border-bottom:1px solid var(--bos-border)}
+.bos-drawer>header h2{font-size:16px;margin-top:4px}
+.bos-drawer-body{flex:1;overflow:auto;padding:18px 22px}
+.bos-drawer-body section{margin-bottom:22px}
+.bos-drawer-body h3{font-size:13px;color:#6e6e73;margin-bottom:10px;font-weight:600}
+.bos-drawer-ai{display:flex;gap:10px;align-items:flex-start;padding:14px;border-radius:13px;background:#f4f9f6;border:1px solid #dbe8e2}
+.bos-drawer-ai strong{font-size:12px;color:#14503b;display:block;margin-bottom:5px}
+.bos-drawer-ai p{font-size:13px;line-height:1.7}
+.bos-drawer-ai svg{color:var(--bos-green);flex:none;margin-top:2px}
+.bos-drawer>footer{padding:16px 22px 20px;border-top:1px solid var(--bos-border);background:#fcfcfd}
+.bos-drawer-complete{display:flex;gap:8px;margin-bottom:10px}
+.bos-drawer-complete .bos-input{flex:1}
+.bos-drawer-actions{display:flex;gap:8px;flex-wrap:wrap}
+.bos-drawer-actions .bos-button{font-size:12px;min-height:34px;padding:7px 11px}
+.bos-timeline-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.bos-timeline-list li{display:flex;gap:10px}
+.bos-timeline-list-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--bos-green);margin-top:5px}
+.bos-timeline-list small{font-size:11px;color:#86868b}
+.bos-timeline-list p{font-size:13px;line-height:1.6;margin-top:3px;word-break:break-word}
+
+@media(max-width:900px){.bos-action-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.bos-reco-list li{flex-wrap:wrap}.bos-reco-actions{width:100%;justify-content:flex-start}}
+@media(max-width:760px){
+  .bos-task-card.is-high{animation:none}
+  .bos-drawer{width:100vw}
+}
