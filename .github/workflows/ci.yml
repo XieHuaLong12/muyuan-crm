@@ -179,7 +179,7 @@ jobs:
           check "SELECT COUNT(*) FROM ProductMedia WHERE role='HERO'" "26"
           check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Product'" "1"
 
-      - name: Verify action center schema
+      - name: Verify action center and Meta Lead Ads schema
         run: |
           check() {
             local got
@@ -193,6 +193,10 @@ jobs:
           # 任务必须能追溯到业务对象
           check "SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Task' AND COLUMN_NAME IN ('orderId','amount','aiReason')" "3"
           check "SELECT COUNT(*) FROM information_schema.referential_constraints WHERE CONSTRAINT_SCHEMA='muyuan_test' AND TABLE_NAME='Task' AND REFERENCED_TABLE_NAME='Order'" "1"
+          # leadgen_id 唯一约束是幂等键：Meta 重复推送不会造成重复客户
+          check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='MetaLeadEvent'" "1"
+          check "SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.statistics WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='MetaLeadEvent' AND COLUMN_NAME='leadgenId' AND NON_UNIQUE=0" "1"
+          check "SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='MetaLeadEvent' AND COLUMN_NAME IN ('leadgenId','pageId','formId','customerId','rawPayload')" "5"
 
       - name: Backfill orders from existing deals
         run: pnpm db:seed:orders

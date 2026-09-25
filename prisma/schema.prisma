@@ -83,6 +83,7 @@ model Customer {
  readStates WhatsAppReadState[]
  intelligence CustomerIntelligence?
  orders Order[]
+ metaLeadEvents MetaLeadEvent[]
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -686,4 +687,30 @@ model ProductCost {
   updatedAt DateTime @updatedAt
   @@index([variantId, status])
   @@index([effectiveFrom])
+}
+
+// ═══════════════════════════════════════════════════════════
+// Meta Facebook Lead Ads 事件
+//
+// Meta 会重复推送同一个 leadgen_id（重试、订阅重复等）。
+// leadgenId 唯一约束是幂等键：同一个线索只会建一次客户。
+// 与 LeadSubmission 区分：那张表服务于「Meta CSV 导入」（有 filename/fileHash/行号），
+// 这里服务于 webhook 推送，两者的语义与生命周期都不同。
+// ═══════════════════════════════════════════════════════════
+model MetaLeadEvent {
+ id String @id @default(cuid())
+ leadgenId String @unique
+ pageId String @default("")
+ formId String @default("")
+ customerId String?
+ customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+ // 原始推送内容，便于事后追溯广告来源与表单答案
+ rawPayload Json
+ // RECEIVED | CREATED | LINKED | SKIPPED | FAILED
+ status String @default("RECEIVED") @db.VarChar(16)
+ error String @db.Text
+ createdAt DateTime @default(now())
+ @@index([formId, createdAt])
+ @@index([customerId])
+ @@index([status, createdAt])
 }
