@@ -179,6 +179,45 @@ jobs:
           check "SELECT COUNT(*) FROM ProductMedia WHERE role='HERO'" "26"
           check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Product'" "1"
 
+      - name: Backfill orders from existing deals
+        run: pnpm db:seed:orders
+
+      - name: Verify order management
+        run: |
+          check() {
+            local got
+            got=$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "$1")
+            if [ "$got" != "$2" ]; then
+              echo "FAIL: expected $2 but got $got :: $1"
+              exit 1
+            fi
+            echo "ok  $got  :: $1"
+          }
+          atleast() {
+            local got
+            got=$(mysql -h127.0.0.1 -uroot -proot -N muyuan_test -e "$1")
+            if [ "$got" -lt "$2" ]; then
+              echo "FAIL: expected at least $2 but got $got :: $1"
+              exit 1
+            fi
+            echo "ok  $got  :: $1"
+          }
+          # 订单表由迁移创建，且不含产品信息列（订单不展示产品信息）
+          # 注意用精确列名：LIKE '%roduct%' 会误伤 productionStatus
+          check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Order'" "1"
+          check "SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Order' AND COLUMN_NAME IN ('product','productId','productModel','productName','productSku','productVariantId')" "0"
+          # 产品库种子里的 12 笔成交应全部补齐订单
+          atleast "SELECT COUNT(*) FROM \`Order\`" "12"
+          check "SELECT COUNT(*) FROM \`Order\` WHERE dealId IS NULL" "0"
+          # 每笔成交只对应一张订单
+          check "SELECT COUNT(*) FROM (SELECT dealId FROM \`Order\` GROUP BY dealId HAVING COUNT(*) > 1) x" "0"
+          # 订单号形如 LV20260925-001
+          check "SELECT COUNT(*) FROM \`Order\` WHERE orderNo NOT REGEXP '^LV[0-9]{8}-[0-9]{3}$'" "0"
+          # 新单默认状态
+          check "SELECT COUNT(*) FROM \`Order\` WHERE status='PENDING_PAYMENT' AND paymentStatus='UNPAID'" "12"
+          # 金额统一人民币，且美元成交保留原币金额以便核对
+          check "SELECT COUNT(*) FROM \`Order\` WHERE amountRMB <= 0" "0"
+
       - name: Test
         run: pnpm test
 

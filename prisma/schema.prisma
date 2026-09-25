@@ -82,6 +82,7 @@ model Customer {
  mediaAssets MediaAsset[]
  readStates WhatsAppReadState[]
  intelligence CustomerIntelligence?
+ orders Order[]
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -124,6 +125,7 @@ model StageHistory {
 }
 model Deal {
  id String @id @default(cuid())
+ order Order?
  customerId String
  customer Customer @relation(fields: [customerId], references: [id])
  orderNumber String @default("")
@@ -309,6 +311,35 @@ model WhatsAppReadState {
  readAt DateTime
  @@unique([customerId, userId])
 }
+model Order {
+ id String @id @default(cuid())
+ orderNo String @unique @db.VarChar(40)
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id])
+ // 一笔成交对应一张订单；复购会产生新成交，因而产生新订单。唯一约束用于幂等。
+ dealId String? @unique
+ deal Deal? @relation(fields: [dealId], references: [id], onDelete: SetNull)
+ // 金额统一以人民币展示；原币种与原币金额保留，便于核对换算来源
+ amountRMB Decimal @db.Decimal(14, 2)
+ currency String @default("CNY") @db.VarChar(3)
+ sourceAmount Decimal? @db.Decimal(14, 2)
+ // 流程固定七段：下单 → 付款 → 生产 → 发货 → 运输 → 清关 → 收货
+ // status 决定状态页签；进度条由 status 推导，不另存冗余字段以免不一致
+ status String @default("PENDING_PAYMENT") @db.VarChar(24)
+ paymentStatus String @default("UNPAID") @db.VarChar(24)
+ productionStatus String @default("NOT_STARTED") @db.VarChar(24)
+ shippingStatus String @default("NOT_SHIPPED") @db.VarChar(24)
+ orderDate DateTime @default(now())
+ estimatedDelivery DateTime?
+ notes String @db.Text
+ createdBy String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([customerId, status])
+ @@index([status, orderDate])
+ @@index([estimatedDelivery])
+}
+
 model Quotation {
  id String @id @default(cuid())
  customerId String

@@ -159,6 +159,27 @@ try {
     console.warn('Product OS seed skipped:', error instanceof Error ? error.message : error);
   }
 
+  // 订单：为启用订单模块之前已有的成交补单。按 dealId 幂等，重复运行不会重复建单。
+  try {
+    const tsxCli = 'node_modules/tsx/dist/cli.mjs';
+    if (fs.existsSync(tsxCli)) {
+      const before = await db.order.count();
+      const seed = spawnSync(process.execPath, [tsxCli, 'prisma/seed-orders.ts'], {
+        stdio: 'inherit',
+        env: process.env,
+      });
+      if (seed.error) {
+        console.warn(`Orders: 补单脚本启动失败（${seed.error.message}）。请运行 pnpm db:seed:orders。`);
+      } else if (seed.status !== 0) {
+        console.warn(`Orders: 补单脚本以退出码 ${seed.status} 结束。请运行 pnpm db:seed:orders。`);
+      } else {
+        console.log(`Orders: 补单完成，订单数 ${before} → ${await db.order.count()}。`);
+      }
+    }
+  } catch (error) {
+    console.warn('Orders backfill skipped:', error instanceof Error ? error.message : error);
+  }
+
   console.log('Production database is ready.');
 } finally {
   await db.$disconnect();

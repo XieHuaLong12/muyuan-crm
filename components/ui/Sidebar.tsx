@@ -2,7 +2,7 @@
 import { useEffect,useState } from 'react';
 import Link from 'next/link';
 import { usePathname,useRouter } from 'next/navigation';
-import { CircleGauge,Layers3,PanelLeft,Users,CheckSquare,ArrowLeft,Package,PanelLeftClose,PanelLeftOpen,Percent,Sun,Target,Settings as SettingsIcon,LogOut } from 'lucide-react';
+import { CircleGauge,Layers3,PanelLeft,Users,CheckSquare,ArrowLeft,Package,PanelLeftClose,PanelLeftOpen,Percent,Sun,Target,Settings as SettingsIcon,LogOut,ClipboardList } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { api } from '@/lib/client';
 
@@ -12,7 +12,7 @@ import { api } from '@/lib/client';
  * 以前有两套外壳：深绿 V3 覆盖 9 个页面、白色 BOS 覆盖 6 个，两边导航互不连通，
  * 看起来像两个系统。现在全部页面都挂在这里，只有一套导航。
  */
-const workspace:readonly (readonly [string,string,LucideIcon])[]=[['/sales','销售工作台',PanelLeft],['/command-center','老板驾驶舱',CircleGauge],['/growth','运营中心',Layers3],['/products','产品库',Package]];
+const workspace:readonly (readonly [string,string,LucideIcon])[]=[['/sales','销售工作台',PanelLeft],['/orders','订单管理',ClipboardList],['/command-center','老板驾驶舱',CircleGauge],['/growth','运营中心',Layers3],['/products','产品库',Package]];
 const tools:readonly (readonly [string,string,LucideIcon])[]=[['/','Today',Sun],['/customers','客户管理',Users],['/tasks','任务中心',CheckSquare]];
 // 销售漏斗与数据分析已并入老板驾驶舱的「销售分析」；客户批量管理改为客户页的表格视图
 const settingsGroup:readonly (readonly [string,string,LucideIcon])[]=[['/targets','目标管理',Target],['/settings','设置',SettingsIcon]];
