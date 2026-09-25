@@ -1,0 +1,204 @@
+/* ═══════════════════════════════════════════════════════════════
+   LVANJU BOS · 统一动效系统
+   规范见 docs/UI_MOTION_SYSTEM.md
+
+   原则：轻、慢、自然。所有动效只服务四件事 ——
+     1. 提升数据理解   2. 提升操作反馈
+     3. 增强高级感     4. 表现 AI 属性
+
+   刻意不使用 JS 动画库：入场动画全部由 CSS 完成，
+   因此不增加任何客户端 JavaScript 体积（见规范 §7）。
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* 时长：默认 300–500ms */
+  --motion-fast: 200ms;
+  --motion-base: 340ms;
+  --motion-slow: 460ms;
+  /* easeOut */
+  --motion-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  /* 周期性动效 */
+  --motion-breathe: 5s;   /* 卡片呼吸 */
+  --motion-pulse: 3s;     /* AI / 高优先级呼吸 */
+  --motion-status: 4s;    /* 系统状态点 */
+}
+
+@keyframes motionFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes motionSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 卡片呼吸：只改透明度，不移动卡片 */
+@keyframes motionBreathe {
+  0%, 100% { opacity: 0.98; }
+  50%      { opacity: 1; }
+}
+
+/* AI 光点：scale 1 → 1.15 → 1，opacity .6 → 1 → .6 */
+@keyframes motionDot {
+  0%, 100% { transform: scale(1);    opacity: 0.6; }
+  50%      { transform: scale(1.15); opacity: 1; }
+}
+
+/* 高优先级边框呼吸：只改边框透明度，不闪烁 */
+@keyframes motionBorderBreathe {
+  0%, 100% { border-color: rgba(133, 82, 27, 0.5); }
+  50%      { border-color: rgba(133, 82, 27, 1); }
+}
+
+/* 系统状态点：慢速呼吸 */
+@keyframes motionStatus {
+  0%, 100% { opacity: 0.45; transform: scale(0.92); }
+  50%      { opacity: 1;    transform: scale(1); }
+}
+
+/* Logo 载入：透明 .3 → 1 循环 */
+@keyframes motionLogo {
+  0%, 100% { opacity: 0.3; }
+  50%      { opacity: 1; }
+}
+
+/* 折线从左向右绘制（用于自绘 SVG 进度线；recharts 用内置 animationDuration）*/
+@keyframes motionLineDraw {
+  from { stroke-dashoffset: var(--motion-line-length, 1200); }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* 柱状从底部增长 */
+@keyframes motionBarGrow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+/* 进度连接线：宽度 0% → 100% */
+@keyframes motionGrowX {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* 当前节点脉冲：绿色光晕 */
+@keyframes motionNodePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(20, 92, 69, 0.30); }
+  50%      { box-shadow: 0 0 8px 3px rgba(20, 92, 69, 0.30); }
+}
+
+/* ── 入场工具类 ─────────────────────────────────────────────
+   延迟由调用方通过 --motion-delay 指定，实现分层进入。 */
+.motion-in,
+.motion-fade {
+  animation-duration: var(--motion-base);
+  animation-timing-function: var(--motion-ease);
+  animation-fill-mode: both;
+  animation-delay: var(--motion-delay, 0ms);
+}
+.motion-in   { animation-name: motionSlideUp; }
+.motion-fade { animation-name: motionFadeIn; }
+
+/* ── 周期动效工具类 ─────────────────────────────────────── */
+.motion-breathe        { animation: motionBreathe var(--motion-breathe) ease-in-out infinite; }
+.motion-dot            { animation: motionDot var(--motion-pulse) ease-in-out infinite; }
+.motion-status-dot     { animation: motionStatus var(--motion-status) ease-in-out infinite; }
+.motion-logo           { animation: motionLogo 1.6s ease-in-out infinite; }
+.motion-node-current   { animation: motionNodePulse var(--motion-pulse) ease-in-out infinite; }
+.motion-border-breathe { animation: motionBorderBreathe var(--motion-pulse) ease-in-out infinite; }
+
+/* ── Hover / 按压反馈 ───────────────────────────────────── */
+.bos-card {
+  transition: transform var(--motion-fast) var(--motion-ease),
+              box-shadow var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+.bos-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.07);
+}
+.bos-button {
+  transition: background var(--motion-fast) var(--motion-ease),
+              transform var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+.bos-button:active { transform: scale(0.97); }
+
+/* 表格行不做位移动画：大量行位移会带来视觉噪音 */
+.bos-table tbody tr { transition: background var(--motion-fast) var(--motion-ease); }
+
+/* ── 载入状态：LVANJU Logo，不用转圈 ─────────────────────── */
+.bos-loading { display: grid; place-items: center; gap: 14px; padding: 96px 20px; }
+.bos-loading-mark {
+  display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 13px;
+  background: var(--bos-green); color: #fff;
+  font-family: Georgia, serif; font-size: 26px;
+  animation: motionLogo 1.6s ease-in-out infinite;
+}
+.bos-loading p { font-size: 12px; color: #86868b; letter-spacing: 0.04em; }
+
+/* ── 顶部系统状态 ───────────────────────────────────────── */
+.bos-system-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #6e6e73; white-space: nowrap; }
+.bos-system-status i { width: 7px; height: 7px; border-radius: 50%; background: #2f8f5b; animation: motionStatus var(--motion-status) ease-in-out infinite; }
+
+/* ── AI 智能状态 ────────────────────────────────────────── */
+.bos-ai-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #426252; }
+.bos-ai-orb { position: relative; width: 9px; height: 9px; border-radius: 50%; background: var(--bos-green); animation: motionDot var(--motion-pulse) ease-in-out infinite; }
+.bos-ai-orb::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; background: radial-gradient(circle, rgba(20, 92, 69, 0.22), transparent 70%); }
+
+/* ── 订单进度：连接线绘制 + 当前节点脉冲 ────────────────── */
+.bos-timeline-step.is-linked::after { animation: motionGrowX var(--motion-base) var(--motion-ease) both; transform-origin: left center; }
+.bos-timeline-step.is-current .bos-timeline-dot { animation: motionNodePulse var(--motion-pulse) ease-in-out infinite; }
+
+/* ── 图表绘制 ──────────────────────────────────────────── */
+.bos-chart-draw { animation: motionFadeIn var(--motion-slow) var(--motion-ease) both; }
+
+/* ── 高优先级任务呼吸边框 ───────────────────────────────── */
+.bos-priority-breathe { border-color: rgba(133, 82, 27, 0.5); animation: motionBorderBreathe var(--motion-pulse) ease-in-out infinite; }
+
+/* ── 性能分层 ───────────────────────────────────────────
+   超过 50 行的列表由组件加上 data-motion="off"，关闭入场与周期动效。 */
+[data-motion='off'] .motion-in,
+[data-motion='off'] .motion-fade,
+[data-motion='off'] .motion-breathe,
+[data-motion='off'] .motion-dot,
+[data-motion='off'] .motion-node-current,
+[data-motion='off'] .motion-border-breathe { animation: none; }
+
+/* 移动端降低动效等级：只保留最必要的反馈 */
+@media (max-width: 760px) {
+  :root { --motion-base: 240ms; --motion-slow: 300ms; }
+  .motion-breathe,
+  .motion-dot,
+  .motion-status-dot,
+  .motion-node-current,
+  .motion-border-breathe,
+  .bos-ai-orb { animation: none; }
+  .bos-card:hover { transform: none; box-shadow: var(--bos-shadow); }
+}
+
+/* 尊重系统「减弱动态效果」设置 —— 这是可访问性要求，不是可选项 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .bos-card:hover { transform: none; }
+}
+
+/* ── 任务中心：高优先级未完成任务的边框呼吸 ─────────────── */
+.v3-task-row.priority-high:not(.is-done) {
+  border-color: rgba(133, 82, 27, 0.5);
+  animation: motionBorderBreathe var(--motion-pulse) ease-in-out infinite;
+}
+.v3-task-row.priority-high:not(.is-done):hover { animation: none; border-color: rgba(133, 82, 27, 1); }
+/* 任务行本身不做位移动画：列表较长，位移会造成视觉噪音 */
+.v3-task-row { transition: border-color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease); }
+
+/* ── 大列表性能分层（组件通过 data-motion="off" 声明）───── */
+[data-motion='off'] .v3-task-row.priority-high { animation: none; }

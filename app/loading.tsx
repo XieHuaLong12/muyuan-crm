@@ -1,1 +1,2 @@
-export default function Loading(){return <div className="v3-page-loading" aria-label="正在加载工作台"><div className="v3-skeleton"/><div className="v3-skeleton"/><div className="v3-skeleton"/></div>;}
+import { LogoLoading } from '@/components/ui/motion';
+export default function Loading(){return <div className="bos" style={{minHeight:'100vh',display:'grid',placeItems:'center'}}><LogoLoading/></div>;}
