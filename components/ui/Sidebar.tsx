@@ -1,21 +1,31 @@
 'use client';
 import { useEffect,useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { CircleGauge,Layers3,PanelLeft,Users,MessageCircle,CheckSquare,ArrowLeft,Package,PanelLeftClose,PanelLeftOpen,Percent } from 'lucide-react';
+import { usePathname,useRouter } from 'next/navigation';
+import { CircleGauge,Layers3,PanelLeft,Users,MessageCircle,CheckSquare,ArrowLeft,Package,PanelLeftClose,PanelLeftOpen,Percent,Sun,BarChart3,Target,Settings as SettingsIcon,Table2,LogOut } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { api } from '@/lib/client';
 
-const core:readonly (readonly [string,string,LucideIcon])[]=[['/command-center','老板驾驶舱',CircleGauge],['/growth','运营中心',Layers3],['/sales','销售工作台',PanelLeft],['/products','产品库',Package]];
-// 成本与毛利是敏感数据，仅管理员可见
+/**
+ * 统一导航（白色 BOS 外壳）
+ *
+ * 以前有两套外壳：深绿 V3 覆盖 9 个页面、白色 BOS 覆盖 6 个，两边导航互不连通，
+ * 看起来像两个系统。现在全部页面都挂在这里，只有一套导航。
+ */
+const workspace:readonly (readonly [string,string,LucideIcon])[]=[['/sales','销售工作台',PanelLeft],['/command-center','老板驾驶舱',CircleGauge],['/growth','运营中心',Layers3],['/products','产品库',Package]];
+const tools:readonly (readonly [string,string,LucideIcon])[]=[['/','Today',Sun],['/customers','客户 CRM',Users],['/whatsapp','WhatsApp',MessageCircle],['/tasks','任务中心',CheckSquare]];
+const analysis:readonly (readonly [string,string,LucideIcon])[]=[['/funnel','销售漏斗',BarChart3],['/targets','目标管理',Target],['/analytics','数据分析',BarChart3],['/customer-directory','客户批量管理',Table2],['/settings','设置',SettingsIcon]];
+// 成本是敏感数据，仅管理员可见
 const adminOnly:readonly (readonly [string,string,LucideIcon])[]=[['/products/margin','成本毛利',Percent]];
-const tools:readonly (readonly [string,string,LucideIcon])[]=[['/customers','客户 CRM',Users],['/whatsapp','WhatsApp',MessageCircle],['/tasks','任务中心',CheckSquare]];
 
 /** 折叠状态保存在浏览器里，刷新与切页后保持。 */
 const STORAGE_KEY='bos-sidebar-collapsed';
 
 export function Sidebar({name,role}:{name:string;role:string}){
  const path=usePathname();
+ const router=useRouter();
  const [collapsed,setCollapsed]=useState(false);
+ const [error,setError]=useState('');
 
  // 在 effect 里读取，避免服务端渲染与客户端不一致
  useEffect(()=>{try{setCollapsed(window.localStorage.getItem(STORAGE_KEY)==='1');}catch{/* 隐私模式不可用，忽略 */}},[]);
@@ -28,8 +38,20 @@ export function Sidebar({name,role}:{name:string;role:string}){
   });
  }
 
+ async function logout(){
+  try{await api('auth/logout','POST');router.push('/login');}catch(e){setError((e as Error).message);}
+ }
+
  function group(label:string,items:readonly (readonly [string,string,LucideIcon])[],aria:string){
-  return <div className="bos-nav-group"><span>{label}</span><nav aria-label={aria}>{items.map(([url,text,Icon])=><Link aria-current={path===url?'page':undefined} href={url} key={url} title={collapsed?text:undefined}><Icon size={18} strokeWidth={1.6}/><span>{text}</span></Link>)}</nav></div>;
+  const all=[...workspace,...tools,...analysis,...(role==='ADMIN'?adminOnly:[])];
+  return <div className="bos-nav-group"><span>{label}</span><nav aria-label={aria}>{items.map(([url,text,Icon])=>{
+   const exact=url==='/';
+   // 最长前缀优先：/products/margin 命中时 /products 不应同时高亮
+   const matches=all.filter(([other])=>exact?path==='/':path===other||path.startsWith(`${other}/`));
+   const best=matches.sort((a,b)=>b[0].length-a[0].length)[0]?.[0];
+   const current=best===url||(exact&&path==='/');
+   return <Link aria-current={current?'page':undefined} href={url} key={url} title={collapsed?text:undefined}><Icon size={18} strokeWidth={1.6}/><span>{text}</span></Link>;
+  })}</nav></div>;
  }
 
  return <aside className={`bos-sidebar${collapsed?' is-collapsed':''}`}>
@@ -37,12 +59,18 @@ export function Sidebar({name,role}:{name:string;role:string}){
    <Link href="/command-center" className="bos-brand"><span className="bos-brand-mark">L</span><span>LVANJU<small>BUSINESS OS</small></span></Link>
    <button type="button" className="bos-sidebar-toggle" onClick={toggle} aria-expanded={!collapsed} aria-label={collapsed?'展开侧边栏':'折叠侧边栏'} title={collapsed?'展开侧边栏':'折叠侧边栏'}>{collapsed?<PanelLeftOpen size={16}/>:<PanelLeftClose size={16}/>}</button>
   </div>
-  {group('工作空间',core,'BOS 核心模块')}
-  {role==='ADMIN'&&group('管理',adminOnly,'管理员功能')}
+  {group('工作空间',workspace,'BOS 核心模块')}
   {group('日常工具',tools,'CRM 工具')}
+  {role==='ADMIN'&&group('管理',adminOnly,'管理员功能')}
+  {group('分析与设置',analysis,'分析与设置')}
   <div className="bos-sidebar-bottom">
-   <Link href="/" className="bos-legacy" title={collapsed?'原 CRM 首页':undefined}><ArrowLeft size={15}/><span>原 CRM 首页</span></Link>
-   <div className="bos-account"><span className="bos-avatar">{name.slice(0,1)}</span><div><strong>{name}</strong><small>{role==='ADMIN'?'管理员':'销售顾问'}</small></div><span className="bos-presence" aria-label="已登录"/></div>
+   <Link href="/" className="bos-legacy" title={collapsed?'返回 Today':undefined}><ArrowLeft size={15}/><span>返回 Today</span></Link>
+   <div className="bos-account">
+    <span className="bos-avatar">{name.slice(0,1)}</span>
+    <div><strong>{name}</strong><small>{role==='ADMIN'?'管理员':'销售顾问'}</small></div>
+    <button type="button" className="bos-icon-button" onClick={logout} aria-label="退出登录" title="退出登录"><LogOut size={16}/></button>
+   </div>
+   {error&&<p className="bos-cost-error" role="alert">{error}</p>}
   </div>
  </aside>;
 }

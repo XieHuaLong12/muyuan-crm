@@ -103,3 +103,16 @@
 .bos-margin-low strong{color:#85521b}
 .bos-margin-negative strong{color:#a44b36}
 @media(max-width:900px){.bos-rate-form{flex-wrap:wrap}.bos-cost-form input{width:78px}}
+
+/* ── 统一外壳：把原深绿 V3 内容嵌进白色 BOS 外壳 ── */
+.bos .bos-embed{min-height:0}
+.bos-embed .v3-content{padding:0}
+.bos .bos-embed .v3-shell{min-height:0}
+/* 嵌入时不显示 V3 自带的侧栏/顶栏（若有残留） */
+.bos-embed>.v3-sidebar,.bos-embed>.v3-topbar,.bos-embed .v3-main>.v3-topbar,.bos-embed .v3-main>.v3-sidebar{display:none}
+/* 嵌入后内容不再需要 V3 的左边距 */
+.bos-embed .v3-main{margin-left:0}
+/* 账号区的退出按钮 */
+.bos-icon-button{flex:none;display:grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid transparent;border-radius:9px;background:transparent;color:#86868b}
+.bos-icon-button:hover{background:#e6e6e9;color:var(--bos-primary)}
+.bos-sidebar.is-collapsed .bos-icon-button{margin:0 auto}
