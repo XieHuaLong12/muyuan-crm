@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { verifyMetaSignature, extractLeadgenEvents, graphVersion } from '../services/meta-lead-service';
 import { mapLeadFields } from '../lib/meta-lead-fields';
 
@@ -19,7 +20,7 @@ const facebookForm = [
 ];
 
 test('Facebook 表单答案按字段结构化落库，其余进备注并保留 JSON 原文', () => {
-  const mapped = mapLeadFields(facebookForm);
+  const mapped = mapLeadFields(facebookForm, { leadgenId: 'LEAD_123', formId: 'form_9' });
   assert.equal(mapped.companyName, 'Nordic Home AB');
   assert.equal(mapped.name, 'Killian Dupont');
   assert.equal(mapped.email, 'killian@nordichome.se');
@@ -33,8 +34,12 @@ test('Facebook 表单答案按字段结构化落库，其余进备注并保留 J
   // 未映射到字段的问题保留在备注
   assert.ok(mapped.notes.includes('是否从中国进口：No, first time'));
   assert.ok(mapped.notes.includes('采购主要顾虑：Quality consistency'));
-  assert.ok(mapped.notes.includes('表单答案原文：'));
-  assert.ok(mapped.notes.includes('Nordic Home AB'));
+  // 归档 JSON 必须是 {facebookLeadId, formId, answers}
+  const archive = JSON.parse(mapped.notes.split('FACEBOOK_LEAD_JSON:')[1]);
+  assert.equal(archive.facebookLeadId, 'LEAD_123');
+  assert.equal(archive.formId, 'form_9');
+  assert.equal(archive.answers['Company name'], 'Nordic Home AB');
+  assert.equal(archive.answers['What is your main concern when sourcing sofas?'], 'Quality consistency');
 });
 
 test('字段映射对未知问题与缺失姓名有兜底', () => {
@@ -108,4 +113,23 @@ test('Graph API 版本走配置，并有默认值', () => {
   } finally {
     if (previous !== undefined) process.env.META_GRAPH_VERSION = previous;
   }
+});
+
+test('Webhook 路由顶部不得引入 service / Prisma —— 否则 GET 会被加载期拖垮', () => {
+  // 曾经的线上故障：顶层 import 了 service，链路拉起 Prisma 客户端，
+  // 初始化失败时连不需要数据库的 GET 验证也一起挂掉（Meta 侧 ERR_CONNECTION_CLOSED）。
+  // 这条断言把这个坑钉死：GET 必须完全独立。
+  const source = readFileSync(new URL('../app/api/leads/webhook/route.ts', import.meta.url), 'utf8');
+  const topLevel = source
+    .split('\n')
+    .filter(line => /^import\s/.test(line))
+    .join('\n');
+  assert.equal(/@\/services\//.test(topLevel), false, '顶层不得 import service');
+  assert.equal(/@\/lib\/db|@prisma\/client/.test(topLevel), false, '顶层不得 import Prisma');
+  assert.equal(/@\/lib\/http/.test(topLevel), false, '顶层不得 import 依赖数据库的 http 封装');
+  // POST 内部允许且必须动态加载
+  assert.ok(source.includes("await import('@/services/meta-lead-service')"));
+  assert.ok(source.includes("await import('@/services/lead-import-service')"));
+  // 验证成功必须原样返回 challenge 的纯文本
+  assert.ok(source.includes("new Response(challenge, {"));
 });

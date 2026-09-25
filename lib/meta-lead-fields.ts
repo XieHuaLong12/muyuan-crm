@@ -89,7 +89,9 @@ function matchRule(field: LeadField): string | null {
 }
 
 /** Meta 的 field_data → CRM 客户字段。 */
-export function mapLeadFields(fields: LeadField[]): MappedLead {
+export type LeadMeta = { leadgenId: string; formId: string };
+
+export function mapLeadFields(fields: LeadField[], meta: LeadMeta = { leadgenId: '', formId: '' }): MappedLead {
   const out: MappedLead = {
     name: '', companyName: '', country: '', phone: '', whatsapp: '', email: '',
     purchaseType: 'OTHER', productInterest: '', quantity: null, notes: '', extras: [],
@@ -117,11 +119,16 @@ export function mapLeadFields(fields: LeadField[]): MappedLead {
     }
   }
 
-  // 备注里同时保留可读文本与完整 JSON 原文，便于事后核对
+  // 备注 = 可读摘要 + 规定格式的 JSON 原文，便于事后核对广告来源与表单答案
   const parts: string[] = ['来源：Facebook Lead Ads'];
   parts.push(...notes);
   if (out.extras.length) parts.push(...out.extras.map(e => `${e.label}：${e.value}`));
-  parts.push('', `表单答案原文：${JSON.stringify(Object.fromEntries(fields.map(f => [f.label || f.name, f.value])))}`);
+  const archive = {
+    facebookLeadId: meta.leadgenId,
+    formId: meta.formId,
+    answers: Object.fromEntries(fields.map(f => [f.label || f.name, f.value])),
+  };
+  parts.push('', 'FACEBOOK_LEAD_JSON:', JSON.stringify(archive));
   out.notes = parts.join('\n');
 
   // 姓名兜底：Facebook 表单偶尔只给名字
