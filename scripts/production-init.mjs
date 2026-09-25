@@ -180,6 +180,31 @@ try {
     console.warn('Orders backfill skipped:', error instanceof Error ? error.message : error);
   }
 
+  // Meta Lead Ads 环境自检：只报告「是否配置」，**绝不打印变量值**
+  {
+    const vars = [
+      ['META_LEAD_WEBHOOK_SECRET', 'Webhook 验证（hub.verify_token）'],
+      ['META_LEAD_VERIFY_TOKEN', '兼容旧名（META_LEAD_WEBHOOK_SECRET 未配时回退）'],
+      ['META_PAGE_ACCESS_TOKEN', 'Graph API 读取 leadgen 详情'],
+      ['META_APP_SECRET', 'X-Hub-Signature-256 验签'],
+      ['META_GRAPH_VERSION', 'Graph API 版本（默认 v26.0）'],
+    ];
+    const missing = [];
+    for (const [name, purpose] of vars) {
+      const present = Boolean(process.env[name]?.trim());
+      console.log(`Meta Lead Ads: ${present ? '✓ 已配置' : '✗ 未配置'}  ${name} — ${purpose}`);
+      // 必填三项缺失时收集，最后统一告警
+      if (!present && name !== 'META_LEAD_VERIFY_TOKEN' && name !== 'META_GRAPH_VERSION') missing.push(name);
+    }
+    if (!process.env.META_LEAD_WEBHOOK_SECRET?.trim() && process.env.META_LEAD_VERIFY_TOKEN?.trim()) {
+      console.warn('Meta Lead Ads: 正在使用旧变量名 META_LEAD_VERIFY_TOKEN，建议改用 META_LEAD_WEBHOOK_SECRET。');
+    }
+    if (missing.length) {
+      console.warn(`Meta Lead Ads: 缺少 ${missing.join('、')} —— Meta Webhook 验证或线索拉取将无法工作。`);
+      console.warn('Meta Lead Ads: 请在 Hostinger 面板 → Environment variables 中补齐后重新部署。');
+    }
+  }
+
   console.log('Production database is ready.');
 } finally {
   await db.$disconnect();

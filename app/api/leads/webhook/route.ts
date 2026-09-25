@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
   const mode = req.nextUrl.searchParams.get('hub.mode');
   const token = req.nextUrl.searchParams.get('hub.verify_token');
   const challenge = req.nextUrl.searchParams.get('hub.challenge') ?? '';
-  const expected = process.env.META_LEAD_WEBHOOK_SECRET;
+  // 优先新名；兼容早期部署已配置的旧名，避免改名后静默失效
+  const expected = process.env.META_LEAD_WEBHOOK_SECRET?.trim() || process.env.META_LEAD_VERIFY_TOKEN?.trim();
 
   if (mode === 'subscribe' && expected && token && safeEqual(token, expected)) {
     return new Response(challenge, {
