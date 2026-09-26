@@ -233,15 +233,22 @@ export async function handleWebhookPayload(body: unknown) {
 
   // Await processing before ACK: detached promises can be terminated after the HTTP response
   // on short-lived hosting runtimes. Meta can retry a failed request; completed leads are idempotent.
-  await Promise.all(
+  const results = await Promise.all(
     events.map(event =>
       handleLeadgenEvent(event, body).catch(async error => {
-        await mark(event.leadgenId, 'FAILED', null, error instanceof Error ? error.message : String(error));
+        const reason = error instanceof Error ? error.message : String(error);
+        await mark(event.leadgenId, 'FAILED', null, reason);
+        return { leadgenId: event.leadgenId, status: 'FAILED' as const, customerId: null, reason };
       }),
     ),
   );
 
-  return { accepted: events.length, results: [], error: '' };
+  const failures = results.filter(result => result.status === 'FAILED');
+  return {
+    accepted: events.length,
+    results,
+    error: failures.length ? `${failures.length} leadgen event(s) failed; see MetaLeadEvent.error` : '',
+  };
 }
 
 /** 供测试与排查：读取最近的 Meta 线索事件。 */
