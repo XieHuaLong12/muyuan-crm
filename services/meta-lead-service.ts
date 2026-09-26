@@ -67,6 +67,11 @@ const webhookPayload = z.object({
 
 export type LeadgenEvent = { leadgenId: string; pageId: string; formId: string };
 
+/** RECEIVED is pending work, not a completed import. Only completed states can be skipped. */
+export function shouldSkipProcessedLead(status: string): boolean {
+  return status === 'CREATED' || status === 'LINKED';
+}
+
 /** 从推送体里取出所有 leadgen 事件（一次推送可能带多条）。 */
 export function extractLeadgenEvents(body: unknown): LeadgenEvent[] {
   const parsed = webhookPayload.parse(body);
@@ -146,7 +151,7 @@ async function mark(id: string, status: string, customerId: string | null, error
 export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown) {
   // 幂等：同一个 leadgenId 已经处理过就直接返回，避免 Meta 重推造成重复客户
   const existing = await db.metaLeadEvent.findUnique({ where: { leadgenId: event.leadgenId }, select: { id: true, status: true, customerId: true } });
-  if (existing && existing.status !== 'FAILED') {
+  if (existing && shouldSkipProcessedLead(existing.status)) {
     return { leadgenId: event.leadgenId, status: 'SKIPPED' as const, customerId: existing.customerId, reason: '已处理过该 leadgen_id' };
   }
 
@@ -219,24 +224,31 @@ export async function handleWebhookPayload(body: unknown) {
 
   // 登记事件（此时还没有客户），保证即使后续失败也留有痕迹
   for (const event of events) {
-    const exists = await db.metaLeadEvent.findUnique({ where: { leadgenId: event.leadgenId }, select: { id: true } });
-    if (!exists) {
-      await db.metaLeadEvent.create({
-        data: { leadgenId: event.leadgenId, pageId: event.pageId, formId: event.formId, rawPayload: body as Prisma.InputJsonValue, error: '' },
-      });
-    }
+    await db.metaLeadEvent.upsert({
+      where: { leadgenId: event.leadgenId },
+      create: { leadgenId: event.leadgenId, pageId: event.pageId, formId: event.formId, rawPayload: body as Prisma.InputJsonValue, error: '' },
+      update: {},
+    });
   }
 
-  // 后台执行，不阻塞 webhook 响应
-  void Promise.all(
+  // Await processing before ACK: detached promises can be terminated after the HTTP response
+  // on short-lived hosting runtimes. Meta can retry a failed request; completed leads are idempotent.
+  const results = await Promise.all(
     events.map(event =>
       handleLeadgenEvent(event, body).catch(async error => {
-        await mark(event.leadgenId, 'FAILED', null, error instanceof Error ? error.message : String(error));
+        const reason = error instanceof Error ? error.message : String(error);
+        await mark(event.leadgenId, 'FAILED', null, reason);
+        return { leadgenId: event.leadgenId, status: 'FAILED' as const, customerId: null, reason };
       }),
     ),
-  ).catch(() => undefined);
+  );
 
-  return { accepted: events.length, results: [], error: '' };
+  const failures = results.filter(result => result.status === 'FAILED');
+  return {
+    accepted: events.length,
+    results,
+    error: failures.length ? `${failures.length} leadgen event(s) failed; see MetaLeadEvent.error` : '',
+  };
 }
 
 /** 供测试与排查：读取最近的 Meta 线索事件。 */
