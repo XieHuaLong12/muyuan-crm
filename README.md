@@ -208,6 +208,10 @@ Supabase 可先作为托管 PostgreSQL 使用；Supabase Auth/RLS 不是自动�
 
 先加入每日数据库备份、员工停用与密码修改、软删除恢复、订单更正审计，再接入实际 Facebook/官网询盘。数据量增长后升级 PostgreSQL 与服务端分页，最后考虑报价单/PI和自动提醒。
 
+## 2026-09-26 更新：Meta 广告数据与表单目录同步
+
+Growth Center 广告表现接入 Meta Marketing API（System User Token + ads_read）：广告系列与近 30 天按天花费/展示/点击/线索自动同步进 Campaign/MarketingMetric 表；Lead Ads 表单目录（leadgen_forms）同步进 MetaLeadForm；线索事件补记 adId/campaignId 归因。支持设置页手动同步与 Hostinger Cron 每 6 小时定时同步（`/api/cron/meta-sync`）。配置步骤与排查见 [docs/META_ADS_SYNC.md](docs/META_ADS_SYNC.md)。
+
 ## 2026-09-12 更新：批量客户管理
 
 客户列表新增复选框、当前页全选、跨页选择、名单确认、批量软删除与回收站恢复。仅管理员可用，已成交客户受到批量删除保护。更换筛选条件清空选择。详见 `批量客户管理说明.md`。新增 HTTP 验收：`node --env-file=.env node_modules/tsx/dist/cli.mjs scripts/batch-smoke.ts`。

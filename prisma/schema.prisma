@@ -702,6 +702,9 @@ model MetaLeadEvent {
  leadgenId String @unique
  pageId String @default("")
  formId String @default("")
+ // 广告归因：线索来自哪条广告 / 哪个广告系列（Graph API leadgen 详情返回）
+ adId String?
+ campaignId String?
  customerId String?
  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
  // 原始推送内容，便于事后追溯广告来源与表单答案
@@ -713,4 +716,56 @@ model MetaLeadEvent {
  @@index([formId, createdAt])
  @@index([customerId])
  @@index([status, createdAt])
+ @@index([campaignId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// Meta Ads（Marketing API）与 Lead Ads 表单目录
+// 加性变更：仅新增表，不修改任何现有表结构。
+//   - MetaAdAccount：广告账户缓存（名称/币种/状态）
+//   - MetaLeadForm：leadgen_forms 目录缓存（表单名/问题/线索数）
+//   - MetaSyncRun：同步执行记录，cron 与手动触发共用
+// ═══════════════════════════════════════════════════════════
+model MetaAdAccount {
+ id String @id @default(cuid())
+ externalId String @unique
+ name String
+ currency String @default("USD")
+ timezone String @default("")
+ // Meta account_status 原值（1=ACTIVE 等）
+ status Int @default(0)
+ disableReason Int @default(0)
+ syncedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+}
+
+model MetaLeadForm {
+ id String @id @default(cuid())
+ formId String @unique
+ pageId String @default("")
+ name String
+ status String @default("")
+ // leadgen_forms 的 questions 数组原文（key/label/type/options）
+ questions Json?
+ // 广告平台统计的线索总数（leads_count）
+ leadsCount Int @default(0)
+ syncedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([pageId])
+}
+
+model MetaSyncRun {
+ id String @id @default(cuid())
+ // ADS | FORMS | ALL
+ kind String @db.VarChar(16)
+ // RUNNING | OK | FAILED
+ status String @db.VarChar(16)
+ // 成功后的统计（campaigns/metrics/forms 等）
+ detail Json?
+ error String @db.Text
+ startedAt DateTime @default(now())
+ finishedAt DateTime?
+ @@index([kind, startedAt])
 }
