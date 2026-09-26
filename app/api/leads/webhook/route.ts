@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 
 /**
  * /api/leads/webhook
@@ -84,12 +84,21 @@ export async function POST(req: NextRequest) {
   }
 
   // ── ② Meta Lead Ads 通道 ─────────────────────────────────────────
+  // 仅记录接收状态和计数，不记录请求体、密钥、签名或客户个人资料。
+  // 入口日志必须放在签名校验之前，否则 401 事件无法与“Meta 未投递”区分。
+  const requestId = randomUUID().slice(0, 8);
+  console.info('[meta-lead] POST received', {
+    requestId,
+    bytes: Buffer.byteLength(raw, 'utf8'),
+    hasSignature: Boolean(req.headers.get('x-hub-signature-256')),
+  });
+
   const { verifyMetaSignature, handleWebhookPayload } = await import('@/services/meta-lead-service');
 
   const verified = verifyMetaSignature(raw, req.headers.get('x-hub-signature-256'));
   if (!verified.ok) {
     // 签名不通过一律 401，且不落库 —— 防止伪造推送往客户库灌数据
-    console.warn('[meta-lead] 签名校验失败', { reason: verified.reason });
+    console.warn('[meta-lead] 签名校验失败', { requestId, reason: verified.reason });
     return new Response('unauthorized', {
       status: 401,
       headers: { 'Content-Type': 'text/plain' },
@@ -100,18 +109,30 @@ export async function POST(req: NextRequest) {
   try {
     body = JSON.parse(raw);
   } catch {
+    console.warn('[meta-lead] invalid json', { requestId });
     return new Response('invalid json', { status: 400 });
   }
 
   try {
     const result = await handleWebhookPayload(body);
+    console.info('[meta-lead] POST parsed', {
+      requestId,
+      accepted: result.accepted,
+      statuses: result.results.map(item => item.status),
+      hasProcessingError: Boolean(result.error),
+    });
+    if (!result.accepted && !result.error) {
+      // A valid signed request can have no leadgen changes (including the empty-body signature smoke test).
+      // Return 200 for non-lead events, but leave a trace so it is not mistaken for an imported lead.
+      console.warn('[meta-lead] no leadgen changes in signed payload', { requestId });
+    }
     if (result.error) {
-      console.warn('[meta-lead] 线索处理失败，等待 Meta 重试', result.error);
+      console.warn('[meta-lead] 线索处理失败，等待 Meta 重试', { requestId, error: result.error });
       return new Response('processing failed', { status: 503 });
     }
     console.log(`[meta-lead] 已处理 ${result.accepted} 条 leadgen 事件`);
   } catch (error) {
-    console.error('[meta-lead] 处理推送失败，等待 Meta 重试', error);
+    console.error('[meta-lead] 处理推送失败，等待 Meta 重试', { requestId, error });
     return new Response('processing failed', { status: 503 });
   }
 
