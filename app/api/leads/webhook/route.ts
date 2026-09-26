@@ -105,11 +105,14 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await handleWebhookPayload(body);
-    if (result.error) console.warn('[meta-lead] 推送解析异常', result.error);
-    else console.log(`[meta-lead] 收到 ${result.accepted} 条 leadgen 事件`);
+    if (result.error) {
+      console.warn('[meta-lead] 线索处理失败，等待 Meta 重试', result.error);
+      return new Response('processing failed', { status: 503 });
+    }
+    console.log(`[meta-lead] 已处理 ${result.accepted} 条 leadgen 事件`);
   } catch (error) {
-    // 仍返回 200：非 200 会让 Meta 持续重推；事件已登记，可在后台重试
-    console.error('[meta-lead] 处理推送失败', error);
+    console.error('[meta-lead] 处理推送失败，等待 Meta 重试', error);
+    return new Response('processing failed', { status: 503 });
   }
 
   return new Response('EVENT_RECEIVED', { status: 200 });
