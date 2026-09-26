@@ -30,7 +30,7 @@ const insightSchema = z.object({
   campaign_id: z.string(),
   campaign_name: z.string().default(''),
   date_start: z.string(),
-  date_end: z.string(),
+  date_stop: z.string(),
   spend: z.string().default('0'),
   impressions: z.string().default('0'),
   clicks: z.string().default('0'),
@@ -185,7 +185,7 @@ export async function syncAds() {
 
     // 5. 近 30 天 insights（按天），写入 MarketingMetric（幂等键：campaignId + metricDate）
     const insightsResult = await pagedGraphGet<unknown>(`act_${accountId}/insights`, token, {
-      fields: 'campaign_id,campaign_name,date_start,date_end,spend,impressions,clicks,ctr,account_currency,actions',
+      fields: 'campaign_id,campaign_name,date_start,date_stop,spend,impressions,clicks,ctr,account_currency,actions',
       date_preset: 'last_30d',
       level: 'campaign',
       time_increment: '1',
