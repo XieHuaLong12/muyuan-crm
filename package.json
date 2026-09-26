@@ -14,7 +14,8 @@
   "test:smoke": "node --env-file=.env node_modules/tsx/dist/cli.mjs scripts/smoke.ts",
   "db:seed:products": "node node_modules/tsx/dist/cli.mjs prisma/seed-product-os.ts",
   "db:seed:orders": "node node_modules/tsx/dist/cli.mjs prisma/seed-orders.ts",
-  "meta:doctor": "node scripts/meta-lead-doctor.mjs"
+  "meta:doctor": "node scripts/meta-lead-doctor.mjs",
+  "meta:sync": "node --env-file=.env node_modules/tsx/dist/cli.mjs scripts/meta-sync.ts"
  },
  "dependencies": {
   "@hookform/resolvers": "^3.10.0",

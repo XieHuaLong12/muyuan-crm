@@ -87,6 +87,10 @@ export function extractLeadgenEvents(body: unknown): LeadgenEvent[] {
 const graphLead = z.object({
   id: z.string(),
   created_time: z.string().optional(),
+  // 广告归因：线索来自哪条广告 / 哪个广告系列（用于对账广告花费与线索）
+  ad_id: z.string().optional(),
+  adset_id: z.string().optional(),
+  campaign_id: z.string().optional(),
   field_data: z.array(
     z.object({
       name: z.string().default(''),
@@ -155,6 +159,12 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown) 
     await mark(event.leadgenId, 'FAILED', null, lead.error);
     return { leadgenId: event.leadgenId, status: 'FAILED' as const, customerId: null, reason: lead.error };
   }
+
+  // 广告归因落库：无论后续是新建还是关联客户，都要记录线索来自哪条广告
+  await db.metaLeadEvent.update({
+    where: { leadgenId: event.leadgenId },
+    data: { adId: lead.lead.ad_id ?? null, campaignId: lead.lead.campaign_id ?? null },
+  }).catch(() => undefined);
 
   const fields: LeadField[] = lead.lead.field_data.flatMap(item =>
     item.values.map(value => ({ name: item.name, label: item.name, value })),

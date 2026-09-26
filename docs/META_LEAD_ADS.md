@@ -139,3 +139,10 @@ curl -i "https://avenee.online/api/leads/webhook?hub.mode=subscribe&hub.verify_t
 | 返回 `403 forbidden` | 变量名或值不对（注意是 `META_LEAD_WEBHOOK_SECRET`） |
 | 仍然连接被关闭 | **不再是代码问题**：Hostinger 代理 / WAF / SSL / 域名解析层拦截 |
 | 返回 404 | 部署的还是旧版本，该路由不存在 |
+
+---
+
+## 相关文档
+
+- **广告数据 + 表单目录同步**（Marketing API / leadgen_forms）：见 [META_ADS_SYNC.md](META_ADS_SYNC.md)。
+  它与本页的 Lead Ads 线索推送互补：线索推送负责「进客户」，广告同步负责「看花费与归因」。

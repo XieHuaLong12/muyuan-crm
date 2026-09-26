@@ -1,0 +1,47 @@
+import { NextRequest } from 'next/server';
+import { timingSafeEqual } from 'node:crypto';
+
+/**
+ * /api/cron/meta-sync —— Meta 广告数据与表单目录的定时同步入口
+ *
+ * 由 Hostinger 面板的 Cron Jobs 每 6 小时请求一次：
+ *   GET https://你的域名/api/cron/meta-sync?secret=<META_SYNC_SECRET>
+ *
+ * 可选 kind 参数：all（默认，广告+表单）| ads | forms
+ *
+ * ⚠️ 顶部 import 保持极简（next/server + node 内置模块），service 一律动态加载：
+ * 与 /api/leads/webhook 同一教训 —— 顶层 import 会拉起 Prisma 与整棵依赖图，
+ * 冷启动失败时连「密钥校验」这种不需要数据库的响应都发不出去。
+ */
+
+function safeEqual(a: string, b: string) {
+  const left = Buffer.from(a, 'utf8');
+  const right = Buffer.from(b, 'utf8');
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+}
+
+export async function GET(req: NextRequest) {
+  const secret = req.nextUrl.searchParams.get('secret') ?? '';
+  const expected = process.env.META_SYNC_SECRET?.trim() ?? '';
+  if (!expected || !secret || !safeEqual(secret, expected)) {
+    console.warn('[meta-sync] cron 密钥校验失败', { hasSecret: Boolean(secret), configured: Boolean(expected) });
+    return new Response('forbidden', { status: 403 });
+  }
+
+  const kind = req.nextUrl.searchParams.get('kind') ?? 'all';
+  const results: Record<string, unknown> = {};
+  if (kind === 'ads' || kind === 'all') {
+    const { syncAds } = await import('@/services/meta-ads-service');
+    results.ads = await syncAds();
+  }
+  if (kind === 'forms' || kind === 'all') {
+    const { syncLeadForms } = await import('@/services/meta-form-service');
+    results.forms = await syncLeadForms();
+  }
+  if (!results.ads && !results.forms) {
+    return new Response('invalid kind', { status: 400 });
+  }
+
+  return Response.json({ success: true, data: { kind, results, time: new Date().toISOString() } });
+}

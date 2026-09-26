@@ -205,6 +205,27 @@ try {
     }
   }
 
+  // Meta 广告数据 + 表单目录同步环境自检：只报告「是否配置」，**绝不打印变量值**
+  {
+    const vars = [
+      ['META_AD_ACCOUNT_ID', '广告账户 ID（act_ 开头），Marketing API 同步'],
+      ['META_ADS_ACCESS_TOKEN', 'System User Token（ads_read），读取花费/展示/线索'],
+      ['META_PAGE_ID', '主页 ID，拉取 leadgen_forms 表单目录'],
+      ['META_PAGE_ACCESS_TOKEN', 'Page Token，读取 leadgen 详情与表单目录'],
+      ['META_SYNC_SECRET', '定时同步入口 /api/cron/meta-sync 的密钥'],
+    ];
+    const missing = [];
+    for (const [name, purpose] of vars) {
+      const present = Boolean(process.env[name]?.trim());
+      console.log(`Meta Ads Sync: ${present ? '✓ 已配置' : '✗ 未配置'}  ${name} — ${purpose}`);
+      if (!present) missing.push(name);
+    }
+    if (missing.length) {
+      console.warn(`Meta Ads Sync: 缺少 ${missing.join('、')} —— 广告数据 / 表单目录同步将跳过。`);
+      console.warn('Meta Ads Sync: 配置方法见 docs/META_ADS_SYNC.md（System User Token 需 ads_read 权限）。');
+    }
+  }
+
   console.log('Production database is ready.');
 } finally {
   await db.$disconnect();
