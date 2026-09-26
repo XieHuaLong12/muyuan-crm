@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { verifyMetaSignature, extractLeadgenEvents, graphVersion } from '../services/meta-lead-service';
+import { verifyMetaSignature, extractLeadgenEvents, graphVersion, shouldSkipProcessedLead } from '../services/meta-lead-service';
 import { mapLeadFields } from '../lib/meta-lead-fields';
 
 /** Facebook 表单的 9 个问题（按需求里列出的原文） */
@@ -137,4 +137,21 @@ test('Webhook 路由顶部不得引入 service / Prisma —— 否则 GET 会被
   assert.ok(secretLine, '未找到 token 读取语句');
   assert.ok(secretLine.includes('META_LEAD_WEBHOOK_SECRET'), '必须先读 META_LEAD_WEBHOOK_SECRET');
   assert.ok(secretLine.indexOf('META_LEAD_WEBHOOK_SECRET') < secretLine.indexOf('META_LEAD_VERIFY_TOKEN'), 'META_LEAD_WEBHOOK_SECRET 必须优先于 META_LEAD_VERIFY_TOKEN');
+});
+
+test('Webhook 预登记 RECEIVED 不得跳过导入；只跳过已成功处理的事件', () => {
+  assert.equal(shouldSkipProcessedLead('RECEIVED'), false);
+  assert.equal(shouldSkipProcessedLead('FAILED'), false);
+  assert.equal(shouldSkipProcessedLead('CREATED'), true);
+  assert.equal(shouldSkipProcessedLead('LINKED'), true);
+});
+
+test('Webhook 应等待事件处理完成，并对失败返回可重试响应', () => {
+  const service = readFileSync(new URL('../services/meta-lead-service.ts', import.meta.url), 'utf8');
+  assert.ok(service.includes('const results = await Promise.all('));
+  assert.equal(service.includes('void Promise.all('), false);
+  for (const route of ['leads', 'meta']) {
+    const source = readFileSync(new URL(`../app/api/${route}/webhook/route.ts`, import.meta.url), 'utf8');
+    assert.ok(source.includes("new Response('processing failed', { status: 503 })"));
+  }
 });
