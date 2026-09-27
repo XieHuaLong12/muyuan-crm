@@ -1,0 +1,14 @@
+import Link from 'next/link';
+import { ArrowUpRight,Info } from 'lucide-react';
+import type { FinanceOverview } from '@/services/bos-v2-service';
+
+const money=(currency:string,amount:string)=>new Intl.NumberFormat('zh-CN',{style:'currency',currency,maximumFractionDigits:0}).format(Number(amount));
+const totals=(list:{currency:string;amount:string}[])=>list.length?list.map(item=>money(item.currency,item.amount)).join(' · '):'—';
+export function FinanceCenter({data}:{data:FinanceOverview}){
+ const summary=[{label:'收入',value:totals(data.revenue),sub:'本月成交金额'},{label:'产品成本',value:totals(data.productCost),sub:'成交记录中录入的成本'},{label:'毛利润',value:totals(data.grossProfit),sub:'收入 − 产品成本'},{label:'净利润',value:'待核算',sub:'缺少完整销售与运输费用'}];
+ return <div className="bos-v2-page"><header className="bos-v2-hero"><div><span className="bos-v2-kicker">FINANCE CENTER / 财务中心</span><h1>先看利润，再看增长。</h1><p>{data.today.slice(0,7)} · 管理员视图 · {data.orders} 笔本月订单</p></div><div className="bos-v2-hero-actions"><Link href="/products/margin" className="bos-v2-secondary">产品毛利 <ArrowUpRight size={15}/></Link><Link href="/orders" className="bos-v2-secondary">查看订单 <ArrowUpRight size={15}/></Link></div></header>
+ <div className="bos-v2-metrics">{summary.map(item=><section className="bos-v2-metric" key={item.label}><span>{item.label}</span><strong>{item.value}</strong><small>{item.sub}</small></section>)}</div>
+ <div className="bos-v2-finance-grid"><section className="bos-v2-surface"><div className="bos-v2-section-head"><div><span className="bos-v2-kicker">COST STRUCTURE</span><h2>成本结构</h2><p>按现有数据核算，不估算缺失费用</p></div></div><div className="bos-v2-cost-list"><div><span>广告成本</span><strong>{totals(data.adSpend)}</strong><small>已同步的投放记录</small></div><div><span>产品成本</span><strong>{totals(data.productCost)}</strong><small>成交单录入；尚未拆分生产成本</small></div><div><span>销售成本</span><strong>待接入</strong><small>暂无费用明细模型</small></div><div><span>生产成本</span><strong>待拆分</strong><small>现有产品成本未细分生产费用</small></div><div><span>运输成本</span><strong>待接入</strong><small>暂无完整运费记录</small></div></div><p className="bos-v2-note"><Info size={15}/> 广告、成交可能使用不同币种，未配置完整汇率与费用前不汇总净利润。</p></section>
+ <section className="bos-v2-surface"><div className="bos-v2-section-head"><div><span className="bos-v2-kicker">DEAL ECONOMICS</span><h2>最近成交毛利</h2><p>按每笔成交原币种计算</p></div></div><div className="bos-v2-deal-list">{data.deals.map((deal,index)=><Link key={`${deal.customerId}-${index}`} href={`/sales?customer=${deal.customerId}`}><div><strong>{deal.customerName}</strong><small>{deal.orderNumber||deal.date.slice(0,10)}</small></div><div><strong>{money(deal.currency,deal.profit)}</strong><small>毛利率 {deal.margin===null?'—':`${deal.margin}%`}</small></div><ArrowUpRight size={15}/></Link>)}{!data.deals.length&&<p className="bos-v2-empty">本月暂无成交记录</p>}</div></section></div>
+ </div>;
+}

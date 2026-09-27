@@ -1,0 +1,14 @@
+import Link from 'next/link';
+import { ArrowUpRight } from 'lucide-react';
+import type { OrdersData } from '@/components/bos/OrderManagement';
+const currency=(value:string,unit:string)=>new Intl.NumberFormat('zh-CN',{style:'currency',currency:unit,maximumFractionDigits:0}).format(Number(value));
+export function OrderJourney({data,admin,details}:{data:OrdersData;admin:boolean;details:Record<string,{product:string;grossProfit:string|null;profitCurrency:string|null}>}){
+ const stats=[{label:'全部订单',value:data.allCount,href:'/orders'},{label:'生产中',value:data.tabs.find(tab=>tab.key==='PRODUCING')?.count??0,href:'/orders?tab=PRODUCING'},{label:'运输中',value:data.tabs.find(tab=>tab.key==='IN_TRANSIT')?.count??0,href:'/orders?tab=IN_TRANSIT'},{label:'待付款',value:data.reminders.pendingPayment,href:'/orders?tab=PENDING_PAYMENT'}];
+ const steps=[['询价','客户线索'],['报价','报价记录'],['下单','订单已建立'],['生产','订单状态'],['质检','待接入'],['出货','物流状态'],['运输','物流状态'],['收货','订单完成']];
+ return <div className="bos-v2-page bos-v2-orders">
+  <header className="bos-v2-hero"><div><span className="bos-v2-kicker">ORDER CENTER / 订单中心</span><h1>从询价到收货，一眼看清。</h1><p>客户与订单自动关联；已建立的订单继续使用现有状态流程。</p></div><div className="bos-v2-hero-actions"><Link href="/products" className="bos-v2-secondary">产品库 <ArrowUpRight size={15}/></Link>{admin&&<Link href="/finance" className="bos-v2-secondary">利润视图 <ArrowUpRight size={15}/></Link>}</div></header>
+  <section className="bos-v2-metrics" aria-label="订单概况">{stats.map(stat=><Link className="bos-v2-metric" key={stat.label} href={stat.href}><span>{stat.label}<ArrowUpRight size={15}/></span><strong>{stat.value}</strong><small>点击查看对应订单</small></Link>)}</section>
+  <section className="bos-v2-surface bos-v2-order-journey"><div className="bos-v2-section-head"><div><span className="bos-v2-kicker">ORDER JOURNEY</span><h2>订单旅程</h2><p>询价 → 报价 → 下单 → 生产 → 质检 → 出货 → 运输 → 收货</p></div></div><ol>{steps.map(([label,source],index)=><li key={label}><span>{String(index+1).padStart(2,'0')}</span><strong>{label}</strong><small>{source}</small></li>)}</ol><p className="bos-v2-note">“质检”尚无独立数据库状态，当前订单详情继续显示原有七段进度；不会自动把未记录的质检标记为完成。</p></section>
+  {data.orders.length>0&&<section className="bos-v2-order-preview" aria-label="最近订单"><div className="bos-v2-section-head"><div><span className="bos-v2-kicker">IN MOTION</span><h2>当前订单</h2><p>先看客户、产品与金额；下方保留完整订单明细。</p></div></div><div className="bos-v2-order-cards">{data.orders.slice(0,4).map(order=><Link href={`/orders/detail/${order.id}`} key={order.id}><span>{order.orderNo}<ArrowUpRight size={15}/></span><strong>{order.customer.name}</strong><small>{order.customer.country||'国家待补充'} · {details[order.id]?.product||'产品待补充'}</small><div><b>{currency(order.amountRMB,'CNY')}</b><em>{order.statusLabel}</em></div>{admin&&<small>成交毛利 {details[order.id]?.grossProfit&&details[order.id]?.profitCurrency?currency(details[order.id].grossProfit!,details[order.id].profitCurrency!):'待录入'}</small>}</Link>)}</div></section>}
+ </div>;
+}
