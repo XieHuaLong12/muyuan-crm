@@ -1,1 +1,2 @@
 ALTER TABLE `MetaLeadEvent` ADD COLUMN `processingStartedAt` DATETIME(3) NULL;
+ALTER TABLE `Customer` MODIFY COLUMN `notes` TEXT NOT NULL DEFAULT ('');

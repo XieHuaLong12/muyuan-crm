@@ -21,6 +21,10 @@ const DAY = 86_400_000;
 const CLAIM_TIMEOUT_MS = 5 * 60_000;
 
 function safeReason(value: unknown) {
+  if (value instanceof Prisma.PrismaClientKnownRequestError) {
+    const column = typeof value.meta?.column_name === 'string' ? ` column ${value.meta.column_name}` : '';
+    return `Prisma ${value.code}${column}`;
+  }
   const message = value instanceof Error ? value.message : String(value);
   const token = process.env.META_PAGE_ACCESS_TOKEN;
   return (token ? message.replaceAll(token, '[redacted]') : message).slice(0, 2000);
