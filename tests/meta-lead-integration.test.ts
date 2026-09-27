@@ -89,8 +89,8 @@ test('Meta Lead Ads webhook persists and deduplicates real events', async t => {
       let customerId: string | undefined;
       try {
         const response = await POST(signedRequest(payload(leadgenId)));
-        assert.equal(response.status, 200);
         const event = await db.metaLeadEvent.findUniqueOrThrow({ where: { leadgenId } });
+        assert.equal(response.status, 200, event.error);
         customerId = event.customerId ?? undefined;
         assert.equal(event.status, 'CREATED');
         assert.ok(customerId);
@@ -150,7 +150,8 @@ test('Meta Lead Ads webhook persists and deduplicates real events', async t => {
       }) as typeof fetch;
       try {
         const statuses = await Promise.all([POST(signedRequest(payload(leadgenId))), POST(signedRequest(payload(leadgenId)))]);
-        assert.ok(statuses.some(response => response.status === 200));
+        const firstEvent = await db.metaLeadEvent.findUniqueOrThrow({ where: { leadgenId } });
+        assert.ok(statuses.some(response => response.status === 200), firstEvent.error);
         assert.ok(statuses.every(response => response.status === 200 || response.status === 503));
         const retry = await POST(signedRequest(payload(leadgenId)));
         assert.equal(retry.status, 200);
