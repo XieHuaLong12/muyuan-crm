@@ -27,6 +27,9 @@ export type OrderRow = {
   amountRMB: string;
   currency: string;
   sourceAmount: string | null;
+  product: string;
+  grossProfit: string | null;
+  profitCurrency: string | null;
   status: string;
   statusLabel: string;
   paymentLabel: string;
