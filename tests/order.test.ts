@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Prisma } from '@prisma/client';
 import { db } from '../lib/db';
 import { ORDER_STAGES,stageProgress } from '../lib/order-status';
-import { ensureOrderForDeal,orderList,orderDetail } from '../services/order-service';
+import { changeOrderMilestone,ensureOrderForDeal,orderList,orderDetail,orderMilestoneInput } from '../services/order-service';
 
 test('订单进度按七段流程推导', () => {
  // 七段：下单 付款 生产 发货 运输 清关 收货
@@ -14,6 +14,7 @@ test('订单进度按七段流程推导', () => {
  assert.deepEqual(stageProgress('IN_TRANSIT').done, [true, true, true, true, true, false, false]);
  assert.deepEqual(stageProgress('COMPLETED').done, [true, true, true, true, true, true, true]);
  assert.equal(stageProgress('CANCELLED').cancelled, true);
+ assert.equal(orderMilestoneInput.safeParse({ status: 'CANCELLED', expectedUpdatedAt: new Date().toISOString() }).success, false);
 });
 
 test('成交自动建单：幂等、人民币换算、按客户隔离', async () => {
@@ -51,6 +52,8 @@ test('成交自动建单：幂等、人民币换算、按客户隔离', async ()
   assert.equal(seen.orders[0].amountRMB, order.amountRMB.toFixed(2));
   // 订单列表不返回产品信息
   assert.equal(Object.keys(seen.orders[0]).includes('product'), false);
+  // 提醒口径：定金未付计入「待付款」
+  assert.ok(seen.reminders.pendingPayment >= 1);
 
   const detail = await orderDetail(actor, order.id);
   assert.equal(detail.customer.country, 'UAE');
@@ -62,10 +65,24 @@ test('成交自动建单：幂等、人民币换算、按客户隔离', async ()
   const hidden = await orderList(sales, { q: order.orderNo });
   assert.equal(hidden.orders.length, 0);
   await assert.rejects(() => orderDetail(sales, order.id), (e: { status?: number }) => e.status === 404);
+  await assert.rejects(() => changeOrderMilestone(sales, order.id, { status: 'PRODUCING', expectedUpdatedAt: order.updatedAt.toISOString() }), (e: { status?: number }) => e.status === 404);
 
-  // 提醒口径：定金未付计入「待付款」
-  const reminder = await orderList(actor, { q: order.orderNo });
-  assert.ok(reminder.reminders.pendingPayment >= 1);
+  // 展开行切换主阶段，同时更新相应生产/物流细项，不改付款记录。
+  const moved = await changeOrderMilestone(actor, order.id, { status: 'SHIPPED', expectedUpdatedAt: order.updatedAt.toISOString() });
+  assert.equal(moved.status, 'SHIPPED');
+  assert.deepEqual(moved.progress.done, [true, true, true, true, false, false, false]);
+  const shipped = await db.order.findUniqueOrThrow({ where: { id: order.id } });
+  assert.equal(shipped.productionStatus, 'DONE');
+  assert.equal(shipped.shippingStatus, 'SHIPPED');
+  assert.equal(shipped.paymentStatus, 'UNPAID');
+  await assert.rejects(() => changeOrderMilestone(actor, order.id, { status: 'COMPLETED', expectedUpdatedAt: new Date(order.updatedAt.getTime() - 1000).toISOString() }), (e: { status?: number }) => e.status === 409);
+
+  const delivered = await changeOrderMilestone(actor, order.id, { status: 'COMPLETED', expectedUpdatedAt: moved.updatedAt });
+  assert.equal(delivered.status, 'COMPLETED');
+  assert.equal((await db.order.findUniqueOrThrow({ where: { id: order.id } })).shippingStatus, 'DELIVERED');
+  await db.order.update({ where: { id: order.id }, data: { status: 'CANCELLED' } });
+  await assert.rejects(() => changeOrderMilestone(actor, order.id, { status: 'PRODUCING', expectedUpdatedAt: delivered.updatedAt }), (e: { status?: number }) => e.status === 409);
+
  } finally {
   await db.order.deleteMany({ where: { customerId: customer.id } });
   await db.deal.delete({ where: { id: deal.id } });

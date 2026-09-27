@@ -160,6 +160,34 @@
 .bos-overdue{color:#a44b36;font-weight:600}
 .bos-order-view{display:inline-flex;align-items:center;gap:3px;font-size:12px;color:var(--bos-green);white-space:nowrap}
 .bos-row-review{background:#fdfaf5}
+.bos-order-customer-toggle{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:0;border:0;background:transparent;color:var(--bos-ink);font-weight:600;text-align:left}
+.bos-order-customer-toggle span{overflow:hidden;text-overflow:ellipsis}
+.bos-order-customer-toggle svg{flex:none;color:#87988e;transition:transform .18s ease}
+.bos-order-customer-toggle[aria-expanded=true] svg{transform:rotate(180deg)}
+.bos-order-customer-toggle:hover{color:var(--bos-green)}
+.bos .bos-table tbody tr.bos-order-expanded-row:hover,.bos .bos-table tr.bos-order-expanded-row{background:#f7faf7}
+.bos .bos-table tr.bos-order-expanded-row>td{padding:0 16px 18px;border-bottom:1px solid var(--bos-border)}
+.bos-order-expanded-content{padding:18px 22px 16px;border-radius:14px;background:#f4f7f3;min-width:630px}
+.bos-order-expanded-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+.bos-order-expanded-heading>div{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.bos-order-expanded-heading strong{font-size:14px;color:var(--bos-ink)}
+.bos-order-expanded-heading span,.bos-order-milestone-note{font-size:12px;color:#6c7c71}
+.bos-order-expanded-heading a{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;color:var(--bos-green);white-space:nowrap}
+.bos-order-milestones{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.bos-order-milestone{display:flex;align-items:center;gap:8px;min-height:48px;padding:8px 10px;border:1px solid #dde6de;border-radius:11px;background:#fff;color:#557060;text-align:left;font-size:12px;font-weight:600;transition:transform .16s ease,background .16s ease,border-color .16s ease,box-shadow .16s ease}
+.bos-order-milestone:not(:disabled):hover{transform:translateY(-2px);border-color:#79a58d;box-shadow:0 4px 12px #164b3a12}
+.bos-order-milestone:active{transform:translateY(0)}
+.bos-order-milestone.is-current{background:var(--bos-green);border-color:var(--bos-green);color:#fff}
+.bos-order-milestone.is-done{background:#e8f2ea;border-color:#d5e7d9;color:var(--bos-green)}
+.bos-order-milestone-marker{display:grid;place-items:center;width:25px;height:25px;flex:none;border-radius:50%;background:#edf1ed;color:#658173;font-size:10px}
+.bos-order-milestone.is-current .bos-order-milestone-marker{background:#ffffff2a;color:#fff}
+.bos-order-milestone.is-done .bos-order-milestone-marker{background:#d3e7d7;color:var(--bos-green)}
+.bos-order-milestone small{margin:0 0 0 auto;color:inherit;font-size:10px}
+.bos-order-milestone-note{margin:12px 0 0!important}
+.bos-order-milestone-feedback{margin:8px 0 0!important;font-size:12px;color:var(--bos-green)}
+.bos-order-milestone-feedback.is-error{color:#a44b36}
+@media(max-width:900px){.bos-order-expanded-content{min-width:560px}.bos-order-milestones{gap:5px}.bos-order-milestone{padding:7px 6px;gap:5px}}
+@media(prefers-reduced-motion:reduce){.bos-order-customer-toggle svg,.bos-order-milestone{transition:none}}
 
 /* 横向进度：绿点＝已完成，绿线＝已经过阶段，灰点＝未完成 */
 .bos-timeline{display:flex;align-items:flex-start;min-width:236px}

@@ -1,8 +1,10 @@
 'use client';
+import { Fragment,useEffect,useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle,ArrowUpRight,Download,Plus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { AlertTriangle,ArrowUpRight,Check,ChevronDown,Download,Plus } from 'lucide-react';
 import { Card,EmptyState,Header,Table } from '@/components/ui/bos';
-import { ORDER_STAGES } from '@/lib/order-status';
+import { ORDER_MILESTONES,ORDER_STAGES,ORDER_STATUS,stageProgress,type OrderMilestone } from '@/lib/order-status';
 
 /**
  * 订单管理
@@ -29,6 +31,7 @@ export type OrderRow = {
   sourceAmount: string | null;
   status: string;
   statusLabel: string;
+  updatedAt: string;
   paymentLabel: string;
   productionLabel: string;
   shippingLabel: string;
@@ -102,6 +105,40 @@ function Timeline({ progress }: { progress: OrderRow['progress'] }) {
 }
 
 export function OrderManagement({ data }: { data: OrdersData }) {
+  const router = useRouter();
+  const [rows, setRows] = useState(data.orders);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ orderId: string; error: boolean; message: string } | null>(null);
+  useEffect(() => { setRows(data.orders); }, [data.orders]);
+
+  async function selectMilestone(order: OrderRow, status: OrderMilestone) {
+    if (busyId || order.status === status || order.status === 'CANCELLED') return;
+    setBusyId(order.id);
+    setFeedback(null);
+    setRows(current => current.map(row => row.id === order.id ? {
+      ...row, status, statusLabel: ORDER_STATUS[status], progress: stageProgress(status),
+    } : row));
+    try {
+      const response = await fetch(`/api/orders/${encodeURIComponent(order.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, expectedUpdatedAt: order.updatedAt }),
+      });
+      const result: { success: boolean; data?: Pick<OrderRow, 'status' | 'statusLabel' | 'updatedAt' | 'progress'>; error?: string } = await response.json();
+      if (!response.ok || !result.success || !result.data) throw new Error(result.error || '订单阶段更新失败');
+      const updated = result.data;
+      setRows(current => current.map(row => row.id === order.id ? { ...row, ...updated } : row));
+      setFeedback({ orderId: order.id, error: false, message: `已切换为${updated.statusLabel}` });
+      router.refresh();
+    } catch (error) {
+      setRows(current => current.map(row => row.id === order.id ? order : row));
+      setFeedback({ orderId: order.id, error: true, message: error instanceof Error ? error.message : '订单阶段更新失败' });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const { query, reminders, tabs } = data;
   const reminderRows = [
     ['待付款', reminders.pendingPayment],
@@ -172,13 +209,22 @@ export function OrderManagement({ data }: { data: OrdersData }) {
             caption="订单列表"
             headings={['订单号', '客户名称', '国家', '订单金额', '下单日期', '预计到货', '当前状态', '订单进度', '操作']}
           >
-            {data.orders.map(order => (
-              <tr key={order.id} className={order.overdue ? 'bos-row-review' : undefined}>
+            {rows.map(order => (
+              <Fragment key={order.id}>
+              <tr className={order.overdue ? 'bos-row-review' : undefined}>
                 <td>
                   <Link href={`/orders/detail/${order.id}`}><strong>{order.orderNo}</strong></Link>
                 </td>
                 <td>
-                  {order.customer.name}
+                  <button
+                    type="button"
+                    className="bos-order-customer-toggle"
+                    aria-expanded={expandedId === order.id}
+                    aria-controls={`order-milestones-${order.id}`}
+                    onClick={() => { setExpandedId(expandedId === order.id ? null : order.id); setFeedback(null); }}
+                  >
+                    <span>{order.customer.name}</span><ChevronDown size={14} aria-hidden="true" />
+                  </button>
                   {order.customer.companyName && <small>{order.customer.companyName}</small>}
                 </td>
                 <td>{order.customer.country || '—'}</td>
@@ -196,6 +242,42 @@ export function OrderManagement({ data }: { data: OrdersData }) {
                   </Link>
                 </td>
               </tr>
+              {expandedId === order.id && (
+                <tr className="bos-order-expanded-row">
+                  <td colSpan={9}>
+                    <div id={`order-milestones-${order.id}`} className="bos-order-expanded-content">
+                      <div className="bos-order-expanded-heading">
+                        <div><strong>{order.customer.name} · {order.orderNo}</strong><span>当前阶段：{order.statusLabel}</span></div>
+                        <Link href={`/orders/detail/${order.id}`}>查看订单详情<ArrowUpRight size={13} /></Link>
+                      </div>
+                      <div className="bos-order-milestones" role="group" aria-label={`${order.customer.name}的订单阶段`}>
+                        {ORDER_MILESTONES.map((milestone, index) => {
+                          const currentIndex = ORDER_MILESTONES.indexOf(order.status as OrderMilestone);
+                          const isCurrent = order.status === milestone;
+                          const isDone = currentIndex > index;
+                          return (
+                            <button
+                              key={milestone}
+                              type="button"
+                              className={`bos-order-milestone${isCurrent ? ' is-current' : ''}${isDone ? ' is-done' : ''}`}
+                              aria-pressed={isCurrent}
+                              disabled={busyId === order.id || order.status === 'CANCELLED'}
+                              onClick={() => void selectMilestone(order, milestone)}
+                            >
+                              <span className="bos-order-milestone-marker">{isDone ? <Check size={13} aria-hidden="true" /> : String(index + 1).padStart(2, '0')}</span>
+                              <span>{ORDER_STATUS[milestone]}</span>
+                              {isCurrent && <small>当前</small>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="bos-order-milestone-note">{order.status === 'CANCELLED' ? '已取消订单不能切换阶段。' : '点击阶段即可更新订单状态；付款记录单独管理，不会随阶段改变。'}</p>
+                      {feedback?.orderId === order.id && <p className={`bos-order-milestone-feedback${feedback.error ? ' is-error' : ''}`} role={feedback.error ? 'alert' : 'status'}>{feedback.message}</p>}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </Table>
 
