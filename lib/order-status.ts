@@ -16,6 +16,10 @@ export const ORDER_STATUS = {
 
 export type OrderStatus = keyof typeof ORDER_STATUS;
 
+/** 可从订单列表直接切换的主状态；付款、清关等细项仍由各自字段记录。 */
+export const ORDER_MILESTONES = ['PENDING_PAYMENT', 'PRODUCING', 'SHIPPED', 'IN_TRANSIT', 'COMPLETED'] as const;
+export type OrderMilestone = typeof ORDER_MILESTONES[number];
+
 /** 固定七段流程，顺序即进度条顺序。 */
 export const ORDER_STAGES = ['下单', '付款', '生产', '发货', '运输', '清关', '收货'] as const;
 

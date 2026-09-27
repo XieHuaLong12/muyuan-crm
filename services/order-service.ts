@@ -2,10 +2,42 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
-import { ORDER_STAGES,ORDER_STATUS,PAYMENT_STATUS,PRODUCTION_STATUS,SHIPPING_STATUS,stageProgress,type OrderStatus } from '@/lib/order-status';
+import { ORDER_MILESTONES,ORDER_STAGES,ORDER_STATUS,PAYMENT_STATUS,PRODUCTION_STATUS,SHIPPING_STATUS,stageProgress,type OrderMilestone,type OrderStatus } from '@/lib/order-status';
+import { retryTransaction } from '@/lib/transaction-retry';
 // 供 API 与导出复用
 export { ORDER_STAGES,ORDER_STATUS,PAYMENT_STATUS,PRODUCTION_STATUS,SHIPPING_STATUS,stageProgress };
 export type { OrderStatus };
+
+export const orderMilestoneInput = z.object({
+  status: z.enum(ORDER_MILESTONES),
+  expectedUpdatedAt: z.string().datetime({ offset: true }),
+});
+
+const milestoneFields: Record<OrderMilestone, { productionStatus: string; shippingStatus: string }> = {
+  PENDING_PAYMENT: { productionStatus: 'NOT_STARTED', shippingStatus: 'NOT_SHIPPED' },
+  PRODUCING: { productionStatus: 'IN_PROGRESS', shippingStatus: 'NOT_SHIPPED' },
+  SHIPPED: { productionStatus: 'DONE', shippingStatus: 'SHIPPED' },
+  IN_TRANSIT: { productionStatus: 'DONE', shippingStatus: 'IN_TRANSIT' },
+  COMPLETED: { productionStatus: 'DONE', shippingStatus: 'DELIVERED' },
+};
+
+/** 只更新有权限查看的单笔订单；版本条件避免覆盖另一位销售刚做的修改。 */
+export async function changeOrderMilestone(user: Actor, id: string, input: unknown) {
+  const { status, expectedUpdatedAt } = orderMilestoneInput.parse(input);
+  const current = await db.order.findFirst({ where: orderWhere(user, { id }), select: { status: true, updatedAt: true } });
+  if (!current) throw new HttpError(404, '订单不存在或无权修改');
+  if (current.status === 'CANCELLED') throw new HttpError(409, '已取消订单不能切换阶段');
+  if (current.updatedAt.toISOString() !== expectedUpdatedAt) throw new HttpError(409, '订单已被其他人更新，请刷新后重试');
+  if (current.status !== status) {
+    const result = await retryTransaction(() => db.order.updateMany({
+      where: orderWhere(user, { id, updatedAt: current.updatedAt, status: { not: 'CANCELLED' } }),
+      data: { status, ...milestoneFields[status] },
+    }));
+    if (result.count !== 1) throw new HttpError(409, '订单已被其他人更新，请刷新后重试');
+  }
+  const updated = await db.order.findFirstOrThrow({ where: orderWhere(user, { id }), select: { status: true, updatedAt: true } });
+  return { status: updated.status, statusLabel: ORDER_STATUS[updated.status as OrderStatus] ?? updated.status, updatedAt: updated.updatedAt.toISOString(), progress: stageProgress(updated.status) };
+}
 
 /**
  * 订单管理
@@ -121,6 +153,7 @@ export async function orderList(user: Actor, input: unknown = {}) {
       sourceAmount: order.sourceAmount ? order.sourceAmount.toFixed(2) : null,
       status: order.status,
       statusLabel: ORDER_STATUS[order.status as OrderStatus] ?? order.status,
+      updatedAt: order.updatedAt.toISOString(),
       paymentStatus: order.paymentStatus,
       paymentLabel: PAYMENT_STATUS[order.paymentStatus as keyof typeof PAYMENT_STATUS] ?? order.paymentStatus,
       productionLabel: PRODUCTION_STATUS[order.productionStatus as keyof typeof PRODUCTION_STATUS] ?? order.productionStatus,
