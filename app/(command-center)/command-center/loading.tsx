@@ -1,2 +1,3 @@
-import { LogoLoading } from '@/components/ui/motion';
-export default function Loading(){return <div className="bos"><LogoLoading/></div>;}
+export default function Loading() {
+ return <div className="business-cockpit cockpit-loading" aria-label="经营驾驶舱正在加载" role="status"><div className="cockpit-loading-header"><span className="cockpit-skeleton"/><span className="cockpit-skeleton"/></div><div className="cockpit-kpis">{Array.from({ length: 6 }, (_, index) => <div className="cockpit-kpi" key={index}><span className="cockpit-skeleton"/><span className="cockpit-skeleton"/><span className="cockpit-skeleton"/></div>)}</div><div className="cockpit-primary-grid"><div className="cockpit-card cockpit-skeleton-panel"/><div className="cockpit-card cockpit-skeleton-panel"/></div></div>;
+}
