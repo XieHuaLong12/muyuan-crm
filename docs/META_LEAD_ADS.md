@@ -40,7 +40,7 @@ Facebook 广告表单
 ### 1. 浏览器验证（最快）
 
 ```
-https://avenee.online/api/leads/webhook?hub.mode=subscribe&hub.verify_token=<TOKEN>&hub.challenge=test123
+https://avenlee.online/api/leads/webhook?hub.mode=subscribe&hub.verify_token=<TOKEN>&hub.challenge=test123
 ```
 
 - 页面显示 **`test123`** → 通过
@@ -65,10 +65,22 @@ FROM MetaLeadEvent ORDER BY createdAt DESC LIMIT 10;
 | status | 含义 |
 |---|---|
 | `RECEIVED` | 已登记，正在处理 |
+| `PROCESSING` | 处理器已认领；若进程中断，5 分钟后重试可重新认领 |
 | `CREATED` | 已创建新客户 |
 | `LINKED` | **已有相同邮箱/电话的客户，已关联而不重复创建** |
 | `SKIPPED` | 该 `leadgen_id` 已处理过（Meta 重推） |
 | `FAILED` | 失败，`error` 列有原因（多为 token 缺失或权限不足） |
+
+签名正确但 `entry: []` 的测试包只证明入口和验签可用，不会产生 `MetaLeadEvent` 或客户。要验证入库，必须用真实表单产生带 `leadgen_id` 的事件。
+
+### 生产定位顺序
+
+1. 在 Meta Lead Ads Testing Tool 对目标 Page 的真实 Instant Form 创建一条**新的**测试 Lead，并记录时间和测试工具的投递状态。确认该 App 在 Meta Business Settings → Integrations → Leads Access 的该 Page 下获准访问，且 Webhooks → Page 已订阅 `leadgen`。若工具仍为 Pending，先查 Page 对 App 的订阅与 Lead Access；广告账户和表单目录同步成功不等于 Lead Webhook 已投递。
+2. 在 Hostinger 同一时间段日志中按 `[meta-lead] POST received` 检索。如果没有该日志，Meta 没有到达此入口，检查 Meta App 的 Callback URL、Page 订阅、投递记录和 Hostinger 代理/WAF。如果有 `signature failed`，核对 Meta App 对应的 `META_APP_SECRET`。
+3. 看 `payload parsed` 的 `accepted`。`0` 表示该请求没有 `leadgen` 变更；正数表示已提取事件。随后查 `SELECT leadgenId, pageId, formId, status, customerId, error, createdAt FROM MetaLeadEvent ORDER BY createdAt DESC LIMIT 20;`。
+4. `FAILED` 且 `Graph API HTTP ... code ...` 时，用**同一个 Page Token**在 Meta Graph API Explorer 读取该测试 `leadgen_id`，核对 token 的 Page ID、`leads_retrieval` 权限和 Leads Access。不要把 token、App Secret 或完整客户信息贴到工单或日志。`CREATED` / `LINKED` 则说明入库已成功，再到 CRM 核对客户筛选条件。
+
+部署时必须先执行 Prisma migration，再启动新版应用；否则新增的处理认领字段会导致数据库查询失败。无需新增环境变量；继续使用当前的 `META_APP_SECRET`、`META_PAGE_ACCESS_TOKEN`，以及可选的 `META_GRAPH_VERSION`。
 
 ## 字段映射
 

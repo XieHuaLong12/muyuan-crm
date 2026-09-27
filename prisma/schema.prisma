@@ -712,6 +712,7 @@ model MetaLeadEvent {
  // RECEIVED | CREATED | LINKED | SKIPPED | FAILED
  status String @default("RECEIVED") @db.VarChar(16)
  error String @db.Text
+ processingStartedAt DateTime?
  createdAt DateTime @default(now())
  @@index([formId, createdAt])
  @@index([customerId])
