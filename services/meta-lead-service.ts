@@ -245,7 +245,7 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
     return { leadgenId: event.leadgenId, status: 'CREATED' as const, customerId: created.id, reason: '' };
   } catch (error) {
     const reason = safeReason(error);
-    console.error('[meta-lead] customer processing failed', { requestId, leadgenId: event.leadgenId, error: reason });
+    console.error('[meta-lead] customer processing failed', { requestId, leadgenId: event.leadgenId, errorType: error instanceof Error ? error.name : 'unknown' });
     await mark(event.leadgenId, claimedAt, 'FAILED', null, reason);
     return { leadgenId: event.leadgenId, status: 'FAILED' as const, customerId: null, reason };
   }
