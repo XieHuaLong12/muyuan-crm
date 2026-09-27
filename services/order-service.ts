@@ -69,7 +69,7 @@ export async function orderList(user: Actor, input: unknown = {}) {
       where,
       include: {
         customer: { select: { id: true, name: true, companyName: true, country: true, whatsapp: true, email: true, phone: true } },
-        deal: { select: { id: true, orderNumber: true, dealDate: true, currency: true, dealAmount: true,product:true,grossProfit:true } },
+        deal: { select: { id: true, orderNumber: true, dealDate: true, currency: true, dealAmount: true } },
       },
       orderBy: [{ orderDate: 'desc' }, { id: 'asc' }],
       skip: (query.page - 1) * PAGE_SIZE,
@@ -119,9 +119,6 @@ export async function orderList(user: Actor, input: unknown = {}) {
       amountRMB: order.amountRMB.toFixed(2),
       currency: order.currency,
       sourceAmount: order.sourceAmount ? order.sourceAmount.toFixed(2) : null,
-      product: order.deal?.product || '',
-      grossProfit: user.role==='ADMIN'&&order.deal?order.deal.grossProfit.toFixed(2):null,
-      profitCurrency: user.role==='ADMIN'&&order.deal?order.deal.currency:null,
       status: order.status,
       statusLabel: ORDER_STATUS[order.status as OrderStatus] ?? order.status,
       paymentStatus: order.paymentStatus,
