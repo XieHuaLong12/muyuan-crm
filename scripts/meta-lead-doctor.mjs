@@ -4,7 +4,6 @@
  *
  * 用法：
  *   node scripts/meta-lead-doctor.mjs                    # 只做只读检查
- *   node scripts/meta-lead-doctor.mjs --push-duplicate   # 追加「重复推送不重复建客户」验证
  *
  * 它依次检查：环境变量 → Webhook 验证 → Graph API → Page 订阅。
  * **绝不打印任何密钥内容**，只报告存在与否。
@@ -19,7 +18,7 @@ import { existsSync } from 'node:fs';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
 
-const DOMAIN = process.env.PUBLIC_APP_URL?.trim() || 'https://avenee.online';
+const DOMAIN = process.env.PUBLIC_APP_URL?.trim() || 'https://avenlee.online';
 const PAGE_ID = process.env.META_PAGE_ID?.trim() || '888983754306369';
 const VERSION = process.env.META_GRAPH_VERSION?.trim() || 'v26.0';
 
@@ -126,15 +125,12 @@ async function main() {
     }
   }
 
-  section('5. 模拟 Meta 推送（验签 + 接收）');
+  section('5. 空 entry 签名探针（仅验证入口，不写客户或事件）');
   const appSecret = process.env.META_APP_SECRET?.trim();
   if (!appSecret) {
     record('POST 模拟', false, '跳过：META_APP_SECRET 未配置');
   } else {
-    const body = JSON.stringify({
-      object: 'page',
-      entry: [{ id: PAGE_ID, changes: [{ field: 'leadgen', value: { leadgen_id: 'doctor-probe', page_id: PAGE_ID, form_id: '1701505577692059' } }] }],
-    });
+    const body = JSON.stringify({ object: 'page', entry: [] });
     const signature = `sha256=${createHmac('sha256', appSecret).update(body, 'utf8').digest('hex')}`;
     try {
       const response = await fetch(`${DOMAIN}/api/leads/webhook`, {
@@ -145,7 +141,7 @@ async function main() {
       const text = (await response.text()).trim();
       if (response.status === 200) {
         record('POST 验签通过', true, `HTTP 200 ${text}`);
-        console.log('   注意：这是探针 leadgen_id，Graph API 查不到它，会以 FAILED 记入 MetaLeadEvent —— **不会创建客户**。');
+        console.log('   这仅验证入口和验签；要验证入库，请在真实 Instant Form 提交新测试 Lead。');
       } else if (response.status === 401) {
         record('POST 验签通过', false, 'HTTP 401 —— META_APP_SECRET 与 Meta App 的不一致');
       } else {
@@ -176,7 +172,7 @@ async function main() {
     for (const f of failed) console.log(`  ✗ ${f.step} — ${f.detail}`);
     process.exitCode = 1;
   } else {
-    console.log('\n全部通过。Meta 后台点「验证并保存」即可。');
+    console.log('\n入口检查通过。请用真实 Instant Form 新测试 Lead 验证投递、Graph 读取及客户入库。');
   }
 }
 

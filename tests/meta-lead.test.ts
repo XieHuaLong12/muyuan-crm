@@ -93,7 +93,7 @@ test('解析 Meta 推送体，只取 leadgen 字段', () => {
       id: 'page-1',
       changes: [
         { field: 'leadgen', value: { leadgen_id: 'LEAD_A', page_id: 'page-1', form_id: 'form-9' } },
-        { field: 'feed', value: { leadgen_id: 'IGNORED', page_id: 'page-1', form_id: 'x' } },
+        { field: 'feed', value: { post_id: 'post-1' } },
       ],
     }],
   });
@@ -148,7 +148,7 @@ test('Webhook 预登记 RECEIVED 不得跳过导入；只跳过已成功处理�
 
 test('Webhook 应等待事件处理完成，并对失败返回可重试响应', () => {
   const service = readFileSync(new URL('../services/meta-lead-service.ts', import.meta.url), 'utf8');
-  assert.ok(service.includes('const results = await Promise.all('));
+  assert.ok(service.includes('results.push(await handleLeadgenEvent('));
   assert.equal(service.includes('void Promise.all('), false);
   for (const route of ['leads', 'meta']) {
     const source = readFileSync(new URL(`../app/api/${route}/webhook/route.ts`, import.meta.url), 'utf8');

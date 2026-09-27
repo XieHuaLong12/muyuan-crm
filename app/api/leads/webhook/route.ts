@@ -98,24 +98,25 @@ export async function POST(req: NextRequest) {
   const verified = verifyMetaSignature(raw, req.headers.get('x-hub-signature-256'));
   if (!verified.ok) {
     // 签名不通过一律 401，且不落库 —— 防止伪造推送往客户库灌数据
-    console.warn('[meta-lead] 签名校验失败', { requestId, reason: verified.reason });
+    console.warn('[meta-lead] signature failed', { requestId, reason: verified.reason });
     return new Response('unauthorized', {
       status: 401,
       headers: { 'Content-Type': 'text/plain' },
     });
   }
+  console.info('[meta-lead] signature valid', { requestId });
 
   let body: unknown;
   try {
     body = JSON.parse(raw);
   } catch {
-    console.warn('[meta-lead] invalid json', { requestId });
+    console.warn('[meta-lead] invalid payload', { requestId, reason: 'invalid json' });
     return new Response('invalid json', { status: 400 });
   }
 
   try {
-    const result = await handleWebhookPayload(body);
-    console.info('[meta-lead] POST parsed', {
+    const result = await handleWebhookPayload(body, requestId);
+    console.info('[meta-lead] processing summary', {
       requestId,
       accepted: result.accepted,
       statuses: result.results.map(item => item.status),
@@ -127,12 +128,13 @@ export async function POST(req: NextRequest) {
       console.warn('[meta-lead] no leadgen changes in signed payload', { requestId });
     }
     if (result.error) {
-      console.warn('[meta-lead] 线索处理失败，等待 Meta 重试', { requestId, error: result.error });
+      if (!result.accepted) console.warn('[meta-lead] invalid payload', { requestId });
+      console.warn('[meta-lead] customer processing failed', { requestId, failed: result.results.filter(item => item.status === 'FAILED').length });
       return new Response('processing failed', { status: 503 });
     }
     console.log(`[meta-lead] 已处理 ${result.accepted} 条 leadgen 事件`);
   } catch (error) {
-    console.error('[meta-lead] 处理推送失败，等待 Meta 重试', { requestId, error });
+    console.error('[meta-lead] customer processing failed', { requestId, errorType: error instanceof Error ? error.name : 'unknown' });
     return new Response('processing failed', { status: 503 });
   }
 

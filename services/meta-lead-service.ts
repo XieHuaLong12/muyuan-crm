@@ -18,6 +18,17 @@ import { mapLeadFields, type LeadField } from '@/lib/meta-lead-fields';
  */
 
 const DAY = 86_400_000;
+const CLAIM_TIMEOUT_MS = 5 * 60_000;
+
+function safeReason(value: unknown) {
+  if (value instanceof Prisma.PrismaClientKnownRequestError) {
+    const column = typeof value.meta?.column_name === 'string' ? ` column ${value.meta.column_name}` : '';
+    return `Prisma ${value.code}${column}`;
+  }
+  const message = value instanceof Error ? value.message : String(value);
+  const token = process.env.META_PAGE_ACCESS_TOKEN;
+  return (token ? message.replaceAll(token, '[redacted]') : message).slice(0, 2000);
+}
 
 /** Graph API 版本走配置，不硬编码：Meta 每约两年废弃一次版本号。 */
 export function graphVersion() {
@@ -51,18 +62,20 @@ const webhookPayload = z.object({
       changes: z.array(
         z.object({
           field: z.string(),
-          value: z.object({
-            leadgen_id: z.string().min(1),
-            page_id: z.string().default(''),
-            form_id: z.string().default(''),
-            created_time: z.number().optional(),
-            ad_id: z.string().optional(),
-            adgroup_id: z.string().optional(),
-          }),
+          value: z.unknown(),
         }),
       ).default([]),
     }),
   ).default([]),
+});
+
+const leadgenValue = z.object({
+  leadgen_id: z.string().min(1),
+  page_id: z.string().optional(),
+  form_id: z.string().optional(),
+  created_time: z.union([z.number(), z.string()]).optional(),
+  ad_id: z.string().optional(),
+  adgroup_id: z.string().optional(),
 });
 
 export type LeadgenEvent = { leadgenId: string; pageId: string; formId: string };
@@ -79,10 +92,11 @@ export function extractLeadgenEvents(body: unknown): LeadgenEvent[] {
   for (const entry of parsed.entry) {
     for (const change of entry.changes) {
       if (change.field !== 'leadgen') continue;
+      const value = leadgenValue.parse(change.value);
       out.push({
-        leadgenId: change.value.leadgen_id,
-        pageId: change.value.page_id || entry.id || '',
-        formId: change.value.form_id || '',
+        leadgenId: value.leadgen_id,
+        pageId: value.page_id || entry.id || '',
+        formId: value.form_id || '',
       });
     }
   }
@@ -113,20 +127,29 @@ export async function fetchLead(leadgenId: string) {
   if (!token) return { ok: false as const, error: 'META_PAGE_ACCESS_TOKEN 未配置' };
 
   const url = new URL(`https://graph.facebook.com/${graphVersion()}/${encodeURIComponent(leadgenId)}`);
-  url.searchParams.set('access_token', token);
   url.searchParams.set('fields', 'id,created_time,field_data,form_id,ad_id,adset_id,campaign_id');
 
   try {
-    const response = await fetch(url, { cache: 'no-store' });
+    const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000), headers: { Authorization: `Bearer ${token}` } });
     const text = await response.text();
     if (!response.ok) {
-      return { ok: false as const, error: `Graph API ${response.status}: ${text.slice(0, 300)}` };
+      let graphCode: number | undefined;
+      let graphSubcode: number | undefined;
+      let graphMessage = '请求失败';
+      try {
+        const responseError = JSON.parse(text) as { error?: { code?: number; error_subcode?: number; message?: string } };
+        graphCode = responseError.error?.code;
+        graphSubcode = responseError.error?.error_subcode;
+        graphMessage = responseError.error?.message || graphMessage;
+      } catch { /* Non-JSON error response: HTTP status remains diagnostic. */ }
+      const error = safeReason(`Graph API HTTP ${response.status}${graphCode === undefined ? '' : ` code ${graphCode}`}${graphSubcode === undefined ? '' : ` subcode ${graphSubcode}`}: ${graphMessage}`);
+      return { ok: false as const, error, httpStatus: response.status, graphCode };
     }
     const parsed = graphLead.safeParse(JSON.parse(text));
-    if (!parsed.success) return { ok: false as const, error: `Graph API 返回格式异常: ${parsed.error.message.slice(0, 200)}` };
+    if (!parsed.success) return { ok: false as const, error: `Graph API HTTP ${response.status}: 返回格式异常` };
     return { ok: true as const, lead: parsed.data, raw: text };
   } catch (error) {
-    return { ok: false as const, error: `Graph API 请求失败: ${error instanceof Error ? error.message : String(error)}` };
+    return { ok: false as const, error: `Graph API 请求失败: ${safeReason(error)}` };
   }
 }
 
@@ -136,11 +159,12 @@ async function defaultActor(): Promise<Actor> {
   return owner;
 }
 
-async function mark(id: string, status: string, customerId: string | null, error = '') {
-  await db.metaLeadEvent.update({
-    where: { leadgenId: id },
-    data: { status, customerId, error: error.slice(0, 2000) },
-  }).catch(() => undefined);
+async function mark(id: string, claimedAt: Date, status: 'FAILED' | 'LINKED', customerId: string | null, error = '', attribution?: { adId: string | null; campaignId: string | null; rawPayload: Prisma.InputJsonValue }) {
+  const result = await db.metaLeadEvent.updateMany({
+    where: { leadgenId: id, status: 'PROCESSING', processingStartedAt: claimedAt },
+    data: { ...attribution, status, customerId, error: safeReason(error), processingStartedAt: null },
+  });
+  if (result.count !== 1) throw new Error('Meta lead processing claim expired');
 }
 
 /**
@@ -148,78 +172,98 @@ async function mark(id: string, status: string, customerId: string | null, error
  *
  * 返回结构用于日志与测试；任何一步失败都会把原因写进 MetaLeadEvent.error。
  */
-export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown) {
+export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, requestId?: string) {
   // 幂等：同一个 leadgenId 已经处理过就直接返回，避免 Meta 重推造成重复客户
-  const existing = await db.metaLeadEvent.findUnique({ where: { leadgenId: event.leadgenId }, select: { id: true, status: true, customerId: true } });
+  const existing = await db.metaLeadEvent.findUniqueOrThrow({ where: { leadgenId: event.leadgenId }, select: { status: true, customerId: true } });
   if (existing && shouldSkipProcessedLead(existing.status)) {
     return { leadgenId: event.leadgenId, status: 'SKIPPED' as const, customerId: existing.customerId, reason: '已处理过该 leadgen_id' };
   }
 
-  const record = existing
-    ? await db.metaLeadEvent.update({ where: { leadgenId: event.leadgenId }, data: { status: 'RECEIVED', error: '', pageId: event.pageId, formId: event.formId } })
-    : await db.metaLeadEvent.create({ data: { leadgenId: event.leadgenId, pageId: event.pageId, formId: event.formId, rawPayload: payload as Prisma.InputJsonValue, error: '' } });
-
-  const lead = await fetchLead(event.leadgenId);
-  if (!lead.ok) {
-    await mark(event.leadgenId, 'FAILED', null, lead.error);
-    return { leadgenId: event.leadgenId, status: 'FAILED' as const, customerId: null, reason: lead.error };
-  }
-
-  // 广告归因落库：无论后续是新建还是关联客户，都要记录线索来自哪条广告
-  await db.metaLeadEvent.update({
-    where: { leadgenId: event.leadgenId },
-    data: { adId: lead.lead.ad_id ?? null, campaignId: lead.lead.campaign_id ?? null },
-  }).catch(() => undefined);
-
-  const fields: LeadField[] = lead.lead.field_data.flatMap(item =>
-    item.values.map(value => ({ name: item.name, label: item.name, value })),
-  );
-  const mapped = mapLeadFields(fields, { leadgenId: event.leadgenId, formId: event.formId });
-  const actor = await defaultActor();
-
-  // 已有同邮箱/同电话的客户 → 关联而不新建（需求第六步）
-  const matched = await duplicates({ email: mapped.email, phone: mapped.phone, whatsapp: mapped.whatsapp });
-  if (matched.length) {
-    await mark(event.leadgenId, 'LINKED', matched[0].id);
-    return { leadgenId: event.leadgenId, status: 'LINKED' as const, customerId: matched[0].id, reason: '已有相同邮箱或电话的客户，已关联而不重复创建' };
-  }
-
-  const created = await saveCustomer(
-    {
-      name: mapped.name,
-      companyName: mapped.companyName,
-      country: mapped.country,
-      phone: mapped.phone,
-      whatsapp: mapped.whatsapp,
-      email: /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mapped.email) ? mapped.email : '',
-      source: 'FACEBOOK',
-      sourceDetail: 'Facebook Ads',
-      purchaseType: mapped.purchaseType,
-      productInterest: mapped.productInterest,
-      quantity: mapped.quantity,
-      notes: mapped.notes,
-      stage: 'NEW',
-      ownerId: actor.id,
+  const claimedAt = new Date();
+  const claim = await db.metaLeadEvent.updateMany({
+    where: {
+      leadgenId: event.leadgenId,
+      OR: [
+        { status: { in: ['RECEIVED', 'FAILED'] } },
+        { status: 'PROCESSING', processingStartedAt: { lt: new Date(claimedAt.getTime() - CLAIM_TIMEOUT_MS) } },
+      ],
     },
-    actor,
-  );
+    data: { status: 'PROCESSING', processingStartedAt: claimedAt, error: '', pageId: event.pageId, formId: event.formId },
+  });
+  if (claim.count !== 1) {
+    const current = await db.metaLeadEvent.findUniqueOrThrow({ where: { leadgenId: event.leadgenId }, select: { status: true, customerId: true } });
+    if (shouldSkipProcessedLead(current.status)) return { leadgenId: event.leadgenId, status: 'SKIPPED' as const, customerId: current.customerId, reason: '已处理过该 leadgen_id' };
+    return { leadgenId: event.leadgenId, status: 'FAILED' as const, customerId: null, reason: '同一 leadgen_id 正在处理，稍后重试' };
+  }
 
-  await mark(event.leadgenId, 'CREATED', created.id);
-  await db.metaLeadEvent.update({ where: { id: record.id }, data: { rawPayload: { webhook: payload, lead: JSON.parse(lead.raw) } as Prisma.InputJsonValue } });
-  return { leadgenId: event.leadgenId, status: 'CREATED' as const, customerId: created.id, reason: '' };
+  try {
+    const lead = await fetchLead(event.leadgenId);
+    if (!lead.ok) {
+      console.error('[meta-lead] graph api failed', { requestId, leadgenId: event.leadgenId, httpStatus: lead.httpStatus, graphCode: lead.graphCode });
+      await mark(event.leadgenId, claimedAt, 'FAILED', null, lead.error);
+      return { leadgenId: event.leadgenId, status: 'FAILED' as const, customerId: null, reason: lead.error };
+    }
+    console.info('[meta-lead] lead fetched', { requestId, leadgenId: event.leadgenId });
+
+    const fields: LeadField[] = lead.lead.field_data.flatMap(item =>
+      item.values.map(value => ({ name: item.name, label: item.name, value })),
+    );
+    const mapped = mapLeadFields(fields, { leadgenId: event.leadgenId, formId: event.formId });
+    const actor = await defaultActor();
+    const matched = await duplicates({ email: mapped.email, phone: mapped.phone, whatsapp: mapped.whatsapp });
+    const attribution = { adId: lead.lead.ad_id ?? null, campaignId: lead.lead.campaign_id ?? null, rawPayload: { webhook: payload, lead: JSON.parse(lead.raw) } as Prisma.InputJsonValue };
+    if (matched.length) {
+      await mark(event.leadgenId, claimedAt, 'LINKED', matched[0].id, '', attribution);
+      console.info('[meta-lead] customer linked', { requestId, leadgenId: event.leadgenId, customerId: matched[0].id });
+      return { leadgenId: event.leadgenId, status: 'LINKED' as const, customerId: matched[0].id, reason: '' };
+    }
+
+    const created = await saveCustomer(
+      {
+        name: mapped.name,
+        companyName: mapped.companyName,
+        country: mapped.country,
+        phone: mapped.phone,
+        whatsapp: mapped.whatsapp,
+        email: /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mapped.email) ? mapped.email : '',
+        source: 'FACEBOOK',
+        sourceDetail: 'Facebook Ads',
+        purchaseType: mapped.purchaseType,
+        productInterest: mapped.productInterest,
+        quantity: mapped.quantity,
+        notes: mapped.notes,
+        stage: 'NEW',
+        ownerId: actor.id,
+      },
+      actor,
+      undefined,
+      async (tx, customerId) => {
+        const updated = await tx.metaLeadEvent.updateMany({
+          where: { leadgenId: event.leadgenId, status: 'PROCESSING', processingStartedAt: claimedAt },
+          data: { ...attribution, status: 'CREATED', customerId, error: '', processingStartedAt: null },
+        });
+        if (updated.count !== 1) throw new Error('Meta lead processing claim expired');
+      },
+    );
+    console.info('[meta-lead] customer created', { requestId, leadgenId: event.leadgenId, customerId: created.id });
+    return { leadgenId: event.leadgenId, status: 'CREATED' as const, customerId: created.id, reason: '' };
+  } catch (error) {
+    const reason = safeReason(error);
+    console.error('[meta-lead] customer processing failed', { requestId, leadgenId: event.leadgenId, errorType: error instanceof Error ? error.name : 'unknown' });
+    await mark(event.leadgenId, claimedAt, 'FAILED', null, reason);
+    return { leadgenId: event.leadgenId, status: 'FAILED' as const, customerId: null, reason };
+  }
 }
 
-/**
- * 处理整包推送。Meta 要求 200 尽快返回，因此这里**串行但后台化**：
- * 先把事件登记进 MetaLeadEvent，再异步处理详情，避免 Graph API 慢导致 Meta 重试。
- */
-export async function handleWebhookPayload(body: unknown) {
+/** 先登记，再等待处理完成才 ACK；Graph 或数据库失败由 Meta 重试。 */
+export async function handleWebhookPayload(body: unknown, requestId?: string) {
   let events: LeadgenEvent[];
   try {
     events = extractLeadgenEvents(body);
   } catch (error) {
     return { accepted: 0, results: [], error: error instanceof Error ? error.message : String(error) };
   }
+  console.info('[meta-lead] payload parsed', { requestId, accepted: events.length });
   if (!events.length) return { accepted: 0, results: [], error: '' };
 
   // 登记事件（此时还没有客户），保证即使后续失败也留有痕迹
@@ -233,15 +277,10 @@ export async function handleWebhookPayload(body: unknown) {
 
   // Await processing before ACK: detached promises can be terminated after the HTTP response
   // on short-lived hosting runtimes. Meta can retry a failed request; completed leads are idempotent.
-  const results = await Promise.all(
-    events.map(event =>
-      handleLeadgenEvent(event, body).catch(async error => {
-        const reason = error instanceof Error ? error.message : String(error);
-        await mark(event.leadgenId, 'FAILED', null, reason);
-        return { leadgenId: event.leadgenId, status: 'FAILED' as const, customerId: null, reason };
-      }),
-    ),
-  );
+  const results = [];
+  for (const event of events) {
+    results.push(await handleLeadgenEvent(event, body, requestId));
+  }
 
   const failures = results.filter(result => result.status === 'FAILED');
   return {
