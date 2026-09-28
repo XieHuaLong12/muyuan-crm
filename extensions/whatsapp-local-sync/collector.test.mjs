@@ -1,8 +1,8 @@
-const test=require('node:test');
-const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const vm=require('node:vm');
-const source=fs.readFileSync(require('node:path').join(__dirname,'collector.js'),'utf8');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const source=fs.readFileSync(new URL('./collector.js',import.meta.url),'utf8');
 function collect(id='false_8613812345678@c.us_ABC',stamp='[12:42, 28/09/2026] Alice: '){
  const textNode={textContent:'Hello',closest:()=>null};
  const row={classList:{contains:x=>x==='message-in'},getAttribute:x=>x==='data-id'?id:null,
