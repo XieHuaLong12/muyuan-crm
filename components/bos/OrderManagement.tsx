@@ -181,26 +181,30 @@ export function OrderManagement({ data }: { data: OrdersData }) {
 
       <form className="bos-order-filter motion-in" style={{ '--motion-delay': '200ms' } as React.CSSProperties} action="/orders">
         <input className="bos-input" type="search" name="q" aria-label="搜索订单号、客户名称或国家" placeholder="搜索订单号 / 客户名称 / 国家" defaultValue={query.q} />
-        <select name="country" aria-label="国家" defaultValue={query.country}>
-          <option value="">全部国家</option>
-          {data.countries.map(country => (
-            <option key={country} value={country}>{country}</option>
-          ))}
-        </select>
-        <select name="tab" aria-label="全部订单阶段" defaultValue={query.tab}>
-          <option value="ALL">全部订单阶段</option>
-          {ORDER_TABS.slice(1).map(([key, label]) => (
-            <option key={key} value={key}>{label}</option>
-          ))}
-        </select>
-        <label className="bos-order-dates">
-          <span>下单时间</span>
-          <input type="date" name="from" aria-label="开始日期" defaultValue={query.from} />
-          <span className="bos-order-dash">—</span>
-          <input type="date" name="to" aria-label="结束日期" defaultValue={query.to} />
-        </label>
-        <button className="bos-button bos-button-primary" type="submit">筛选</button>
-        <Link className="bos-button" href="/orders">重置</Link>
+        <div className="bos-order-filter-controls">
+          <select name="country" aria-label="国家" defaultValue={query.country}>
+            <option value="">全部国家</option>
+            {data.countries.map(country => (
+              <option key={country} value={country}>{country}</option>
+            ))}
+          </select>
+          <select name="tab" aria-label="全部订单阶段" defaultValue={query.tab}>
+            <option value="ALL">全部订单阶段</option>
+            {ORDER_TABS.slice(1).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+          <label className="bos-order-dates">
+            <span>下单时间</span>
+            <input type="date" name="from" aria-label="开始日期" defaultValue={query.from} />
+            <span className="bos-order-dash">—</span>
+            <input type="date" name="to" aria-label="结束日期" defaultValue={query.to} />
+          </label>
+          <div className="bos-order-filter-actions">
+            <button className="bos-button bos-button-primary" type="submit">筛选</button>
+            <Link className="bos-button" href="/orders">重置</Link>
+          </div>
+        </div>
       </form>
 
       <div className="bos-order-layout motion-in" style={{ '--motion-delay': '400ms' } as React.CSSProperties}>
