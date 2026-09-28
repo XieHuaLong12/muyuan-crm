@@ -143,14 +143,19 @@
 .bos-order-tabs a b{font-size:12px;font-weight:600;padding:1px 7px;border-radius:99px;background:#f0f1f3;color:#6e6e73}
 .bos-order-tabs a[aria-current=page] b{background:rgba(255,255,255,.22);color:#fff}
 
-/* 筛选行 */
-.bos-order-filter{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:20px}
-.bos-order-filter .bos-input{min-width:260px}
-.bos-order-filter select{padding:10px 12px;border:1px solid var(--bos-border);border-radius:12px;background:#fff;font-size:13px;color:var(--bos-ink)}
-.bos-order-dates{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--bos-border);border-radius:12px;background:#fff}
-.bos-order-dates span{font-size:12px;color:#86868b}
-.bos-order-dates input{border:0;background:transparent;font-size:13px;color:var(--bos-ink);padding:4px 0}
+/* 订单筛选：搜索独占一行，其他条件与操作共用第二行 */
+.bos-order-filter{display:grid;gap:12px;margin-bottom:20px}
+.bos-order-filter .bos-input{width:100%;min-width:0;min-height:44px}
+.bos-order-filter-controls{display:grid;grid-template-columns:minmax(150px,1fr) minmax(160px,1fr) minmax(355px,1.8fr) auto;align-items:center;gap:10px;min-width:0}
+.bos-order-filter select{width:100%;min-width:0;height:44px;padding:10px 12px;border:1px solid var(--bos-border);border-radius:12px;background:#fff;font-size:13px;color:var(--bos-ink)}
+.bos-order-dates{display:grid;grid-template-columns:auto minmax(118px,1fr) auto minmax(118px,1fr);align-items:center;gap:8px;min-width:0;height:44px;padding:5px 12px;border:1px solid var(--bos-border);border-radius:12px;background:#fff}
+.bos-order-dates span{font-size:12px;color:#86868b;white-space:nowrap}
+.bos-order-dates input{width:100%;min-width:0;border:0;background:transparent;font-size:13px;color:var(--bos-ink);padding:4px 0}
 .bos-order-dash{color:#c7c7cc}
+.bos-order-filter-actions{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.bos-order-filter-actions .bos-button{min-height:44px}
+@media(max-width:1080px){.bos-order-filter-controls{grid-template-columns:repeat(2,minmax(0,1fr))}.bos-order-dates{grid-column:1/-1}.bos-order-filter-actions{grid-column:1/-1;justify-content:flex-end}}
+@media(max-width:600px){.bos-order-filter-controls{grid-template-columns:minmax(0,1fr)}.bos-order-dates,.bos-order-filter-actions{grid-column:auto}.bos-order-dates{height:auto;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);grid-template-areas:'label label label' 'from dash to';padding:9px 12px;gap:5px}.bos-order-dates>span:first-child{grid-area:label}.bos-order-dates input[name=from]{grid-area:from}.bos-order-dates input[name=to]{grid-area:to}.bos-order-dash{grid-area:dash}.bos-order-filter-actions{justify-content:stretch}.bos-order-filter-actions .bos-button{flex:1}}
 
 /* 列表 + 右侧提醒 */
 .bos-order-layout{display:grid;grid-template-columns:minmax(0,1fr) 268px;gap:20px;align-items:start}
