@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "LVANJU WhatsApp 本地同步助手",
+  "version": "0.1.0",
+  "description": "手动预览并同步 WhatsApp Web 当前已加载的聊天消息到 LVANJU BOS。",
+  "permissions": ["scripting", "tabs", "storage"],
+  "host_permissions": ["https://web.whatsapp.com/*"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "action": {"default_title": "WhatsApp 本地同步", "default_popup": "popup.html"}
+}

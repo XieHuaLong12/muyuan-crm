@@ -96,7 +96,7 @@ function parseTimestamp(value: string | undefined) {
   return Number.isFinite(seconds) && seconds > 0 && seconds < 8e12 ? new Date(seconds * 1000) : new Date();
 }
 
-type Incoming = { id: string; phone: string; name: string; content: string; messageType: string; sentAt: Date; raw: unknown; direction?: 'INBOUND' | 'OUTBOUND'; sender?: string; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null };
+type Incoming = { id: string; phone: string; name: string; content: string; messageType: string; sentAt: Date; raw: unknown; source?: 'cloud_api' | 'gupshup'; direction?: 'INBOUND' | 'OUTBOUND'; sender?: string; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null };
 
 async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
   const waId = normalizeWhatsApp(input.phone);
@@ -133,7 +133,7 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
     if (direction === 'INBOUND') result.customerIds.push(customerId);
     const customer = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
     const latest = (previous: Date | null) => previous && previous > input.sentAt ? previous : input.sentAt;
-    await tx.whatsAppMessage.create({ data: { customerId, waMessageId: input.id, waId, direction,
+    await tx.whatsAppMessage.create({ data: { customerId, waMessageId: input.id, waId, direction, source:input.source||'cloud_api',
       sender: input.sender || (direction === 'INBOUND' ? waId : 'BUSINESS'), content: input.content,
       messageType: input.messageType, mediaUrl: input.mediaUrl?.startsWith('https://') ? input.mediaUrl : null, mimeType: input.mimeType, fileName: input.fileName, status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT',
       sentAt: input.sentAt, raw: JSON.stringify(input.raw) } });
@@ -160,7 +160,7 @@ export async function ingestWhatsAppWebhook(input: unknown): Promise<WhatsAppWeb
   if (!root) throw new HttpError(400, 'Webhook 必须为 JSON 对象');
   if (root.object !== 'whatsapp_business_account') {
     const parsed = parseGupshup(input);
-    if (parsed.kind === 'message') await storeMessage(parsed, result);
+    if (parsed.kind === 'message') await storeMessage({...parsed,source:'gupshup'}, result);
     if (parsed.kind === 'status') result.statusesUpdated = await applyWhatsAppStatus(parsed.id, parsed.status, parsed.gsId);
     return result;
   }

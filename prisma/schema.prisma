@@ -190,6 +190,10 @@ model WhatsAppMessage {
  customerId String
  customer Customer @relation(fields: [customerId], references: [id])
  waMessageId String? @unique
+ source String @default("legacy") @db.VarChar(24)
+ sourceMessageId String? @db.Text
+ sourceKey String? @unique @db.Char(64)
+ attachmentMetadata String? @db.Text
  requestId String? @unique
  providerMessageId String? @unique
  sender String @default("")
@@ -208,6 +212,53 @@ model WhatsAppMessage {
  updatedAt DateTime @updatedAt
  @@index([customerId, sentAt])
  @@index([waId])
+}
+
+model WhatsAppSyncToken {
+ id String @id @default(cuid())
+ userId String
+ label String @db.VarChar(80)
+ accountPhone String @db.VarChar(16)
+ tokenHash String @unique @db.Char(64)
+ expiresAt DateTime
+ revokedAt DateTime?
+ lastUsedAt DateTime?
+ createdAt DateTime @default(now())
+ @@index([userId, createdAt])
+}
+
+model WhatsAppSyncRun {
+ id String @id @default(cuid())
+ userId String
+ accountPhone String @db.VarChar(16)
+ success Int @default(0)
+ skipped Int @default(0)
+ failed Int @default(0)
+ unmatched Int @default(0)
+ errors String @db.Text
+ createdAt DateTime @default(now())
+ @@index([userId, createdAt])
+}
+
+model WhatsAppUnmatchedMessage {
+ id String @id @default(cuid())
+ sourceKey String @unique @db.Char(64)
+ userId String
+ accountPhone String @db.VarChar(16)
+ conversationId String @db.VarChar(191)
+ sourceMessageId String @db.Text
+ peerPhone String? @db.VarChar(16)
+ peerName String @default("") @db.VarChar(191)
+ direction String @db.VarChar(8)
+ sentAt DateTime
+ content String @map("text") @db.Text
+ attachments String @db.Text
+ reason String @db.VarChar(32)
+ status String @default("PENDING") @db.VarChar(16)
+ customerId String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([userId, status, createdAt])
 }
 
 model CustomerIntelligence {

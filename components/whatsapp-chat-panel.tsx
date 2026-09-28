@@ -6,7 +6,7 @@ import { api } from '@/lib/client';
 import { stages } from '@/lib/constants';
 import type { WhatsAppMessage } from '@/lib/types';
 
-type ChatMessage = Pick<WhatsAppMessage, 'id' | 'content' | 'direction' | 'status' | 'sentAt' | 'messageType'>;
+type ChatMessage = Pick<WhatsAppMessage, 'id' | 'content' | 'direction' | 'status' | 'sentAt' | 'messageType' | 'source' | 'attachmentMetadata'>;
 type History = { messages: ChatMessage[]; nextCursor: string | null; stage: string; lastInboundAt: string | null; configured: boolean };
 const statuses: Record<string, string> = { PENDING: '发送中', SENT: '已提交', ENQUEUED: '排队中', DELIVERED: '已送达', READ: '已读', FAILED: '发送失败', UNKNOWN: '结果未知', RECEIVED: '已接收' };
 const merge = (old: ChatMessage[], incoming: ChatMessage[]) => Array.from(new Map([...old, ...incoming].map(m => [m.id, m])).values())
@@ -107,7 +107,7 @@ export function WhatsappChatPanel({ customerId, customerName, stage, timezone, o
       {loading && <p className="empty">正在加载聊天…</p>}
       {!loading && !messages.length && <p className="empty">暂无聊天记录，收到客户消息后会显示在这里。</p>}
       {messages.map(m => <div key={m.id} className={`wa-message ${m.direction === 'OUTBOUND' ? 'outbound' : 'inbound'}`}>
-        <p>{m.content}</p><small>{time(m.sentAt)}{m.direction === 'OUTBOUND' && ` · ${statuses[m.status.toUpperCase()] || m.status}`}</small>
+        <p>{m.content || (m.source === 'whatsapp_web' && m.attachmentMetadata && m.attachmentMetadata !== '[]' ? '［历史附件：仅保存元数据］' : '')}</p><small>{time(m.sentAt)}{m.source === 'whatsapp_web' && ' · Web 历史导入'}{m.direction === 'OUTBOUND' && ` · ${statuses[m.status.toUpperCase()] || m.status}`}</small>
       </div>)}
     </div>
     <section className="wa-ai-draft"><div className="card-title"><h3><Sparkles size={15} /> AI 回复建议</h3>
