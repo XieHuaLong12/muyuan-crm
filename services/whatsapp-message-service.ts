@@ -10,7 +10,7 @@ import { decryptWhatsAppAccessToken } from './whatsapp-connect-service';
 
 export const sendMessageSchema = z.object({ customerId: z.string().min(1).max(191),
   content: z.string().trim().max(4096).default(''), mediaAssetId: z.string().min(1).optional(), requestId: z.string().uuid() }).refine(v=>v.content.length>0||!!v.mediaAssetId,'请输入消息或选择附件');
-export const messageSelect = { id: true, customerId: true, waMessageId: true, content: true,
+export const messageSelect = { id: true, customerId: true, waMessageId: true, source: true, sourceMessageId: true, attachmentMetadata: true, content: true,
   mediaUrl: true, mimeType: true, fileName: true, sender: true, direction: true, messageType: true, status: true, sentAt: true, createdAt: true, updatedAt: true } as const;
 
 const gupshupReady = () => !!(process.env.GUPSHUP_API_KEY?.trim() && normalizeWhatsApp(process.env.GUPSHUP_SOURCE) && process.env.GUPSHUP_APP_NAME?.trim());
@@ -86,7 +86,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
 
   let message;
   try {
-    message = await db.whatsAppMessage.create({ data: { customerId, requestId, waId: destination,
+    message = await db.whatsAppMessage.create({ data: { customerId, requestId, waId: destination, source: transport === 'META' ? 'cloud_api' : 'gupshup',
       direction: 'OUTBOUND', sender: source, content, mediaUrl, mimeType:asset?.mimeType, fileName:asset?.fileName, messageType: kind.toUpperCase(), status: 'PENDING', sentAt: new Date(), raw: '{}' } });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
