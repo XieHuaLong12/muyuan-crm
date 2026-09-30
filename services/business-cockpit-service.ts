@@ -1,8 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { Actor, scope } from '@/lib/auth';
-import { dayKey, localDate } from '@/lib/time';
-import { biggestFunnelLoss, changeRate, cockpitSelection, customerFunnel, rate } from '@/lib/business-cockpit';
+import { dayKey, localDate, periodRange } from '@/lib/time';
+import { biggestFunnelLoss, changeRate, cockpitSelection, customerFunnel, rate, type CockpitSelection } from '@/lib/business-cockpit';
 
 type Query = Parameters<typeof cockpitSelection>[0];
 const within = (date: Date, start: Date, end: Date) => date >= start && date < end;
@@ -10,7 +10,7 @@ const sum = (values: Prisma.Decimal[]) => values.reduce((total, value) => total.
 const channelName: Record<string, string> = { FACEBOOK: 'Facebook Ads', TIKTOK: 'TikTok', INSTAGRAM: 'Instagram', WEBSITE: 'Website', WHATSAPP: 'WhatsApp' };
 const channelKey = (source: string) => source.toUpperCase().includes('FACEBOOK') ? 'FACEBOOK' : source.toUpperCase().includes('TIKTOK') ? 'TIKTOK' : source.toUpperCase().includes('INSTAGRAM') ? 'INSTAGRAM' : source.toUpperCase().includes('WEBSITE') || source.toUpperCase().includes('WEB') ? 'WEBSITE' : source.toUpperCase().includes('WHATSAPP') ? 'WHATSAPP' : null;
 const dated = (key: string, timezone: string) => localDate(`${key}T00:00`, timezone);
-const dateKey = (year: number, month: number, day: number) => new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10);
+const shiftKey = (key: string, days: number) => { const date = new Date(`${key}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); };
 
 /** Dashboard reads existing records only. Currency and incomplete attribution remain visible to the user. */
 export async function businessCockpit(user: Actor, query: Query, now = new Date()) {
@@ -18,60 +18,68 @@ export async function businessCockpit(user: Actor, query: Query, now = new Date(
  const timezone = settings.timezone;
  const selected = cockpitSelection(query, timezone, now);
  const today = dayKey(now, timezone), year = Number(today.slice(0, 4));
- const monthNumber = Number(today.slice(5, 7)), dayNumber = Number(today.slice(8, 10));
  const yearStart = dated(`${year}-01-01`, timezone), nextYear = dated(`${year + 1}-01-01`, timezone);
- const monthStart = dated(`${today.slice(0, 7)}-01`, timezone);
- const previousYearStart = dated(`${year - 1}-01-01`, timezone);
- const previousYearEnd = dated(dateKey(year - 1, monthNumber, Math.min(dayNumber, new Date(Date.UTC(year - 1, monthNumber, 0)).getUTCDate()) + 1), timezone);
- const previousMonthKey = dateKey(year, monthNumber - 1, 1);
- const previousMonthStart = dated(previousMonthKey, timezone);
- const previousMonthEnd = dated(dateKey(Number(previousMonthKey.slice(0, 4)), Number(previousMonthKey.slice(5, 7)), Math.min(dayNumber, new Date(Date.UTC(year, monthNumber - 1, 0)).getUTCDate()) + 1), timezone);
  const effectiveEnd = new Date(Math.min(now.getTime(), selected.end.getTime()));
  const previousEnd = selected.start;
  const previousStart = new Date(selected.start.getTime() - Math.max(0, effectiveEnd.getTime() - selected.start.getTime()));
- const dataStart = new Date(Math.min(previousYearStart.getTime(), previousStart.getTime()));
- const dataEnd = new Date(now.getTime() + 86400000);
+ const dataStart = new Date(Math.min(selected.start.getTime(), previousStart.getTime(), dated(selected.trendStartKey, timezone).getTime(), selected.range === 'year' ? yearStart.getTime() : Infinity));
  const customerScope = scope(user);
  const target = user.role === 'ADMIN' ? await db.salesTarget.findUnique({ where: { periodKey: `YEAR-${year}` } }) : null;
  const currency = target?.currency || settings.currency;
+ const weekKey = selected.range === 'week' ? periodRange('WEEK', today, timezone).key : '';
  const campaignScope = user.role === 'ADMIN' ? {} : { createdBy: user.id };
  const taskScope = user.role === 'ADMIN' ? {} : { createdBy: user.id };
  const quoteCutoff = new Date(now.getTime() - 3 * 86400000);
- const [deals, orders, customers, previousCustomers, metrics, monthlyTargets, overdueTasks, dueTasks, doneTasks, lateQuotes] = await Promise.all([
-  db.deal.findMany({ where: { customer: customerScope, dealDate: { gte: dataStart, lt: dataEnd } }, select: { dealDate: true, currency: true, dealAmount: true, grossProfit: true, customer: { select: { source: true } } } }),
-  db.order.findMany({ where: { customer: customerScope, orderDate: { gte: dataStart, lt: dataEnd }, status: { not: 'CANCELLED' } }, select: { orderDate: true } }),
-  db.customer.findMany({ where: { ...customerScope, createdAt: { gte: selected.start, lt: selected.end } }, select: { stage: true, isQualified: true, quotedAt: true, source: true, quotations: { where: { status: 'SENT' }, select: { id: true }, take: 1 }, deals: { select: { id: true }, take: 1 } } }),
+ const [deals, orders, quotes, customers, previousCustomers, metrics, periodTargets, overdueTasks, dueTasks, doneTasks, lateQuotes] = await Promise.all([
+  db.deal.findMany({ where: { customer: customerScope, dealDate: { gte: dataStart, lt: effectiveEnd } }, select: { dealDate: true, currency: true, dealAmount: true, grossProfit: true, customer: { select: { source: true } } } }),
+  db.order.findMany({ where: { customer: customerScope, orderDate: { gte: dataStart, lt: effectiveEnd }, status: { not: 'CANCELLED' } }, select: { orderDate: true } }),
+  db.quotation.findMany({ where: { customer: customerScope, status: 'SENT', sentAt: { gte: dataStart, lt: effectiveEnd } }, select: { sentAt: true, currency: true, unitPrice: true, quantity: true } }),
+  db.customer.findMany({ where: { ...customerScope, createdAt: { gte: selected.start, lt: effectiveEnd } }, select: { stage: true, isQualified: true, quotedAt: true, source: true, quotations: { where: { status: 'SENT' }, select: { id: true }, take: 1 }, deals: { select: { id: true }, take: 1 } } }),
   db.customer.count({ where: { ...customerScope, createdAt: { gte: previousStart, lt: previousEnd } } }),
   db.marketingMetric.findMany({ where: { metricDate: { gte: selected.start, lt: effectiveEnd }, campaign: campaignScope }, select: { spend: true, campaign: { select: { channel: true, currency: true } } } }),
-  target ? db.salesTarget.findMany({ where: { periodType: 'MONTH', year, currency: target.currency }, select: { month: true, targetRevenue: true } }) : Promise.resolve([]),
+  target ? db.salesTarget.findMany({ where: { currency, OR: [{ year }, ...(weekKey ? [{ periodKey: weekKey }] : [])] }, select: { periodKey: true, periodType: true, month: true, targetRevenue: true } }) : Promise.resolve([]),
   db.task.count({ where: { ...taskScope, deletedAt: null, status: { not: 'DONE' }, dueDate: { lt: now } } }),
-  db.task.count({ where: { ...taskScope, deletedAt: null, dueDate: { gte: selected.start, lt: selected.end } } }),
-  db.task.count({ where: { ...taskScope, deletedAt: null, status: 'DONE', dueDate: { gte: selected.start, lt: selected.end } } }),
+  db.task.count({ where: { ...taskScope, deletedAt: null, dueDate: { gte: selected.start, lt: effectiveEnd } } }),
+  db.task.count({ where: { ...taskScope, deletedAt: null, status: 'DONE', dueDate: { gte: selected.start, lt: effectiveEnd } } }),
   db.quotation.groupBy({ by: ['customerId'], where: { status: 'SENT', sentAt: { lt: quoteCutoff }, customer: { ...customerScope, stage: { notIn: ['WON', 'LOST', 'INVALID', 'PAUSED'] }, OR: [{ lastContactAt: null }, { lastContactAt: { lt: quoteCutoff } }] } } }),
  ]);
  const currencyDeals = deals.filter(deal => deal.currency === currency);
- const yearDeals = currencyDeals.filter(deal => within(deal.dealDate, yearStart, nextYear) && deal.dealDate <= now);
- const monthDeals = currencyDeals.filter(deal => deal.dealDate >= monthStart && deal.dealDate <= now);
  const periodDeals = currencyDeals.filter(deal => within(deal.dealDate, selected.start, effectiveEnd));
- const annualRevenue = sum(yearDeals.map(deal => deal.dealAmount)).toNumber();
- const monthlyRevenue = sum(monthDeals.map(deal => deal.dealAmount)).toNumber();
+ const periodRevenue = sum(periodDeals.map(deal => deal.dealAmount)).toNumber();
+ const previousRevenue = sum(currencyDeals.filter(deal => within(deal.dealDate, previousStart, previousEnd)).map(deal => deal.dealAmount)).toNumber();
+ const currencyQuotes = quotes.filter(quote => quote.currency === currency && quote.sentAt !== null);
+ const quotedAmount = sum(currencyQuotes.filter(quote => quote.sentAt && within(quote.sentAt, selected.start, effectiveEnd)).map(quote => quote.unitPrice.mul(quote.quantity))).toNumber();
+ const previousQuotedAmount = sum(currencyQuotes.filter(quote => quote.sentAt && within(quote.sentAt, previousStart, previousEnd)).map(quote => quote.unitPrice.mul(quote.quantity))).toNumber();
  const grossProfit = user.role === 'ADMIN' ? sum(periodDeals.map(deal => deal.grossProfit)).toNumber() : null;
  const periodOrders = orders.filter(order => within(order.orderDate, selected.start, effectiveEnd)).length;
- const previousYearRevenue = sum(currencyDeals.filter(deal => within(deal.dealDate, previousYearStart, previousYearEnd)).map(deal => deal.dealAmount)).toNumber();
- const previousMonthRevenue = sum(currencyDeals.filter(deal => within(deal.dealDate, previousMonthStart, previousMonthEnd)).map(deal => deal.dealAmount)).toNumber();
  const previousProfit = sum(currencyDeals.filter(deal => within(deal.dealDate, previousStart, previousEnd)).map(deal => deal.grossProfit)).toNumber();
  const previousOrders = orders.filter(order => within(order.orderDate, previousStart, previousEnd)).length;
- const annualGoal = target?.targetRevenue.toNumber() ?? null;
- const completion = annualGoal && annualGoal > 0 ? rate(annualRevenue, annualGoal) : null;
- const quarters = Array.from({ length: 4 }, (_, index) => {
+ const monthlyTargets = periodTargets.filter(row => row.periodType === 'MONTH' && row.month !== null);
+ const currentMonth = Number(today.slice(5, 7));
+ const quarterStartMonth = Math.floor((currentMonth - 1) / 3) * 3 + 1;
+ const monthTarget = (month: number) => monthlyTargets.find(row => row.month === month)?.targetRevenue ?? null;
+ const quarterTargets = [quarterStartMonth, quarterStartMonth + 1, quarterStartMonth + 2].map(monthTarget);
+ const periodGoal = selected.range === 'year' ? target?.targetRevenue.toNumber() ?? null
+  : selected.range === 'quarter' ? quarterTargets.every(value => value !== null) ? sum(quarterTargets as Prisma.Decimal[]).toNumber() : null
+  : selected.range === 'month' ? monthTarget(currentMonth)?.toNumber() ?? null
+  : selected.range === 'week' ? periodTargets.find(row => row.periodKey === weekKey)?.targetRevenue.toNumber() ?? null : null;
+ const completion = periodGoal && periodGoal > 0 ? rate(periodRevenue, periodGoal) : null;
+ const breakdown = selected.range === 'year' ? Array.from({ length: 4 }, (_, index) => {
   const start = dated(`${year}-${String(index * 3 + 1).padStart(2, '0')}-01`, timezone);
   const end = index === 3 ? nextYear : dated(`${year}-${String(index * 3 + 4).padStart(2, '0')}-01`, timezone);
-  const goalRows = monthlyTargets.filter(row => row.month !== null && row.month >= index * 3 + 1 && row.month <= index * 3 + 3);
-  const goal = goalRows.length === 3 ? sum(goalRows.map(row => row.targetRevenue)).toNumber() : null;
-  const actual = sum(yearDeals.filter(deal => within(deal.dealDate, start, end)).map(deal => deal.dealAmount)).toNumber();
+  const goals = [index * 3 + 1, index * 3 + 2, index * 3 + 3].map(monthTarget);
+  const goal = goals.every(value => value !== null) ? sum(goals as Prisma.Decimal[]).toNumber() : null;
+  const actual = sum(currencyDeals.filter(deal => within(deal.dealDate, start, end)).map(deal => deal.dealAmount)).toNumber();
   return { label: `Q${index + 1}`, goal, actual, completion: goal && goal > 0 ? rate(actual, goal) : null };
- });
- const trend = buildTrend(selected.trend, today, timezone, currencyDeals, orders);
+ }) : selected.range === 'quarter' ? [0, 1, 2].map(offset => {
+  const month = quarterStartMonth + offset;
+  const start = dated(`${year}-${String(month).padStart(2, '0')}-01`, timezone);
+  const end = month === 12 ? nextYear : dated(`${year}-${String(month + 1).padStart(2, '0')}-01`, timezone);
+  const goal = monthTarget(month)?.toNumber() ?? null;
+  const actual = sum(currencyDeals.filter(deal => within(deal.dealDate, start, end)).map(deal => deal.dealAmount)).toNumber();
+  return { label: `${month} 月`, goal, actual, completion: goal && goal > 0 ? rate(actual, goal) : null };
+ }) : [];
+ const trend = buildTrend(selected, timezone, currencyDeals, orders);
  const funnel = customerFunnel(customers);
  const funnelLoss = biggestFunnelLoss(funnel);
  const channels = Object.entries(channelName).map(([id, name]) => {
@@ -97,32 +105,30 @@ export async function businessCockpit(user: Actor, query: Query, now = new Date(
  if (!suggestions.length) suggestions.push({ kind: 'insight', title: '当前没有紧急经营异常', detail: '查看销售趋势和待办执行进度，继续推进本期目标。', href: '/tasks' });
  return {
   generatedAt: now.toISOString(), timezone, selected, scope: user.role === 'ADMIN' ? '团队' : '个人', currency, year,
-  kpis: { annualRevenue, monthlyRevenue, grossProfit, periodOrders, newCustomers: customers.length, completion },
-  kpiTrends: { annualRevenue: changeRate(annualRevenue, previousYearRevenue), monthlyRevenue: changeRate(monthlyRevenue, previousMonthRevenue), grossProfit: grossProfit === null ? null : changeRate(grossProfit, previousProfit), periodOrders: changeRate(periodOrders, previousOrders), newCustomers: changeRate(customers.length, previousCustomers), completion: null },
-  goal: { annualGoal, annualRevenue, remaining: annualGoal === null ? null : Math.max(0, annualGoal - annualRevenue), completion, quarters },
+  kpis: { periodRevenue, quotedAmount, grossProfit, periodOrders, newCustomers: customers.length, completion },
+  kpiTrends: { periodRevenue: changeRate(periodRevenue, previousRevenue), quotedAmount: changeRate(quotedAmount, previousQuotedAmount), grossProfit: grossProfit === null ? null : changeRate(grossProfit, previousProfit), periodOrders: changeRate(periodOrders, previousOrders), newCustomers: changeRate(customers.length, previousCustomers), completion: null },
+  goal: { periodGoal, periodRevenue, previousRevenue, remaining: periodGoal === null ? null : Math.max(0, periodGoal - periodRevenue), completion, breakdown },
   trend, funnel, funnelLoss, execution: { dueTasks, doneTasks, completion: rate(doneTasks, dueTasks) },
   channels, suggestions, attributionNote: '渠道收入按客户来源归类；毛利回报仅在广告花费与成交币种一致时估算。未包含完整营销归因。',
-  excludedDealCurrencies: [...new Set(deals.filter(deal => within(deal.dealDate, selected.start, selected.end) && deal.currency !== currency).map(deal => deal.currency))],
+  excludedCurrencies: [...new Set([...deals.filter(deal => within(deal.dealDate, selected.start, effectiveEnd) && deal.currency !== currency).map(deal => deal.currency), ...quotes.filter(quote => quote.sentAt && within(quote.sentAt, selected.start, effectiveEnd) && quote.currency !== currency).map(quote => quote.currency)])],
  };
 }
 export type BusinessCockpit = Awaited<ReturnType<typeof businessCockpit>>;
 
-function buildTrend(view: 'month' | 'quarter' | 'year', today: string, timezone: string,
+function buildTrend(selected: CockpitSelection, timezone: string,
  deals: { dealDate: Date; dealAmount: Prisma.Decimal }[], orders: { orderDate: Date }[]) {
- const year = Number(today.slice(0, 4)), month = Number(today.slice(5, 7));
- const quarterMonth = Math.floor((month - 1) / 3) * 3 + 1;
- const startKey = view === 'month' ? `${today.slice(0, 7)}-01` : view === 'quarter' ? `${year}-${String(quarterMonth).padStart(2, '0')}-01` : `${year}-01-01`;
- const start = dated(startKey, timezone), end = dated(new Date(`${today}T12:00:00Z`).toISOString().slice(0, 10), timezone);
- const length = view === 'month' ? Number(today.slice(8, 10)) : view === 'quarter' ? Math.ceil((end.getTime() - start.getTime()) / 604800000) + 1 : month;
- const points = Array.from({ length }, (_, index) => ({ label: view === 'month' ? `${index + 1}日` : view === 'quarter' ? `W${index + 1}` : `${index + 1}月`, revenue: 0, orders: 0 }));
- const bucket = (date: Date) => {
-  const value = dayKey(date, timezone);
-  if (value < startKey || value > today) return -1;
-  if (view === 'month') return Number(value.slice(8, 10)) - 1;
-  if (view === 'year') return Number(value.slice(5, 7)) - 1;
-  return Math.floor((dated(value, timezone).getTime() - start.getTime()) / 604800000);
- };
- for (const deal of deals) { const index = bucket(deal.dealDate); if (points[index]) points[index].revenue += deal.dealAmount.toNumber(); }
- for (const order of orders) { const index = bucket(order.orderDate); if (points[index]) points[index].orders++; }
- return { view, points };
+ const boundaries: { start: string; end: string; label: string }[] = [];
+ let cursor = selected.trendStartKey;
+ while (cursor <= selected.endKey) {
+  const next = selected.trend === 'day' ? shiftKey(cursor, 1) : selected.trend === 'week' ? shiftKey(cursor, 7 - ((new Date(`${cursor}T12:00:00Z`).getUTCDay() + 6) % 7)) : `${Number(cursor.slice(5, 7)) === 12 ? Number(cursor.slice(0, 4)) + 1 : cursor.slice(0, 4)}-${String(Number(cursor.slice(5, 7)) % 12 + 1).padStart(2, '0')}-01`;
+  const end = shiftKey(next, -1) < selected.endKey ? shiftKey(next, -1) : selected.endKey;
+  const label = selected.trend === 'month' ? `${cursor.slice(0, 4) === selected.endKey.slice(0, 4) ? '' : `${cursor.slice(0, 4)}/`}${Number(cursor.slice(5, 7))}月` : `${Number(cursor.slice(5, 7))}/${Number(cursor.slice(8, 10))}`;
+  boundaries.push({ start: cursor, end, label });
+  cursor = next;
+ }
+ const points = boundaries.map(boundary => ({ label: boundary.label, revenue: 0, orders: 0 }));
+ const bucket = (date: Date) => boundaries.findIndex(boundary => { const key = dayKey(date, timezone); return key >= boundary.start && key <= boundary.end; });
+ for (const deal of deals) { const index = bucket(deal.dealDate); if (index >= 0) points[index].revenue += deal.dealAmount.toNumber(); }
+ for (const order of orders) { const index = bucket(order.orderDate); if (index >= 0) points[index].orders++; }
+ return { view: selected.trend, label: selected.range === 'today' ? '近 7 天（含今日）' : `${selected.label} · ${selected.startKey} — ${selected.endKey}`, points };
 }
