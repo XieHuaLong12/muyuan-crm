@@ -1,8 +1,8 @@
 import { dayKey, localDate } from './time';
 
 export type CockpitRange = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
-export type TrendView = 'month' | 'quarter' | 'year';
-export type CockpitSelection = { range: CockpitRange; start: Date; end: Date; startKey: string; endKey: string; label: string; trend: TrendView };
+export type TrendView = 'day' | 'week' | 'month';
+export type CockpitSelection = { range: CockpitRange; start: Date; end: Date; startKey: string; endKey: string; label: string; trend: TrendView; trendStartKey: string };
 const validKey = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T12:00:00Z`).getTime()) && new Date(`${value}T12:00:00Z`).toISOString().slice(0, 10) === value;
 const key = (date: Date) => date.toISOString().slice(0, 10);
 const shift = (value: string, days: number) => { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return key(date); };
@@ -22,8 +22,12 @@ export function cockpitSelection(query: { range?: string; startDate?: string; en
   startKey = query.startDate!; endKey = query.endDate!;
  }
  const label = range === 'custom' ? `${startKey} — ${endKey}` : ({ today: '今天', week: '本周', month: '本月', quarter: '本季度', year: '本年度' } as const)[range];
- const trend: TrendView = query.trend === 'month' || query.trend === 'quarter' || query.trend === 'year' ? query.trend : 'year';
- return { range, start: localDate(`${startKey}T00:00`, timezone), end: localDate(`${shift(endKey, 1)}T00:00`, timezone), startKey, endKey, label, trend };
+ // The chart follows the selected business period. Old bookmarked `trend=year` URLs
+ // cannot silently turn a daily/monthly page back into an annual chart.
+ const days = Math.round((Date.parse(`${endKey}T12:00:00Z`) - Date.parse(`${startKey}T12:00:00Z`)) / 86400000) + 1;
+ const trend: TrendView = range === 'year' || (range === 'custom' && days > 92) ? 'month' : range === 'quarter' || (range === 'custom' && days > 31) ? 'week' : 'day';
+ const trendStartKey = range === 'today' ? shift(today, -6) : startKey;
+ return { range, start: localDate(`${startKey}T00:00`, timezone), end: localDate(`${shift(endKey, 1)}T00:00`, timezone), startKey, endKey, label, trend, trendStartKey };
 }
 
 export function rate(part: number, total: number): number | null { return total > 0 ? Math.round(part / total * 1000) / 10 : null; }
