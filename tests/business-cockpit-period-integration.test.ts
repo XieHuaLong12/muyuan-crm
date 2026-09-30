@@ -12,7 +12,11 @@ test('驾驶舱成交、报价与目标都遵循所选周期', async () => {
  const now = new Date('2037-03-15T04:00:00Z');
  const targets = [`YEAR-2037`, `MONTH-2037-1`, `MONTH-2037-2`, `MONTH-2037-3`];
  const createdTargetIds: string[] = [];
+ const customerIds = [customer.id];
  try {
+  const importedLater = await db.customer.create({ data: { name: 'Imported later', ownerId: actor.id, source: 'WEBSITE', createdAt: new Date('2037-03-04T04:00:00Z'), inquiryAt: new Date('2037-02-20T04:00:00Z') } });
+  const correctedInquiry = await db.customer.create({ data: { name: 'Corrected inquiry', ownerId: actor.id, source: 'WEBSITE', createdAt: new Date('2037-02-04T04:00:00Z'), inquiryAt: new Date('2037-03-04T04:00:00Z') } });
+  customerIds.push(importedLater.id, correctedInquiry.id);
   for (const data of [
    { periodKey: targets[0], periodType: 'YEAR', year: 2037, targetRevenue: 12000, currency: 'CNY' },
    ...[1, 2, 3].map(month => ({ periodKey: targets[month], periodType: 'MONTH', year: 2037, month, targetRevenue: 1000, currency: 'CNY' })),
@@ -28,6 +32,10 @@ test('驾驶舱成交、报价与目标都遵循所选周期', async () => {
   const month = await businessCockpit(user, { range: 'month', trend: 'year' }, now);
   assert.equal(month.kpis.periodRevenue, 300);
   assert.equal(month.kpis.quotedAmount, 100);
+  assert.equal(month.kpis.newCustomers, 2);
+  assert.equal(month.funnel[0].count, 2);
+  assert.equal(month.channels.find(channel => channel.id === 'WEBSITE')?.customers, 2);
+  assert.equal(month.kpiTrends.newCustomers, 100);
   assert.equal(month.goal.periodGoal, 1000);
   assert.equal(month.kpis.completion, 30);
   assert.equal(month.trend.view, 'day');
@@ -35,17 +43,19 @@ test('驾驶舱成交、报价与目标都遵循所选周期', async () => {
   const year = await businessCockpit(user, { range: 'year' }, now);
   assert.equal(year.kpis.periodRevenue, 1000);
   assert.equal(year.kpis.quotedAmount, 300);
+  assert.equal(year.kpis.newCustomers, 3);
   assert.equal(year.goal.periodGoal, 12000);
   assert.equal(year.trend.view, 'month');
   const today = await businessCockpit(user, { range: 'today', trend: 'year' }, now);
   assert.equal(today.kpis.periodRevenue, 0);
+  assert.equal(today.kpis.newCustomers, 0);
   assert.equal(today.goal.periodGoal, null);
   assert.equal(today.trend.view, 'day');
  } finally {
   await db.quotation.deleteMany({ where: { customerId: customer.id } });
   await db.deal.deleteMany({ where: { customerId: customer.id } });
   await db.salesTarget.deleteMany({ where: { id: { in: createdTargetIds } } });
-  await db.customer.delete({ where: { id: customer.id } });
+  await db.customer.deleteMany({ where: { id: { in: customerIds } } });
   await db.user.delete({ where: { id: actor.id } });
   await db.$disconnect();
  }
