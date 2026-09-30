@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { accessible } from '@/services/customer-service';
-import { e164, matchPhone, sourceKey, webBatch, type WebMessage } from '@/lib/whatsapp-web-sync';
+import { e164, storedE164, exactCustomerPhone, matchPhone, sourceKey, webBatch, type WebMessage } from '@/lib/whatsapp-web-sync';
 
 export const tokenInput = z.object({label:z.string().trim().min(1).max(80),accountPhone:z.string().max(32)}).strict();
 const customerSelect = {id:true,name:true,phone:true,whatsapp:true,whatsappNormalized:true,waId:true} as const;
@@ -107,8 +107,43 @@ export async function syncState(user:Actor){
   return {tokens,runs:runs.map(r=>({...r,errors:JSON.parse(r.errors) as {sourceMessageId?:string;message:string}[]})),unmatched,unmatchedTotal:total,lastSyncedAt:runs[0]?.createdAt||null};
 }
 export async function searchSyncCustomers(q:string,user:Actor){
-  if(q.trim().length<2)return [];
-  return db.customer.findMany({where:{...scope(user),OR:[{name:{contains:q}},{phone:{contains:q}},{whatsapp:{contains:q}},{companyName:{contains:q}}]},select:{id:true,name:true,phone:true,whatsapp:true,companyName:true},take:20});
+  const query=z.string().trim().max(120).parse(q);
+  if(query.length<2)return [];
+  const phone=storedE164(query);
+  if(phone){
+    const list=await db.customer.findMany({where:scope(user),select:{...customerSelect,companyName:true}});
+    return list.filter(c=>exactCustomerPhone(phone,c)).slice(0,20);
+  }
+  return db.customer.findMany({where:{...scope(user),OR:[{name:{contains:query}},{phone:{contains:query}},{whatsapp:{contains:query}},{companyName:{contains:query}}]},select:{id:true,name:true,phone:true,whatsapp:true,companyName:true},take:20});
+}
+export async function reconcilePendingWebSync(user:Actor){
+  const [list,pending]=await Promise.all([
+    customers(user),
+    db.whatsAppUnmatchedMessage.findMany({where:{userId:user.id,status:'PENDING',peerPhone:{not:null}},orderBy:{createdAt:'asc'}}),
+  ]);
+  const eligible=pending.map(item=>({item,match:matchPhone(item.peerPhone,list)})).filter(result=>result.match.status==='matched');
+  let imported=0,skipped=pending.length-eligible.length;
+  for(const {item,match} of eligible.slice(0,200)){
+    if(match.status!=='matched')continue;
+    const m:WebMessage={sourceMessageId:item.sourceMessageId,conversationId:item.conversationId,
+      peerPhone:item.peerPhone,peerName:item.peerName,direction:item.direction as 'inbound'|'outbound',
+      sentAt:item.sentAt.toISOString(),text:item.content,attachments:JSON.parse(item.attachments)};
+    try{
+      const claimed=await db.$transaction(async tx=>{
+        const current=await tx.customer.findFirst({where:{id:match.customer.id,...scope(user)},select:{id:true}});
+        if(!current)return false;
+        const changed=await tx.whatsAppUnmatchedMessage.updateMany({where:{id:item.id,userId:user.id,status:'PENDING'},data:{status:'IMPORTED',reason:'MATCHED',customerId:match.customer.id}});
+        if(!changed.count)return false;
+        await tx.whatsAppMessage.create({data:dbMessage(m,item.sourceKey,item.accountPhone,match.customer.id)});
+        return true;
+      });
+      if(claimed)imported++;else skipped++;
+    }catch(error){
+      if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002'){skipped++;continue;}
+      throw error;
+    }
+  }
+  return {imported,skipped,scanned:pending.length,hasMore:eligible.length>200};
 }
 export async function claimSyncMessage(input:unknown,user:Actor){
   const {itemId,customerId}=z.object({itemId:z.string().min(1),customerId:z.string().min(1)}).strict().parse(input);

@@ -8,10 +8,11 @@ export function e164(value: string | null | undefined): string | null {
   return /^\+[1-9]\d{7,14}$/.test(international) ? international : null;
 }
 
-// Existing CRM waId/whatsappNormalized values are international digits without '+'.
+// Existing CRM WhatsApp IDs and numbers may omit the leading '+'.
 export function storedE164(value: string | null | undefined): string | null {
   if (!value) return null;
-  return e164(value) || (/^[1-9]\d{7,14}$/.test(value.trim()) ? `+${value.trim()}` : null);
+  const cleaned = value.trim().replace(/[\s().-]/g, '');
+  return e164(value) || (/^[1-9]\d{7,14}$/.test(cleaned) ? `+${cleaned}` : null);
 }
 
 const attachment = z.object({
@@ -38,11 +39,17 @@ export function sourceKey(accountPhone: string, message: Pick<WebMessage, 'conve
   return createHash('sha256').update(JSON.stringify(['whatsapp_web', accountPhone, message.conversationId, message.sourceMessageId])).digest('hex');
 }
 
-export function matchPhone<T extends { id: string; name: string; phone: string; whatsapp: string; whatsappNormalized: string; waId: string | null }>(peer: string | null, customers: T[]) {
+type PhoneCustomer = { id: string; name: string; phone: string; whatsapp: string; whatsappNormalized: string; waId: string | null };
+export function exactCustomerPhone(phone: string, customer: PhoneCustomer) {
+  // `phone` may be a domestic number, so require an explicit international prefix there.
+  // The WhatsApp fields store international identifiers and can omit '+'.
+  return e164(customer.phone) === phone || storedE164(customer.whatsapp) === phone ||
+    storedE164(customer.whatsappNormalized) === phone || storedE164(customer.waId) === phone;
+}
+export function matchPhone<T extends PhoneCustomer>(peer: string | null, customers: T[]) {
   const phone = e164(peer);
   if (!phone) return { status: 'unmatched' as const, phone: null, reason: '缺少可确认的国际号码' };
-  const matches = customers.filter(c => e164(c.phone) === phone || e164(c.whatsapp) === phone ||
-    storedE164(c.whatsappNormalized) === phone || storedE164(c.waId) === phone);
+  const matches = customers.filter(c => exactCustomerPhone(phone, c));
   if (matches.length === 1) return { status: 'matched' as const, phone, customer: { id: matches[0].id, name: matches[0].name } };
   if (matches.length > 1) return { status: 'ambiguous' as const, phone, reason: '多个客户使用同一号码' };
   return { status: 'unmatched' as const, phone, reason: '未找到同号客户' };

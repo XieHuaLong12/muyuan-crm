@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {e164,matchPhone,sourceKey,webBatch} from '../lib/whatsapp-web-sync';
+import {e164,storedE164,exactCustomerPhone,matchPhone,sourceKey,webBatch} from '../lib/whatsapp-web-sync';
 const customer=(id:string,phone:string,name='Same')=>({id,name,phone,whatsapp:'',whatsappNormalized:'',waId:null});
 const message={sourceMessageId:'false_8613812345678@c.us_ABCD',conversationId:'8613812345678@c.us',peerPhone:'+8613812345678',peerName:'Alias',direction:'inbound',sentAt:'2026-09-27T09:30:00.000Z',text:'hello',attachments:[]};
 test('E.164 requires explicit international prefix and rejects ambiguous local numbers',()=>{
@@ -15,6 +15,15 @@ test('exact phone only; duplicate numbers remain ambiguous regardless of names',
  assert.equal(matchPhone('+8613812345678',[{...customer('a',''),whatsappNormalized:'8613812345678'}]).status,'matched');
  assert.equal(matchPhone(null,[customer('a','+8613812345678','Alias')]).status,'unmatched');
  assert.equal(matchPhone('+8613812345678',[customer('a','8613812345678','Alias')]).status,'unmatched');
+});
+test('WhatsApp international digits with or without + identify the same customer',()=>{
+ const record={...customer('lovett',''),whatsapp:'971585891501'};
+ assert.equal(storedE164('971585891501'),'+971585891501');
+ assert.equal(storedE164('+971 58 589 1501'),'+971585891501');
+ assert.equal(exactCustomerPhone('+971585891501',record),true);
+ assert.equal(matchPhone('+971585891501',[record]).status,'matched');
+ assert.equal(matchPhone('+971585891501',[record,{...record,id:'duplicate',whatsapp:'+971585891501'}]).status,'ambiguous');
+ assert.equal(matchPhone('+971585891501',[{...record,whatsapp:'',phone:'971585891501'}]).status,'unmatched');
 });
 test('web identity is stable and account-scoped',()=>{
  const a=sourceKey('+8613812345678',message),b=sourceKey('+8613812345678',message);
