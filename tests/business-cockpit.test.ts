@@ -38,6 +38,7 @@ test('漏斗按客户去重且阶段单调递减', () => {
   { ...base, stage: 'WON', deals: [{ id: 'deal1' }] },
  ]);
  assert.deepEqual(funnel.map(step => step.count), [4, 2, 2, 1, 1]);
+ assert.deepEqual(funnel.map(step => step.conversion), [null, 50, 50, 25, 25]);
  assert.deepEqual(biggestFunnelLoss(funnel), { from: '线索 Lead', to: '有效客户', loss: 2 });
  assert.equal(rate(0, 0), null);
 });

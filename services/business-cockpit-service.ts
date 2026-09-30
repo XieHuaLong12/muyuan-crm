@@ -11,6 +11,9 @@ const channelName: Record<string, string> = { FACEBOOK: 'Facebook Ads', TIKTOK: 
 const channelKey = (source: string) => source.toUpperCase().includes('FACEBOOK') ? 'FACEBOOK' : source.toUpperCase().includes('TIKTOK') ? 'TIKTOK' : source.toUpperCase().includes('INSTAGRAM') ? 'INSTAGRAM' : source.toUpperCase().includes('WEBSITE') || source.toUpperCase().includes('WEB') ? 'WEBSITE' : source.toUpperCase().includes('WHATSAPP') ? 'WHATSAPP' : null;
 const dated = (key: string, timezone: string) => localDate(`${key}T00:00`, timezone);
 const shiftKey = (key: string, days: number) => { const date = new Date(`${key}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); };
+const inquiryWindow = (start: Date, end: Date): Prisma.CustomerWhereInput => ({
+ OR: [{ inquiryAt: { gte: start, lt: end } }, { inquiryAt: null, createdAt: { gte: start, lt: end } }],
+});
 
 /** Dashboard reads existing records only. Currency and incomplete attribution remain visible to the user. */
 export async function businessCockpit(user: Actor, query: Query, now = new Date()) {
@@ -34,8 +37,8 @@ export async function businessCockpit(user: Actor, query: Query, now = new Date(
   db.deal.findMany({ where: { customer: customerScope, dealDate: { gte: dataStart, lt: effectiveEnd } }, select: { dealDate: true, currency: true, dealAmount: true, grossProfit: true, customer: { select: { source: true } } } }),
   db.order.findMany({ where: { customer: customerScope, orderDate: { gte: dataStart, lt: effectiveEnd }, status: { not: 'CANCELLED' } }, select: { orderDate: true } }),
   db.quotation.findMany({ where: { customer: customerScope, status: 'SENT', sentAt: { gte: dataStart, lt: effectiveEnd } }, select: { sentAt: true, currency: true, unitPrice: true, quantity: true } }),
-  db.customer.findMany({ where: { ...customerScope, createdAt: { gte: selected.start, lt: effectiveEnd } }, select: { stage: true, isQualified: true, quotedAt: true, source: true, quotations: { where: { status: 'SENT' }, select: { id: true }, take: 1 }, deals: { select: { id: true }, take: 1 } } }),
-  db.customer.count({ where: { ...customerScope, createdAt: { gte: previousStart, lt: previousEnd } } }),
+  db.customer.findMany({ where: { ...customerScope, ...inquiryWindow(selected.start, effectiveEnd) }, select: { stage: true, isQualified: true, quotedAt: true, source: true, quotations: { where: { status: 'SENT' }, select: { id: true }, take: 1 }, deals: { select: { id: true }, take: 1 } } }),
+  db.customer.count({ where: { ...customerScope, ...inquiryWindow(previousStart, previousEnd) } }),
   db.marketingMetric.findMany({ where: { metricDate: { gte: selected.start, lt: effectiveEnd }, campaign: campaignScope }, select: { spend: true, campaign: { select: { channel: true, currency: true } } } }),
   target ? db.salesTarget.findMany({ where: { currency, OR: [{ year }, ...(weekKey ? [{ periodKey: weekKey }] : [])] }, select: { periodKey: true, periodType: true, month: true, targetRevenue: true } }) : Promise.resolve([]),
   db.task.count({ where: { ...taskScope, deletedAt: null, status: { not: 'DONE' }, dueDate: { lt: now } } }),
@@ -99,7 +102,7 @@ export async function businessCockpit(user: Actor, query: Query, now = new Date(
  const suggestions = [
   ...(overdueTasks ? [{ kind: 'warning' as const, title: `${overdueTasks} 项任务已经逾期`, detail: '优先处理已超过承诺时间的客户动作。', href: '/tasks?view=OVERDUE' }] : []),
   ...(staleQuotes ? [{ kind: 'warning' as const, title: `${staleQuotes} 位报价客户超过 3 天未推进`, detail: '查看报价后的跟进记录，安排下一次联系。', href: '/sales?queue=today' }] : []),
-  ...(funnelLoss && funnelLoss.loss > 0 ? [{ kind: 'insight' as const, title: `${funnelLoss.from} → ${funnelLoss.to} 流失 ${funnelLoss.loss} 位客户`, detail: '基于所选时间内新增客户的当前阶段，检查此环节话术与交付速度。', href: '/crm' }] : []),
+  ...(funnelLoss && funnelLoss.loss > 0 ? [{ kind: 'insight' as const, title: `${funnelLoss.from} → ${funnelLoss.to} 流失 ${funnelLoss.loss} 位客户`, detail: '基于所选时间内询盘客户的当前阶段，检查此环节话术与交付速度。', href: '/crm' }] : []),
   ...(channels.find(channel => channel.roi !== null && channel.roi < 0) ? [{ kind: 'insight' as const, title: '有渠道的毛利回报为负', detail: '检查广告投入与该渠道客户的成交毛利。', href: '/growth' }] : []),
  ];
  if (!suggestions.length) suggestions.push({ kind: 'insight', title: '当前没有紧急经营异常', detail: '查看销售趋势和待办执行进度，继续推进本期目标。', href: '/tasks' });

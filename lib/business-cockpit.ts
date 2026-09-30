@@ -52,7 +52,7 @@ export function customerFunnel(customers: FunnelCustomer[]) {
   { label: '线索 Lead', count: customers.length }, { label: '有效客户', count: qualified },
   { label: '已报价', count: quoted }, { label: '谈判中', count: negotiation }, { label: '成交', count: won },
  ];
- return stages.map((stage, index) => ({ ...stage, conversion: index === 0 ? null : rate(stage.count, stages[index - 1].count) }));
+ return stages.map((stage, index) => ({ ...stage, conversion: index === 0 ? null : rate(stage.count, stages[0].count) }));
 }
 
 export function biggestFunnelLoss(stages: ReturnType<typeof customerFunnel>) {
