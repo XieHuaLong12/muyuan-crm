@@ -133,7 +133,10 @@
    独立模块，不引用驾驶舱内容。
    颜色沿用 BOS 现有 token（与需求给的 #145C45 / #F7F8FA / #E5E7EB 肉眼无差），
    保持整套系统一个色系。 */
-.bos-order-actions{display:flex;gap:10px;align-items:center}
+.bos-order-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.bos-order-payment-filter{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 16px;border-radius:12px;background:#edf4ef;color:var(--bos-green);font-size:13px;margin-bottom:12px}
+.bos-order-payment-filter a{font-weight:600;text-decoration:underline}
+.bos-v2-order-list{max-width:1440px;margin:0 auto}
 
 /* 状态页签：选中＝绿底白字，其余＝白底灰字 */
 .bos-order-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 16px}

@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db } from '../lib/db';
 import { ORDER_STAGES,stageProgress } from '../lib/order-status';
@@ -15,6 +16,43 @@ test('订单进度按七段流程推导', () => {
  assert.deepEqual(stageProgress('COMPLETED').done, [true, true, true, true, true, true, true]);
  assert.equal(stageProgress('CANCELLED').cancelled, true);
  assert.equal(orderMilestoneInput.safeParse({ status: 'CANCELLED', expectedUpdatedAt: new Date().toISOString() }).success, false);
+});
+
+test('订单概况列表按生产、运输和付款分别筛选，分页保留未付款口径', async () => {
+ const tag = randomUUID();
+ const owner = await db.user.create({ data: { name: 'Order list owner', email: `order-list-${tag}@example.test`, passwordHash: 'test', role: 'SALES' } });
+ const customer = await db.customer.create({ data: { name: 'Order list customer', ownerId: owner.id, country: 'France' } });
+ const actor = { id: owner.id, name: owner.name, email: owner.email, role: owner.role };
+ try {
+  const states = [
+   ...Array.from({ length: 24 }, () => ({ status: 'IN_TRANSIT', paymentStatus: 'UNPAID' })),
+   { status: 'PRODUCING', paymentStatus: 'UNPAID' },
+   { status: 'PRODUCING', paymentStatus: 'PAID' },
+   { status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' },
+   { status: 'CANCELLED', paymentStatus: 'UNPAID' },
+  ];
+  await db.order.createMany({ data: states.map((state, index) => ({ ...state, orderNo: `LIST-${tag.replaceAll('-', '')}-${index}`, customerId: customer.id, amountRMB: 100, notes: '', createdBy: owner.id })) });
+  const all = await orderList(actor);
+  assert.equal(all.total, 28);
+  assert.equal(all.reminders.pendingPayment, 26);
+  assert.equal((await orderList(actor, { tab: 'PRODUCING' })).total, 2);
+  assert.equal((await orderList(actor, { tab: 'IN_TRANSIT' })).total, 24);
+  const unpaid = await orderList(actor, { payment: 'UNPAID' });
+  assert.equal(unpaid.total, all.reminders.pendingPayment);
+  assert.equal(unpaid.allCount, 26);
+  assert.equal(unpaid.tabs.find(tab => tab.key === 'CANCELLED')?.count, 0);
+  assert.ok(unpaid.orders.every(order => order.paymentStatus === 'UNPAID' && order.status !== 'CANCELLED'));
+  const page2 = await orderList(actor, { payment: 'UNPAID', page: 2 });
+  assert.equal(page2.total, 26);
+  assert.equal(page2.orders.length, 6);
+  assert.equal(new Set([...unpaid.orders, ...page2.orders].map(order => order.id)).size, 26);
+  assert.equal((await orderList(actor, { payment: 'UNPAID', tab: 'PRODUCING', country: 'France' })).total, 1);
+  assert.equal((await orderList({ ...actor, id: 'order-list-outsider' }, { payment: 'UNPAID' })).total, 0);
+ } finally {
+  await db.order.deleteMany({ where: { customerId: customer.id } });
+  await db.customer.delete({ where: { id: customer.id } });
+  await db.user.delete({ where: { id: owner.id } });
+ }
 });
 
 test('成交自动建单：幂等、人民币换算、按客户隔离', async () => {

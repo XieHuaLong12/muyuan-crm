@@ -2,7 +2,7 @@
 import { Fragment,useEffect,useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle,ArrowUpRight,Check,ChevronDown,Download,Plus } from 'lucide-react';
+import { AlertTriangle,ArrowLeft,ArrowUpRight,Check,ChevronDown,Download,Plus } from 'lucide-react';
 import { Card,EmptyState,Header,Table } from '@/components/ui/bos';
 import { ORDER_MILESTONES,ORDER_STAGES,ORDER_STATUS,stageProgress,type OrderMilestone } from '@/lib/order-status';
 
@@ -43,7 +43,7 @@ export type OrderRow = {
 };
 
 export type OrdersData = {
-  query: { tab: string; q: string; country: string; from: string; to: string; page: number };
+  query: { tab: string; payment: string; q: string; country: string; from: string; to: string; page: number };
   pageSize: number;
   total: number;
   tabs: { key: string; label: string; count: number }[];
@@ -71,17 +71,18 @@ function day(iso: string | null) {
   return iso ? iso.slice(0, 10) : '—';
 }
 
-function queryString(query: OrdersData['query'], patch: Partial<OrdersData['query']> = {}) {
+function queryString(query: OrdersData['query'], patch: Partial<OrdersData['query']> = {}, basePath = '/orders') {
   const next = { ...query, ...patch };
   const params = new URLSearchParams();
   if (next.tab !== 'ALL') params.set('tab', next.tab);
+  if (next.payment !== 'ALL') params.set('payment', next.payment);
   if (next.q) params.set('q', next.q);
   if (next.country) params.set('country', next.country);
   if (next.from) params.set('from', next.from);
   if (next.to) params.set('to', next.to);
   if (next.page > 1) params.set('page', String(next.page));
   const text = params.toString();
-  return text ? `/orders?${text}` : '/orders';
+  return text ? `${basePath}?${text}` : basePath;
 }
 
 /** 横向进度：绿点=已完成，绿线=已经过阶段，灰点=未完成。 */
@@ -104,7 +105,7 @@ function Timeline({ progress }: { progress: OrderRow['progress'] }) {
   );
 }
 
-export function OrderManagement({ data }: { data: OrdersData }) {
+export function OrderManagement({ data, basePath = '/orders', title = '订单管理', description = '从下单到收货，全流程跟踪' }: { data: OrdersData; basePath?: '/orders' | '/orders/list'; title?: string; description?: string }) {
   const router = useRouter();
   const [rows, setRows] = useState(data.orders);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -151,15 +152,16 @@ export function OrderManagement({ data }: { data: OrdersData }) {
     <>
       <Header
         eyebrow="ORDER MANAGEMENT"
-        title="订单管理"
-        description="从下单到收货，全流程跟踪"
+        title={title}
+        description={description}
         actions={
           <div className="bos-order-actions">
+            {basePath === '/orders/list' && <Link className="bos-button" href="/orders"><ArrowLeft size={15} />订单中心</Link>}
             <Link className="bos-button bos-button-primary" href="/customers" title="订单随客户成交自动创建：在客户页新增成交订单即可">
               <Plus size={15} />新建订单
             </Link>
             <a className="bos-button" href={`/api/orders/export?${new URLSearchParams(
-              Object.entries({ tab: query.tab === 'ALL' ? '' : query.tab, q: query.q, country: query.country, from: query.from, to: query.to }).filter(([, v]) => v) as [string, string][],
+              Object.entries({ tab: query.tab === 'ALL' ? '' : query.tab, payment: query.payment === 'ALL' ? '' : query.payment, q: query.q, country: query.country, from: query.from, to: query.to }).filter(([, v]) => v) as [string, string][],
             ).toString()}`}>
               <Download size={15} />导出
             </a>
@@ -167,11 +169,13 @@ export function OrderManagement({ data }: { data: OrdersData }) {
         }
       />
 
+      {query.payment === 'UNPAID' && <div className="bos-order-payment-filter"><span>付款筛选：定金未付（不含已取消订单）</span><Link href={queryString(query, { payment: 'ALL', page: 1 }, basePath)}>查看全部付款状态</Link></div>}
+
       <nav className="bos-order-tabs motion-in" style={{ '--motion-delay': '100ms' } as React.CSSProperties} aria-label="订单状态">
         {ORDER_TABS.map(([key, label]) => {
           const count = key === 'ALL' ? data.allCount : tabs.find(t => t.key === key)?.count ?? 0;
           return (
-            <Link key={key} href={queryString(query, { tab: key, page: 1 })} aria-current={query.tab === key ? 'page' : undefined}>
+            <Link key={key} href={queryString(query, { tab: key, page: 1 }, basePath)} aria-current={query.tab === key ? 'page' : undefined}>
               {label}
               <b>{count}</b>
             </Link>
@@ -179,7 +183,8 @@ export function OrderManagement({ data }: { data: OrdersData }) {
         })}
       </nav>
 
-      <form className="bos-order-filter motion-in" style={{ '--motion-delay': '200ms' } as React.CSSProperties} action="/orders">
+      <form key={JSON.stringify(query)} className="bos-order-filter motion-in" style={{ '--motion-delay': '200ms' } as React.CSSProperties} action={basePath}>
+        {query.payment !== 'ALL' && <input type="hidden" name="payment" value={query.payment} />}
         <input className="bos-input" type="search" name="q" aria-label="搜索订单号、客户名称或国家" placeholder="搜索订单号 / 客户名称 / 国家" defaultValue={query.q} />
         <div className="bos-order-filter-controls">
           <select name="country" aria-label="国家" defaultValue={query.country}>
@@ -202,7 +207,7 @@ export function OrderManagement({ data }: { data: OrdersData }) {
           </label>
           <div className="bos-order-filter-actions">
             <button className="bos-button bos-button-primary" type="submit">筛选</button>
-            <Link className="bos-button" href="/orders">重置</Link>
+            <Link className="bos-button" href={basePath}>重置</Link>
           </div>
         </div>
       </form>
@@ -238,7 +243,7 @@ export function OrderManagement({ data }: { data: OrdersData }) {
                   {day(order.estimatedDelivery)}
                   {order.overdue && <small>已逾期</small>}
                 </td>
-                <td><span className={`bos-status ${STATUS_TONE[order.status] ?? ''}`}>{order.statusLabel}</span></td>
+                <td><span className={`bos-status ${STATUS_TONE[order.status] ?? ''}`}>{order.statusLabel}</span>{query.payment === 'UNPAID' && <small>{order.paymentLabel}</small>}</td>
                 <td className="bos-order-progress"><Timeline progress={order.progress} /></td>
                 <td>
                   <Link className="bos-order-view" href={`/orders/detail/${order.id}`}>
@@ -289,15 +294,15 @@ export function OrderManagement({ data }: { data: OrdersData }) {
             <EmptyState
               title="没有匹配的订单"
               description="换个状态页签或清空筛选条件试试。订单会在客户成交时自动创建。"
-              action={<Link className="bos-button" href="/orders">清空筛选</Link>}
+              action={<Link className="bos-button" href={basePath}>清空筛选</Link>}
             />
           )}
 
           <div className="bos-pagination">
             <span>第 {query.page} 页 · 共 {data.total} 张订单</span>
             <div>
-              {query.page > 1 && <Link className="bos-button" href={queryString(query, { page: query.page - 1 })}>上一页</Link>}
-              {query.page * data.pageSize < data.total && <Link className="bos-button" href={queryString(query, { page: query.page + 1 })}>下一页</Link>}
+              {query.page > 1 && <Link className="bos-button" href={queryString(query, { page: query.page - 1 }, basePath)}>上一页</Link>}
+              {query.page * data.pageSize < data.total && <Link className="bos-button" href={queryString(query, { page: query.page + 1 }, basePath)}>下一页</Link>}
             </div>
           </div>
         </Card>

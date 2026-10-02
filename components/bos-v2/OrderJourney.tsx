@@ -3,7 +3,7 @@ import { ArrowUpRight } from 'lucide-react';
 import type { OrdersData } from '@/components/bos/OrderManagement';
 const currency=(value:string,unit:string)=>new Intl.NumberFormat('zh-CN',{style:'currency',currency:unit,maximumFractionDigits:0}).format(Number(value));
 export function OrderJourney({data,admin,details}:{data:OrdersData;admin:boolean;details:Record<string,{product:string;grossProfit:string|null;profitCurrency:string|null}>}){
- const stats=[{label:'全部订单',value:data.allCount,href:'/orders'},{label:'生产中',value:data.tabs.find(tab=>tab.key==='PRODUCING')?.count??0,href:'/orders?tab=PRODUCING'},{label:'运输中',value:data.tabs.find(tab=>tab.key==='IN_TRANSIT')?.count??0,href:'/orders?tab=IN_TRANSIT'},{label:'待付款',value:data.reminders.pendingPayment,href:'/orders?tab=PENDING_PAYMENT'}];
+ const stats=[{label:'全部订单',value:data.allCount,href:'/orders/list'},{label:'生产中',value:data.tabs.find(tab=>tab.key==='PRODUCING')?.count??0,href:'/orders/list?tab=PRODUCING'},{label:'运输中',value:data.tabs.find(tab=>tab.key==='IN_TRANSIT')?.count??0,href:'/orders/list?tab=IN_TRANSIT'},{label:'待付款',value:data.reminders.pendingPayment,href:'/orders/list?payment=UNPAID'}];
  const steps=[['下单','订单已建立'],['生产','订单状态'],['质检','待接入'],['出货','物流状态'],['运输','物流状态'],['收货','订单完成']];
  return <div className="bos-v2-page bos-v2-orders">
   <header className="bos-v2-hero"><div><span className="bos-v2-kicker">ORDER CENTER / 订单中心</span><h1>从下单到收货，一眼看清。</h1><p>客户与订单自动关联；已建立的订单继续使用现有状态流程。</p></div><div className="bos-v2-hero-actions"><Link href="/products" className="bos-v2-secondary">产品库 <ArrowUpRight size={15}/></Link>{admin&&<Link href="/finance" className="bos-v2-secondary">利润视图 <ArrowUpRight size={15}/></Link>}</div></header>
