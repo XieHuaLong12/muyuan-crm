@@ -31,7 +31,7 @@ test('订单概况列表按生产、运输和付款分别筛选，分页保留�
    { status: 'PENDING_PAYMENT', paymentStatus: 'UNPAID' },
    { status: 'CANCELLED', paymentStatus: 'UNPAID' },
   ];
-  await db.order.createMany({ data: states.map((state, index) => ({ ...state, orderNo: `LIST-${tag}-${index}`, customerId: customer.id, amountRMB: 100, notes: '', createdBy: owner.id })) });
+  await db.order.createMany({ data: states.map((state, index) => ({ ...state, orderNo: `LIST-${tag.replaceAll('-', '')}-${index}`, customerId: customer.id, amountRMB: 100, notes: '', createdBy: owner.id })) });
   const all = await orderList(actor);
   assert.equal(all.total, 28);
   assert.equal(all.reminders.pendingPayment, 26);
