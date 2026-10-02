@@ -54,6 +54,7 @@ export async function changeOrderMilestone(user: Actor, id: string, input: unkno
 
 export const orderQuery = z.object({
   tab: z.enum(['ALL', 'PENDING_PAYMENT', 'PRODUCING', 'SHIPPED', 'IN_TRANSIT', 'COMPLETED', 'CANCELLED']).default('ALL'),
+  payment: z.enum(['ALL', 'UNPAID']).default('ALL'),
   q: z.string().trim().max(100).default(''),
   country: z.string().trim().max(60).default(''),
   from: z.string().trim().max(20).default(''),
@@ -78,8 +79,10 @@ function orderWhere(user: Actor, extra: Prisma.OrderWhereInput = {}): Prisma.Ord
 export async function orderList(user: Actor, input: unknown = {}) {
   const query = orderQuery.parse(input);
   const range = dateRange(query.from, query.to);
+  const paymentFilter: Prisma.OrderWhereInput = query.payment === 'UNPAID' ? { paymentStatus: 'UNPAID', status: { not: 'CANCELLED' } } : {};
 
   const base: Prisma.OrderWhereInput = {
+    AND: [paymentFilter],
     ...(query.tab === 'ALL' ? {} : { status: query.tab }),
     ...(query.country ? { customer: { ...scope(user), country: query.country } } : {}),
     ...(range ? { orderDate: range } : {}),
@@ -111,7 +114,7 @@ export async function orderList(user: Actor, input: unknown = {}) {
     Promise.all(
       (Object.keys(ORDER_STATUS) as OrderStatus[]).map(async key => ({
         key,
-        count: await db.order.count({ where: orderWhere(user, { status: key }) }),
+        count: await db.order.count({ where: orderWhere(user, { AND: [paymentFilter, { status: key }] }) }),
       })),
     ),
     db.order.findMany({
