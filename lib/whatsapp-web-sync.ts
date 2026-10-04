@@ -1,19 +1,12 @@
+import { canonicalPhone } from './contact-identity';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
 export function e164(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const cleaned = value.trim().replace(/[\s().-]/g, '');
-  const international = cleaned.startsWith('00') ? `+${cleaned.slice(2)}` : cleaned;
-  return /^\+[1-9]\d{7,14}$/.test(international) ? international : null;
+  if(!value||!/^\s*(?:\+|00)/.test(value))return null;
+  return canonicalPhone(value);
 }
-
-// Existing CRM WhatsApp IDs and numbers may omit the leading '+'.
-export function storedE164(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const cleaned = value.trim().replace(/[\s().-]/g, '');
-  return e164(value) || (/^[1-9]\d{7,14}$/.test(cleaned) ? `+${cleaned}` : null);
-}
+export function storedE164(value: string | null | undefined): string | null { return canonicalPhone(value,undefined,true); }
 
 const attachment = z.object({
   kind: z.enum(['image', 'video', 'audio', 'document', 'sticker']),

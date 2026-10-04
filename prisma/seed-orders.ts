@@ -38,6 +38,7 @@ async function main() {
         currency: deal.currency,
         orderDate: deal.dealDate,
         createdBy: deal.customer.ownerId,
+        historical: true,
       }),
     );
     if (order) created += 1;

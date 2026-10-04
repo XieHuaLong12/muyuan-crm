@@ -1,0 +1,31 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": MySQL database "lvanju_identity_upgrade_clean" at "127.0.0.1:13316"
+
+16 migrations found in prisma/migrations
+
+Applying migration `20261003153000_identity_chain_foundation`
+Applying migration `20261003163000_whatsapp_provider_account_identity`
+Applying migration `20261003170000_meta_import_result_payload`
+
+┌─────────────────────────────────────────────────────────┐
+│  Update available 6.19.0 -> 8.0.0-rc.19                 │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20261003153000_identity_chain_foundation/
+    └─ migration.sql
+  └─ 20261003163000_whatsapp_provider_account_identity/
+    └─ migration.sql
+  └─ 20261003170000_meta_import_result_payload/
+    └─ migration.sql
+      
+All migrations have been successfully applied.

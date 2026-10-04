@@ -1,3 +1,4 @@
+import { deleteTestCustomers } from './identity-test-cleanup';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
@@ -54,7 +55,7 @@ async function cleanup(leadgenId: string, customerId?: string) {
   await db.metaLeadEvent.deleteMany({ where: { leadgenId } });
   if (customerId) {
     await db.stageHistory.deleteMany({ where: { customerId } });
-    await db.customer.delete({ where: { id: customerId } });
+    await deleteTestCustomers({ where: { id: customerId } });
   }
 }
 
@@ -101,7 +102,7 @@ test('Meta Lead Ads webhook persists and deduplicates real events', async t => {
         assert.equal(customer.email, email);
         assert.equal(customer.companyName, 'Test Furniture Ltd');
         assert.equal(customer.country, 'Sweden');
-        assert.equal(customer.quantity, 500);
+        assert.equal(customer.quantity, null);
       } finally {
         await cleanup(leadgenId, customerId);
       }

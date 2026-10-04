@@ -1,3 +1,21 @@
+> 当前 LVANJU BOS 使用 Next.js 15.5 / React 19 / Prisma 6.19 / MySQL。下面的 V1 SQLite 说明保留作历史参考，当前部署请以 [身份链实现与部署报告](docs/IDENTITY_CHAIN.md) 和 `.env.example` 为准。
+
+当前已实现 Meta CSV / webhook → 统一 Lead 账本 → E.164 与历史号码别名 → CRM Customer → 分账号 WhatsApp Conversation → 真实 Quote / Deal / Order → 固定广告归因 → 可重试反馈台账。AI 是增量建议，人工修正独立保存，原始消息和订单来源保留。
+
+新增入口：客户 / 销售 / 订单详情中的身份时间线，以及 `/analytics/ads`、`/analytics/conversations`、`/analytics/loss-reasons`、`/analytics/data-quality`。广告详情可双向追溯客户、会话与固定归因订单；缺少来源、成本或 API 配置时显示未知 / 未连接。
+
+| 新分析口径 | 定义 |
+| --- | --- |
+| 客户群体 | 周期内首次 / 末次留资，每客户计一次；联系、回复、正式报价为截至当前的历史事实 |
+| 成交 / 毛利 | Deal.dealDate 窗口，真实原币金额与已登记毛利；OrderAttribution 固定订单前末次有效 Meta 来源 |
+| CPL | Meta 平台花费 / 平台 Leads；CRM 留资单独显示 |
+| 每单成本 / ROAS | 花费 / 订单数、销售额 / 花费；同币种才计算，未知数据及零分母返回 null，不冒充首次获客 CAC |
+| 素材 | 原 Lead 的 Creative 快照；历史素材版本没有可用费用分解时，素材成本保持未知 |
+
+新增 3 条加性迁移；99 项隔离 MySQL 测试和旧库升级演练见 [验收记录](docs/identity-acceptance/README.md)。测试只允许本机 / CI 的 MySQL `*_test` 数据库。生产 `build` / `start` 会执行既有初始化和迁移，不是只读检查；先在副本演练。
+
+Meta 回传默认 `META_FEEDBACK_ENABLED=false`；未设置 Dataset / CAPI token 不会外发。后台恢复 worker 为 POST `/api/cron/identity-chain`，需服务器私有 `x-cron-secret`；部署平台的定时任务需要另行配置。真实 Meta / WhatsApp / AI 授权与验收仍需服务器现有配置，本次未部署生产。
+
 # 木远 CRM · 家具外贸轻量销售管理系统 V1
 
 这是可运行的 Next.js 全栈项目，使用 Prisma + SQLite 持久化数据，界面中文，默认人民币与 Asia/Shanghai 时区。不是静态演示页面。

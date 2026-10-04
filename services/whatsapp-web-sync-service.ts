@@ -3,7 +3,10 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
-import { accessible } from '@/services/customer-service';
+import { lockIdentity, resolveContact } from './contact-identity-service';
+import { ensureConversation, messageFacts } from './conversation-identity-service';
+import { canonicalPhone } from '@/lib/contact-identity';
+import { retryTransaction } from '@/lib/transaction-retry';
 import { e164, storedE164, exactCustomerPhone, matchPhone, sourceKey, webBatch, type WebMessage } from '@/lib/whatsapp-web-sync';
 
 export const tokenInput = z.object({label:z.string().trim().min(1).max(80),accountPhone:z.string().max(32)}).strict();
@@ -53,13 +56,15 @@ export async function previewWebSync(input:unknown, user:Actor, accountPhone:str
   const existing=await db.whatsAppUnmatchedMessage.findMany({where:{sourceKey:{in:keys}},select:{sourceKey:true}});
   const duplicates=new Set(existing.map(e=>e.sourceKey));
   const seen=new Set<string>();
-  const items=messages.map(m=>{
+  const items=[];
+  for(const m of messages){
     const key=sourceKey(accountPhone,m);
-    if(duplicates.has(key)||seen.has(key))return {sourceMessageId:m.sourceMessageId,phone:e164(m.peerPhone),status:'duplicate' as const,reason:'已同步或已入待认领'};
+    if(duplicates.has(key)||seen.has(key)){items.push({sourceMessageId:m.sourceMessageId,phone:e164(m.peerPhone),status:'duplicate' as const,reason:'已同步或已入待认领'});continue;}
     seen.add(key);
     const match=matchPhone(m.peerPhone,list);
-    return {sourceMessageId:m.sourceMessageId,...match};
-  });
+    const global=await resolveContact({phones:e164(m.peerPhone)?[e164(m.peerPhone)!]:[]});
+    items.push({sourceMessageId:m.sourceMessageId,...(global.status==='AMBIGUOUS'?{status:'ambiguous' as const,phone:e164(m.peerPhone),reason:'号码身份需要人工核对'}:match)});
+  }
   const counts={matched:0,unmatched:0,ambiguous:0,duplicate:0,invalid:0};
   for(const item of items)counts[item.status]++;
   return {items,counts};
@@ -69,24 +74,29 @@ export async function syncWebMessages(input:unknown,user:Actor,accountPhone:stri
   if(e164(batch.accountPhone)!==accountPhone)throw new HttpError(403,'当前账号与授权号码不一致');
   const {messages}=batch;
   const list=await customers(user);
+  const job=await db.syncJob.create({data:{provider:'WHATSAPP',jobType:'LOCAL_BRIDGE',status:'RUNNING',actorId:user.id}});
   let success=0,skipped=0,failed=0,unmatched=0;
   const errors:{sourceMessageId?:string;message:string}[]=[];
   for(const m of messages){
-    const key=sourceKey(accountPhone,m),match=matchPhone(m.peerPhone,list);
+    const key=sourceKey(accountPhone,m);let match:{status:'matched';phone:string;customer:{id:string;name:string}}|{status:'ambiguous'|'unmatched';phone:string|null;reason:string}=matchPhone(m.peerPhone,list);
     try{
-      await db.$transaction(async tx=>{
+      await retryTransaction(()=>db.$transaction(async tx=>{
+        await lockIdentity(tx);
+        const linked=await ensureConversation(tx,{provider:'whatsapp_web',accountId:accountPhone,peerId:canonicalPhone(m.peerPhone,undefined,true)||m.conversationId,phone:m.peerPhone,name:m.peerName,externalId:m.conversationId,sentAt:new Date(m.sentAt),direction:m.direction,sourceMessageId:m.sourceMessageId});
+        const visible=linked.customerId?await tx.customer.findFirst({where:{id:linked.customerId,...scope(user)},select:{id:true,name:true}}):null;
+        match=visible?{status:'matched',phone:linked.contact.phoneE164!,customer:visible}:{status:linked.status==='AMBIGUOUS'?'ambiguous':'unmatched',phone:linked.contact.phoneE164,reason:'等待人工核对'};
         if(match.status==='matched'){
           const current=await tx.customer.findFirst({where:{id:match.customer.id,...scope(user)},select:{id:true}});
           if(!current)throw new HttpError(403,'客户权限已变化');
         }
         // The queue row is the unique ledger for both matched and unmatched messages.
         await tx.whatsAppUnmatchedMessage.create({data:{sourceKey:key,userId:user.id,accountPhone,
-          conversationId:m.conversationId,sourceMessageId:m.sourceMessageId,peerPhone:match.phone,
+          conversationId:m.conversationId,canonicalConversationId:linked.conversation.id,sourceMessageId:m.sourceMessageId,peerPhone:match.phone,
           peerName:m.peerName,direction:m.direction,sentAt:new Date(m.sentAt),content:m.text,
           attachments:metadata(m),reason:match.status==='matched'?'MATCHED':match.status==='ambiguous'?'AMBIGUOUS':'NO_MATCH',
           status:match.status==='matched'?'IMPORTED':'PENDING',customerId:match.status==='matched'?match.customer.id:null}});
-        if(match.status==='matched')await tx.whatsAppMessage.create({data:dbMessage(m,key,accountPhone,match.customer.id)});
-      });
+        if(match.status==='matched'){await tx.whatsAppMessage.create({data:{...dbMessage(m,key,accountPhone,match.customer.id),conversationId:linked.conversation.id}});await messageFacts(tx,match.customer.id,new Date(m.sentAt),m.direction);}
+      }));
       if(match.status==='matched')success++;else unmatched++;
     }catch(error){
       if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002'){skipped++;continue;}
@@ -96,7 +106,10 @@ export async function syncWebMessages(input:unknown,user:Actor,accountPhone:stri
   }
   const run=await db.whatsAppSyncRun.create({data:{userId:user.id,accountPhone,success,skipped,failed,unmatched,
     errors:JSON.stringify(errors.slice(0,30))},select:{id:true}});
-  return {runId:run.id,success,skipped,failed,unmatched,errors};
+  await db.syncJob.update({where:{id:job.id},data:{status:failed?'PARTIAL':'OK',completedAt:new Date(),processed:messages.length,succeeded:success,failed,detail:{unmatched,skipped},error:failed?'MESSAGE_SAVE_FAILED':null}});
+  let analysis:unknown={status:'NOT_CONNECTED'};
+  if(process.env.DEEPSEEK_API_KEY)try{analysis=await (await import('./customer-intelligence-service')).processPendingIntelligence({limit:3},user);}catch{analysis={status:'FAILED_RETRYABLE'};}
+  return {runId:run.id,success,skipped,failed,unmatched,errors,analysis};
 }
 export async function syncState(user:Actor){
   const [tokens,runs,unmatched,total]=await Promise.all([
@@ -117,50 +130,8 @@ export async function searchSyncCustomers(q:string,user:Actor){
   return db.customer.findMany({where:{...scope(user),OR:[{name:{contains:query}},{phone:{contains:query}},{whatsapp:{contains:query}},{companyName:{contains:query}}]},select:{id:true,name:true,phone:true,whatsapp:true,companyName:true},take:20});
 }
 export async function reconcilePendingWebSync(user:Actor){
-  const [list,pending]=await Promise.all([
-    customers(user),
-    db.whatsAppUnmatchedMessage.findMany({where:{userId:user.id,status:'PENDING',peerPhone:{not:null}},orderBy:{createdAt:'asc'}}),
-  ]);
-  const eligible=pending.map(item=>({item,match:matchPhone(item.peerPhone,list)})).filter(result=>result.match.status==='matched');
-  let imported=0,skipped=pending.length-eligible.length;
-  for(const {item,match} of eligible.slice(0,200)){
-    if(match.status!=='matched')continue;
-    const m:WebMessage={sourceMessageId:item.sourceMessageId,conversationId:item.conversationId,
-      peerPhone:item.peerPhone,peerName:item.peerName,direction:item.direction as 'inbound'|'outbound',
-      sentAt:item.sentAt.toISOString(),text:item.content,attachments:JSON.parse(item.attachments)};
-    try{
-      const claimed=await db.$transaction(async tx=>{
-        const current=await tx.customer.findFirst({where:{id:match.customer.id,...scope(user)},select:{id:true}});
-        if(!current)return false;
-        const changed=await tx.whatsAppUnmatchedMessage.updateMany({where:{id:item.id,userId:user.id,status:'PENDING'},data:{status:'IMPORTED',reason:'MATCHED',customerId:match.customer.id}});
-        if(!changed.count)return false;
-        await tx.whatsAppMessage.create({data:dbMessage(m,item.sourceKey,item.accountPhone,match.customer.id)});
-        return true;
-      });
-      if(claimed)imported++;else skipped++;
-    }catch(error){
-      if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002'){skipped++;continue;}
-      throw error;
-    }
-  }
-  return {imported,skipped,scanned:pending.length,hasMore:eligible.length>200};
+  return (await import('./identity-chain-service')).reconcilePendingIdentityMessages({limit:200},user);
 }
 export async function claimSyncMessage(input:unknown,user:Actor){
-  const {itemId,customerId}=z.object({itemId:z.string().min(1),customerId:z.string().min(1)}).strict().parse(input);
-  await accessible(customerId,user);
-  const item=await db.whatsAppUnmatchedMessage.findFirst({where:{id:itemId,userId:user.id,status:'PENDING'}});
-  if(!item)throw new HttpError(404,'待认领消息不存在');
-  const m:WebMessage={sourceMessageId:item.sourceMessageId,conversationId:item.conversationId,
-    peerPhone:item.peerPhone,peerName:item.peerName,direction:item.direction as 'inbound'|'outbound',
-    sentAt:item.sentAt.toISOString(),text:item.content,attachments:JSON.parse(item.attachments)};
-  try{
-    await db.$transaction(async tx=>{
-      const current=await tx.customer.findFirst({where:{id:customerId,...scope(user)},select:{id:true}});
-      if(!current)throw new HttpError(404,'客户不存在或无访问权限');
-      const changed=await tx.whatsAppUnmatchedMessage.updateMany({where:{id:itemId,userId:user.id,status:'PENDING'},data:{status:'IMPORTED',customerId}});
-      if(!changed.count)throw new HttpError(409,'该消息已被认领');
-      await tx.whatsAppMessage.create({data:dbMessage(m,item.sourceKey,item.accountPhone,customerId)});
-    });
-  }catch(error){if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002')throw new HttpError(409,'该消息已入库');throw error;}
-  return {claimed:true};
+  return (await import('./identity-chain-service')).claimIdentityMessage(input,user);
 }

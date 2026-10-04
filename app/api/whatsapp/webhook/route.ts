@@ -159,10 +159,7 @@ export async function POST(
   );
 
 
-  console.log(
-    '[WhatsApp Webhook Payload]',
-    raw.slice(0,3000)
-  );
+
 
 
   let payload: JsonObject;
@@ -264,6 +261,7 @@ export async function POST(
           '[meta-lead] 推送解析异常',
           result.error
         );
+        return new NextResponse('processing failed',{status:503});
 
       } else {
 
@@ -280,7 +278,7 @@ export async function POST(
         '[meta-lead] 处理推送失败',
         error
       );
-
+      return new NextResponse('processing failed',{status:503});
     }
 
 
@@ -444,6 +442,7 @@ export async function POST(
 
 
 
+    if (!appSecret || !signature) return NextResponse.json({success:false,error:'WhatsApp signature configuration required'},{status:401});
     if (
       appSecret &&
       signature

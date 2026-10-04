@@ -1,3 +1,4 @@
+import { deleteTestCustomers } from './identity-test-cleanup';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -55,7 +56,7 @@ test('驾驶舱成交、报价与目标都遵循所选周期', async () => {
   await db.quotation.deleteMany({ where: { customerId: customer.id } });
   await db.deal.deleteMany({ where: { customerId: customer.id } });
   await db.salesTarget.deleteMany({ where: { id: { in: createdTargetIds } } });
-  await db.customer.deleteMany({ where: { id: { in: customerIds } } });
+  await deleteTestCustomers({ where: { id: { in: customerIds } } });
   await db.user.delete({ where: { id: actor.id } });
   await db.$disconnect();
  }

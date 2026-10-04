@@ -1,3 +1,4 @@
+import { deleteTestCustomers } from './identity-test-cleanup';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../lib/db';
@@ -79,7 +80,7 @@ test('AI/WhatsApp基础模型：客户标准化号码、消息和智能画像可
       await db.whatsAppMessage.deleteMany({ where: { customerId } });
       await db.customerIntelligence.deleteMany({ where: { customerId } });
       await db.stageHistory.deleteMany({ where: { customerId } });
-      await db.customer.deleteMany({ where: { id: customerId } });
+      await deleteTestCustomers({ where: { id: customerId } });
     }
     await db.$disconnect();
   }

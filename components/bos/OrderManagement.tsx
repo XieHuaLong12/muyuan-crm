@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle,ArrowLeft,ArrowUpRight,Check,ChevronDown,Download,Plus } from 'lucide-react';
 import { Card,EmptyState,Header,Table } from '@/components/ui/bos';
 import { ORDER_MILESTONES,ORDER_STAGES,ORDER_STATUS,stageProgress,type OrderMilestone } from '@/lib/order-status';
+import { rmb } from '@/lib/order-format';
+export { rmb } from '@/lib/order-format';
 
 /**
  * 订单管理
@@ -61,11 +63,6 @@ const STATUS_TONE: Record<string, string> = {
   COMPLETED: 'bos-status-done',
   CANCELLED: 'bos-status-cancelled',
 };
-
-/** 金额统一人民币展示，不显示美元。 */
-export function rmb(value: string | number) {
-  return `¥${Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 0 })}`;
-}
 
 function day(iso: string | null) {
   return iso ? iso.slice(0, 10) : '—';

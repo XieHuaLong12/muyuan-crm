@@ -1,3 +1,4 @@
+import { deleteTestCustomers } from './identity-test-cleanup';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -37,7 +38,7 @@ test('legacy WhatsApp digits match +E.164 search and reconcile pending messages 
   }finally{
     await db.whatsAppMessage.deleteMany({where:{customerId:{in:customerIds}}});
     await db.whatsAppUnmatchedMessage.deleteMany({where:{userId:user.id}});
-    await db.customer.deleteMany({where:{id:{in:customerIds}}});
+    await deleteTestCustomers({where:{id:{in:customerIds}}});
     await db.user.delete({where:{id:user.id}});
     await db.$disconnect();
   }

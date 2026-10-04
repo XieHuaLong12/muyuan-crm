@@ -24,6 +24,9 @@ model Customer {
  phone String @default("")
  whatsapp String @default("")
  whatsappNormalized String @default("")
+ phoneE164 String? @db.VarChar(16)
+ emailNormalized String? @db.VarChar(191)
+ stageSource String @default("HUMAN") @db.VarChar(16)
  waId String?
  email String @default("")
  source String @default("OTHER")
@@ -84,6 +87,10 @@ model Customer {
  intelligence CustomerIntelligence?
  orders Order[]
  metaLeadEvents MetaLeadEvent[]
+ contactIdentities ContactIdentity[]
+ leadAttributions CustomerLeadAttribution[]
+ whatsappContacts WhatsAppContact[]
+ advertisingFeedback AdvertisingFeedback[]
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -96,6 +103,8 @@ model Customer {
  @@index([phone])
  @@index([whatsapp])
  @@index([whatsappNormalized])
+ @@index([phoneE164])
+ @@index([emailNormalized])
  @@index([waId])
  @@index([aiScore])
  @@index([aiPriority])
@@ -187,6 +196,8 @@ model LeadSubmission {
 
 model WhatsAppMessage {
  id String @id @default(cuid())
+ conversationId String?
+ conversation WhatsAppConversation? @relation(fields: [conversationId], references: [id], onDelete: Restrict)
  customerId String
  customer Customer @relation(fields: [customerId], references: [id])
  waMessageId String? @unique
@@ -210,6 +221,7 @@ model WhatsAppMessage {
  aiProcessedAt DateTime?
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
+ @@index([conversationId, sentAt, id])
  @@index([customerId, sentAt])
  @@index([waId])
 }
@@ -242,6 +254,10 @@ model WhatsAppSyncRun {
 
 model WhatsAppUnmatchedMessage {
  id String @id @default(cuid())
+ provider String @default("whatsapp_web") @db.VarChar(24)
+ providerAccountId String? @db.VarChar(191)
+ canonicalConversationId String?
+ canonicalConversation WhatsAppConversation? @relation(fields: [canonicalConversationId], references: [id], onDelete: Restrict)
  sourceKey String @unique @db.Char(64)
  userId String
  accountPhone String @db.VarChar(16)
@@ -270,6 +286,14 @@ model CustomerIntelligence {
  intent String @default("UNKNOWN")
  customerType String @default("UNKNOWN")
  productsJson String @db.Text
+ summary String? @db.Text
+ aiAnalysis Json?
+ humanOverrides Json?
+ lastAnalyzedMessageId String?
+ lastAnalyzedMessageAt DateTime?
+ nextFollowUpAt DateTime?
+ analysisPending Boolean @default(false)
+ analysisError String? @db.Text
  quantity Int?
  currentNeed String @default("")
  mainObjection String @default("")
@@ -289,6 +313,7 @@ model CustomerIntelligence {
 model MetaImportRun {
  id String @id
  userId String
+ resultPayload Json?
  result String
  createdAt DateTime @default(now())
 }
@@ -393,6 +418,8 @@ model Order {
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
  tasks Task[]
+ attribution OrderAttribution?
+ feedback AdvertisingFeedback[]
  @@index([customerId, status])
  @@index([status, orderDate])
  @@index([estimatedDelivery])
@@ -820,4 +847,211 @@ model MetaSyncRun {
  startedAt DateTime @default(now())
  finishedAt DateTime?
  @@index([kind, startedAt])
+}
+
+// Identity chain: additive ledger, never replace the canonical CRM records.
+model ContactIdentity {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+ kind String @db.VarChar(16)
+ normalized String @db.VarChar(191)
+ rawValue String @db.Text
+ source String @db.VarChar(32)
+ createdAt DateTime @default(now())
+ @@unique([customerId, kind, normalized])
+ @@index([kind, normalized])
+}
+model CustomerLeadAttribution {
+ id String @id @default(cuid())
+ leadKey String @unique @db.VarChar(191)
+ leadId String? @db.VarChar(191)
+ customerId String?
+ customer Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+ status String @default("UNMATCHED") @db.VarChar(16)
+ matchMethod String @default("NONE") @db.VarChar(16)
+ confidence Int @default(0)
+ occurredAt DateTime?
+ phoneRaw String? @db.Text
+ phoneE164 String? @db.VarChar(16)
+ emailNormalized String? @db.VarChar(191)
+ platform String? @db.VarChar(24)
+ accountId String? @db.VarChar(191)
+ campaignId String? @db.VarChar(191)
+ campaignName String? @db.Text
+ adsetId String? @db.VarChar(191)
+ adsetName String? @db.Text
+ adId String? @db.VarChar(191)
+ adName String? @db.Text
+ creativeId String? @db.VarChar(191)
+ creativeName String? @db.Text
+ formId String? @db.VarChar(191)
+ formName String? @db.Text
+ answers Json?
+ source String @db.VarChar(16)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([customerId, occurredAt, id])
+ @@index([phoneE164])
+ @@index([leadId])
+ @@index([campaignId, occurredAt])
+ @@index([adsetId, occurredAt])
+ @@index([adId, occurredAt])
+ @@index([creativeId, occurredAt])
+ @@index([status])
+}
+model WhatsAppContact {
+ id String @id @default(cuid())
+ identityKey String @unique @db.Char(64)
+ provider String @db.VarChar(24)
+ accountId String @db.VarChar(191)
+ peerId String @db.VarChar(191)
+ phoneRaw String? @db.Text
+ phoneE164 String? @db.VarChar(16)
+ name String @default("") @db.VarChar(191)
+ customerId String?
+ customer Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+ status String @default("UNMATCHED") @db.VarChar(16)
+ matchMethod String @default("NONE") @db.VarChar(16)
+ confidence Int @default(0)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ conversations WhatsAppConversation[]
+ @@index([phoneE164])
+ @@index([customerId])
+ @@index([status])
+}
+model WhatsAppConversation {
+ id String @id @default(cuid())
+ identityKey String @unique @db.Char(64)
+ contactId String
+ contact WhatsAppContact @relation(fields: [contactId], references: [id], onDelete: Restrict)
+ externalId String @db.VarChar(191)
+ syncCursor String? @db.Text
+ lastMessageAt DateTime?
+ lastInboundAt DateTime?
+ lastOutboundAt DateTime?
+ lastSyncedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ messages WhatsAppMessage[]
+ pendingMessages WhatsAppUnmatchedMessage[]
+ @@index([contactId, lastMessageAt])
+}
+model IdentityAudit {
+ id String @id @default(cuid())
+ entityType String @db.VarChar(32)
+ entityId String @db.VarChar(191)
+ fromCustomerId String? @db.VarChar(191)
+ toCustomerId String? @db.VarChar(191)
+ actorId String @db.VarChar(191)
+ reason String @db.Text
+ detail Json?
+ createdAt DateTime @default(now())
+ @@index([entityType, entityId, createdAt])
+}
+model OrderAttribution {
+ id String @id @default(cuid())
+ orderId String @unique
+ order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+ model String @default("LAST_META_TOUCH") @db.VarChar(32)
+ status String @default("UNATTRIBUTED") @db.VarChar(24)
+ firstLeadKey String? @db.VarChar(191)
+ lastLeadKey String? @db.VarChar(191)
+ campaignId String? @db.VarChar(191)
+ adsetId String? @db.VarChar(191)
+ adId String? @db.VarChar(191)
+ creativeId String? @db.VarChar(191)
+ snapshot Json
+ lockedAt DateTime @default(now())
+ @@index([campaignId])
+ @@index([adId])
+ @@index([creativeId])
+}
+model AdvertisingFeedback {
+ id String @id @default(cuid())
+ eventId String @unique @db.VarChar(191)
+ eventName String @db.VarChar(32)
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+ orderId String?
+ order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+ leadKey String? @db.VarChar(191)
+ eventTime DateTime
+ value Decimal? @db.Decimal(14, 2)
+ currency String? @db.VarChar(3)
+ status String @default("NOT_CONNECTED") @db.VarChar(24)
+ payload Json
+ response Json?
+ retryCount Int @default(0)
+ processingStartedAt DateTime?
+ nextAttemptAt DateTime?
+ sentAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([status, nextAttemptAt])
+ @@index([customerId, eventTime])
+}
+model AdDimension {
+ id String @id @default(cuid())
+ accountId String @db.VarChar(191)
+ adId String @db.VarChar(191)
+ adName String @db.Text
+ adsetId String @db.VarChar(191)
+ adsetName String @db.Text
+ campaignId String @db.VarChar(191)
+ campaignName String @db.Text
+ creativeId String? @db.VarChar(191)
+ creativeName String? @db.Text
+ creativeCategory String? @db.VarChar(32)
+ syncedAt DateTime?
+ @@unique([accountId, adId])
+ @@index([campaignId])
+ @@index([adsetId])
+ @@index([creativeId])
+}
+model AdDailyMetric {
+ id String @id @default(cuid())
+ accountId String @db.VarChar(191)
+ adId String @db.VarChar(191)
+ metricDate DateTime @db.Date
+ platform String @default("ALL") @db.VarChar(24)
+ country String @default("ALL") @db.VarChar(16)
+ grain String @default("AD") @db.VarChar(24)
+ currency String @db.VarChar(3)
+ spend Decimal @db.Decimal(14, 2)
+ impressions Int @default(0)
+ reach Int?
+ clicks Int @default(0)
+ leads Int @default(0)
+ syncedAt DateTime @default(now())
+ @@unique([accountId, adId, metricDate, grain, platform, country])
+ @@index([metricDate, grain])
+ @@index([adId, metricDate])
+}
+model SyncJob {
+ id String @id @default(cuid())
+ provider String @db.VarChar(24)
+ jobType String @db.VarChar(32)
+ status String @db.VarChar(24)
+ actorId String? @db.VarChar(191)
+ startedAt DateTime @default(now())
+ completedAt DateTime?
+ processed Int @default(0)
+ succeeded Int @default(0)
+ failed Int @default(0)
+ error String? @db.Text
+ detail Json?
+ @@index([provider, jobType, startedAt])
+}
+model DailyAdInsight {
+ id String @id @default(cuid())
+ reportKey String @unique @db.VarChar(191)
+ reportDate DateTime @db.Date
+ timezone String @db.VarChar(60)
+ evidence Json
+ analysis Json
+ model String @db.VarChar(80)
+ createdAt DateTime @default(now())
+ @@index([reportDate])
 }

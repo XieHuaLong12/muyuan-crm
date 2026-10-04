@@ -1,3 +1,4 @@
+import { deleteTestCustomers } from './identity-test-cleanup';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -49,6 +50,6 @@ test('沟通档案只显示有消息的客户，按真实消息时间排序并�
     assert.equal((await db.customer.findUniqueOrThrow({ where: { id: beta.id } })).lastWhatsAppAt, null);
   } finally {
     await db.whatsAppMessage.deleteMany({ where: { customerId: { in: customers.map(customer => customer.id) } } });
-    await db.customer.deleteMany({ where: { id: { in: customers.map(customer => customer.id) } } });
+    await deleteTestCustomers({ where: { id: { in: customers.map(customer => customer.id) } } });
   }
 });

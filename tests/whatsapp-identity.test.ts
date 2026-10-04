@@ -1,3 +1,4 @@
+import { deleteTestCustomers } from './identity-test-cleanup';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../lib/db';
@@ -33,7 +34,7 @@ test('WhatsApp身份识别：号码匹配后绑定 waId', async () => {
     assert.equal(second.status, 'MATCHED');
     if (second.status === 'MATCHED') assert.equal(second.matchedBy, 'WA_ID');
   } finally {
-    await db.customer.delete({ where: { id: customer.id } });
+    await deleteTestCustomers({ where: { id: customer.id } });
     await db.$disconnect();
   }
 });
@@ -61,7 +62,7 @@ test('WhatsApp身份识别：重复号码返回冲突而不是随便绑定', asy
       assert.deepEqual(new Set(result.customerIds), new Set(created.map((c) => c.id)));
     }
   } finally {
-    await db.customer.deleteMany({ where: { id: { in: created.map((c) => c.id) } } });
+    await deleteTestCustomers({ where: { id: { in: created.map((c) => c.id) } } });
     await db.$disconnect();
   }
 });

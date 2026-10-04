@@ -10,18 +10,31 @@ on:
 
 jobs:
   verify:
+    name: Verify (${{ matrix.database.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        database:
+          - name: MySQL 8.4
+            image: mysql:8.4
+            health: mysqladmin ping -h 127.0.0.1 -proot
+          - name: MariaDB 11.8
+            image: mariadb:11.8
+            health: healthcheck.sh --connect --innodb_initialized
     services:
       mysql:
-        image: mysql:8.4
+        image: ${{ matrix.database.image }}
         env:
           MYSQL_ROOT_PASSWORD: root
           MYSQL_DATABASE: muyuan_test
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: muyuan_test
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-cmd="${{ matrix.database.health }}"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
@@ -80,16 +93,20 @@ jobs:
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3306/muyuan_reuse
         run: |
-          # 复现生产升级路径：先应用除最新一条以外的全部迁移（等价于线上现状），
-          # 再应用最新一条。若最新一条重复创建了已存在的表，这一步会失败。
+          # 复现已核对的线上状态：13 条旧迁移，再部署 3 条身份链增量迁移。
           mysql -h127.0.0.1 -uroot -proot -e 'CREATE DATABASE muyuan_reuse'
-          NEWEST="$(ls -1d prisma/migrations/*/ | sort | tail -1)"
-          NEWEST="${NEWEST%/}"
-          echo "newest migration under test: $NEWEST"
-          mv "$NEWEST" /tmp/newest-migration
+          mkdir /tmp/identity-ci-migrations
+          trap 'for migration in /tmp/identity-ci-migrations/*; do [ ! -d "$migration" ] || mv "$migration" prisma/migrations/; done' EXIT
+          mv prisma/migrations/20261003153000_identity_chain_foundation /tmp/identity-ci-migrations/
+          mv prisma/migrations/20261003163000_whatsapp_provider_account_identity /tmp/identity-ci-migrations/
+          mv prisma/migrations/20261003170000_meta_import_result_payload /tmp/identity-ci-migrations/
           pnpm exec prisma migrate deploy
-          mv /tmp/newest-migration "$NEWEST"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "13"
+          mysql -h127.0.0.1 -uroot -proot muyuan_reuse -e "INSERT INTO User (id,name,email,passwordHash) VALUES ('reuse-sentinel','Existing user','existing@example.com','preserve-me')"
+          mv /tmp/identity-ci-migrations/* prisma/migrations/
           pnpm exec prisma migrate deploy
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "16"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM User WHERE id='reuse-sentinel' AND passwordHash='preserve-me'")" = "1"
           echo "reused-deployment upgrade path OK"
 
       - name: Seed test database

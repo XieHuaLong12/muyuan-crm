@@ -16,7 +16,8 @@ const RULES: { target: string; keywords: string[] }[] = [
   { target: 'whatsapp', keywords: ['whatsapp', 'whats app', '沃次'] },
   { target: 'phone', keywords: ['phone', 'mobile', 'telephone', '电话'] },
   { target: 'purchaseType', keywords: ['best describes your business', 'business type', 'business?', '业务类型', 'describe your business'] },
-  { target: 'country', keywords: ['market or country', 'which market', 'country', 'market', '国家', '市场'] },
+  { target: 'notes:market', keywords: ['market or country','which market','market','市场'] },
+  { target: 'country', keywords: ['country','国家'] },
   { target: 'quantity', keywords: ['order quantity', 'quantity per model', 'estimated order', '数量'] },
   { target: 'productInterest', keywords: ['compressed', 'roll-packed', 'roll packed', 'interested in', 'product interest'] },
   { target: 'notes:import', keywords: ['import furniture from china', 'do you currently import', '是否进口'] },
@@ -70,11 +71,9 @@ function toPurchaseType(value: string): string {
 }
 
 function toQuantity(value: string): number | null {
-  // 「100-500」这类区间取上限；纯数字直接用；「More than 1000」取数字
-  const numbers = value.match(/\d[\d,]*/g);
-  if (!numbers?.length) return null;
-  const parsed = numbers.map(n => Number(n.replace(/,/g, ''))).filter(n => Number.isFinite(n) && n >= 0);
-  return parsed.length ? Math.max(...parsed) : null;
+  const cleaned=value.trim().replace(/,/g,'');
+  if(!/^\d+$/.test(cleaned))return null;
+  const n=Number(cleaned);return Number.isInteger(n)&&n<=2147483647?n:null;
 }
 
 /** 判断一条 field_data 命中了哪条规则（先匹配 name，再匹配 label）。 */
@@ -113,6 +112,7 @@ export function mapLeadFields(fields: LeadField[], meta: LeadMeta = { leadgenId:
       case 'productInterest': if (!out.productInterest) out.productInterest = value; else out.extras.push({ label: field.label || field.name, value }); break;
       case 'quantity': if (out.quantity === null) out.quantity = toQuantity(value); else out.extras.push({ label: field.label || field.name, value }); break;
       case 'purchaseType': if (out.purchaseType === 'OTHER') out.purchaseType = toPurchaseType(value); out.extras.push({ label: field.label || field.name, value }); break;
+      case 'notes:market': notes.push(`销售市场（不推断客户所在国）：${value}`); break;
       case 'notes:import': notes.push(`是否从中国进口：${value}`); break;
       case 'notes:concern': notes.push(`采购主要顾虑：${value}`); break;
       default: out.extras.push({ label: field.label || field.name, value });

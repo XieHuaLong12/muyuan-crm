@@ -7,6 +7,9 @@ import { dayKey } from '@/lib/time';
 import { parseInquiryDate } from '@/lib/customer-date';
 import { metaFields,identifyHeader,parseMetaCsv,normHeader,MetaField,MetaValues,MetaRow,MetaPreview,MetaDecision } from '@/lib/meta-import';
 import { normalizePhone } from './customer-service';
+import { canonicalEmail, canonicalPhone, sourceInstant } from '@/lib/contact-identity';
+import { lockIdentity, rememberCustomerContacts, recordLeadAttribution } from './contact-identity-service';
+import { retryTransaction } from '@/lib/transaction-retry';
 import { translator } from './meta-translation-service';
 
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
@@ -15,7 +18,7 @@ const previewSchema=z.object({filename:z.string().min(1).max(200),text:z.string(
 type Draft={userId:string;fileHash:string;expires:number;preview:MetaPreview;decisions:Record<string,MetaDecision>};
 const drafts=new Map<string,Draft>();
 function admin(user:Actor){if(user.role!=='ADMIN')throw new HttpError(403,'智能导入需要管理员权限');}
-const phones=(c:{phone:string;whatsapp:string})=>[c.phone,c.whatsapp].filter(Boolean).map(normalizePhone).filter(p=>p.length>=7);
+const phones=(c:{phone:string;whatsapp:string;countryCode?:string})=>[canonicalPhone(c.phone,c.countryCode,true),canonicalPhone(c.whatsapp,undefined,true)].filter((v):v is string=>!!v).map(v=>v.slice(1));
 const email=(s:string)=>s.trim().toLowerCase();
 type Candidate={id:string;name:string;companyName:string;phones:string[];emails:string[];deleted:boolean;ordinal:number};
 const scientific=(s:string)=>/^\d[\d.]*e[+-]?\d+$/i.test(s.replace(/^[pl]:/i,''));
@@ -34,7 +37,7 @@ export function metaDate(value:string,tz:string){
 function statusSignature(row:MetaRow){return JSON.stringify([row.status,row.targetId,row.ordinal,row.candidates.map(c=>c.id).sort()]);}
 
 async function classify(rows:MetaRow[],decisions:Record<string,MetaDecision>,client:Prisma.TransactionClient=db){
- const customers=await client.customer.findMany({include:{submissions:{select:{ordinal:true,values:true}}}});
+ const customers=await client.customer.findMany({include:{submissions:{select:{ordinal:true,values:true}},contactIdentities:{select:{kind:true,normalized:true}}}});
  const candidates:Candidate[]=customers.map(c=>{
   const history=c.submissions.flatMap(s=>{
     try{
@@ -62,6 +65,7 @@ async function classify(rows:MetaRow[],decisions:Record<string,MetaDecision>,cli
     phones:[
       ...new Set([
         ...phones(c),
+        ...c.contactIdentities.filter(a=>a.kind==='PHONE').map(a=>a.normalized.slice(1)),
         ...history.flatMap(phones)
       ])
     ],
@@ -69,6 +73,7 @@ async function classify(rows:MetaRow[],decisions:Record<string,MetaDecision>,cli
     emails:[
       ...new Set([
         c.email,
+        ...c.contactIdentities.filter(a=>a.kind==='EMAIL').map(a=>a.normalized),
         ...history.map(v=>v.email)
       ]
         .filter(Boolean)
@@ -85,6 +90,8 @@ async function classify(rows:MetaRow[],decisions:Record<string,MetaDecision>,cli
   };
 });
  const imported=new Set((await client.leadSubmission.findMany({where:{eventKey:{in:rows.map(r=>r.key)}},select:{eventKey:true}})).map(r=>r.eventKey));
+ for(const l of await client.customerLeadAttribution.findMany({where:{leadKey:{in:rows.map(r=>r.key)},customerId:{not:null},status:'MATCHED'},select:{leadKey:true}}))imported.add(l.leadKey);
+ for(const e of await client.metaLeadEvent.findMany({where:{leadgenId:{in:rows.filter(r=>r.key.startsWith('meta:')).map(r=>r.key.slice(5))},customerId:{not:null},status:{in:['CREATED','LINKED']}},select:{leadgenId:true}}))imported.add(`meta:${e.leadgenId}`);
  const seen=new Set<string>();
  const ordered=[...rows].sort((a,b)=>a.values.inquiryAt.localeCompare(b.values.inquiryAt)||a.row-b.row);
  for(const row of ordered){
@@ -94,7 +101,8 @@ async function classify(rows:MetaRow[],decisions:Record<string,MetaDecision>,cli
   const v=row.values;
   if(row.warnings.some(w=>w.startsWith('阻止：'))){row.status='INVALID';row.reason='请补充或修正必填字段后重新预览';continue;}
   const p=phones(v),e=email(v.email);
-  const exact=candidates.filter(c=>p.some(n=>c.phones.includes(n))||e&&c.emails.includes(e));
+  const phoneMatches=candidates.filter(c=>p.some(n=>c.phones.includes(n)));
+  const exact=phoneMatches.length?phoneMatches:candidates.filter(c=>e&&c.emails.includes(e));
   const weak=exact.length?[]:candidates.filter(c=>p.some(n=>c.phones.some(m=>Math.min(n.length,m.length)>=8&&n.slice(-8)===m.slice(-8)))||v.name&&normHeader(c.name)===normHeader(v.name));
   const matches=exact.length?exact:weak;
   row.candidates=matches.map(c=>({id:c.id,name:c.name,deleted:c.deleted}));
@@ -181,15 +189,16 @@ export function commitMeta(input:unknown,user:Actor){
 }
 async function executeCommitMeta(input:unknown,user:Actor){
  admin(user);const v=z.object({token:z.string().uuid(),rows:z.array(z.number().int()).min(1).max(500),confirmed:z.literal(true),allowPendingTranslation:z.boolean().default(false)}).parse(input);
- const existing=await db.metaImportRun.findUnique({where:{id:v.token}});if(existing){if(existing.userId!==user.id)throw new HttpError(403,'无权使用此预览');return JSON.parse(existing.result);}
+ const existing=await db.metaImportRun.findUnique({where:{id:v.token}});if(existing){if(existing.userId!==user.id)throw new HttpError(403,'无权使用此预览');return existing.resultPayload??JSON.parse(existing.result);}
  const draft=drafts.get(v.token);if(!draft||draft.expires<Date.now())throw new HttpError(409,'预览已过期或服务已重启，请重新上传预览');if(draft.userId!==user.id)throw new HttpError(403,'无权使用此预览');
  const selected=new Set(v.rows),rows=draft.preview.rows.filter(r=>selected.has(r.row));
  if(rows.length!==selected.size)throw new HttpError(400,'包含不属于当前预览的行');
  if(rows.some(r=>!['NEW','REPEAT'].includes(r.status)))throw new HttpError(400,'只能确认新客户或已核对的重复留资；请先处理疑似重复和错误');
  if(!v.allowPendingTranslation&&rows.some(r=>r.pending.length))throw new HttpError(400,'部分回答尚未翻译，请先处理或明确选择保留原文待处理');
  const settings=await db.setting.findUniqueOrThrow({where:{id:'system'}});
- return db.$transaction(async tx=>{
-  const done=await tx.metaImportRun.findUnique({where:{id:v.token}});if(done)return JSON.parse(done.result);
+ return retryTransaction(() => db.$transaction(async tx=>{
+  await lockIdentity(tx);
+  const done=await tx.metaImportRun.findUnique({where:{id:v.token}});if(done)return done.resultPayload??JSON.parse(done.result);
   const fresh=await classify(structuredClone(draft.preview.rows),draft.decisions,tx);
   if(rows.some(row=>statusSignature(row)!==statusSignature(fresh.find(r=>r.row===row.row)!)))throw new HttpError(409,'客户或留资记录已变化，为避免重复请重新预览');
   const result={created:0,repeated:0,skipped:draft.preview.rows.length-rows.length,customerIds:[] as string[]};
@@ -199,17 +208,24 @@ async function executeCommitMeta(input:unknown,user:Actor){
    if(customerId?.startsWith('row:'))customerId=newIds.get(customerId);
    if(row.status==='REPEAT'&&!customerId)throw new HttpError(400,'同文件中的首次留资未选中，请同时选择首次留资行');
    if(row.status==='NEW'){const importedStage=stageCodes[f.stage]??'NEW';const importedPurchaseType=purchaseCodes[f.customerType]??'OTHER';
-    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,phone:f.phone,whatsapp:f.whatsapp,whatsappNormalized:normalizePhone(f.whatsapp),email:f.email,country:f.country,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:importedPurchaseType,quantity:/^\d+$/.test(f.quantity)?Number(f.quantity):null,inquiryAt:parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:user.id,currency:settings.currency,stage:importedStage,isQualified:importedStage==='INVALID'?false:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
+    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,phone:f.phone,whatsapp:f.whatsapp,whatsappNormalized:normalizePhone(f.whatsapp),email:f.email,country:f.country,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:importedPurchaseType,quantity:/^\d+$/.test(f.quantity)?Number(f.quantity):null,inquiryAt:sourceInstant(Object.entries(row.original).find(([header])=>draft.preview.mapping[header]==='inquiryAt')?.[1])||parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:user.id,currency:settings.currency,stage:importedStage,stageSource:f.stage?'HUMAN':'SYSTEM',isQualified:importedStage==='INVALID'?false:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
     customerId=c.id;newIds.set(`row:${row.row}`,c.id);result.created++;
     await tx.stageHistory.create({data:{customerId,changedBy:user.id,toStage:importedStage,note:'CSV 智能导入'}});
-   }else{const old=await tx.customer.findUniqueOrThrow({where:{id:customerId!}});const importedStage=f.stage?stageCodes[f.stage]:undefined;const importedPurchaseType=f.customerType?purchaseCodes[f.customerType]:undefined;const stageChanged=!!importedStage&&old.stage!==importedStage;const purchaseTypeChanged=!!importedPurchaseType&&old.purchaseType!==importedPurchaseType;if(stageChanged||purchaseTypeChanged)await tx.customer.update({where:{id:customerId!},data:{...(stageChanged?{stage:importedStage,isQualified:importedStage==='INVALID'?false:old.stage==='INVALID'?null:old.isQualified}:{}),...(purchaseTypeChanged?{purchaseType:importedPurchaseType}:{})}});if(stageChanged)await tx.stageHistory.create({data:{customerId:customerId!,fromStage:old.stage,toStage:importedStage!,changedBy:user.id,note:'CSV 智能导入同步阶段'}});result.repeated++;}
+   }else{const old=await tx.customer.findUniqueOrThrow({where:{id:customerId!}});const importedStage=f.stage?stageCodes[f.stage]:undefined;const importedPurchaseType=f.customerType?purchaseCodes[f.customerType]:undefined;const stageChanged=!!importedStage&&old.stage!==importedStage;const purchaseTypeChanged=!!importedPurchaseType&&old.purchaseType!==importedPurchaseType;if(stageChanged||purchaseTypeChanged||importedStage&&old.stageSource!=='HUMAN')await tx.customer.update({where:{id:customerId!},data:{...(importedStage?{stageSource:'HUMAN'}:{}),...(stageChanged?{stage:importedStage,isQualified:importedStage==='INVALID'?false:old.stage==='INVALID'?null:old.isQualified}:{}),...(purchaseTypeChanged?{purchaseType:importedPurchaseType}:{})}});if(stageChanged)await tx.stageHistory.create({data:{customerId:customerId!,fromStage:old.stage,toStage:importedStage!,changedBy:user.id,note:'CSV 智能导入同步阶段'}});result.repeated++;}
    const previous=await tx.leadSubmission.aggregate({where:{customerId:customerId!},_max:{ordinal:true}});
    const ordinal=row.status==='NEW'?1:Math.max(1,previous._max.ordinal??1)+1;
    if(ordinal!==row.ordinal)throw new HttpError(400,'同一客户的多次留资请按顺序选中，包含更早的留资行，以保持编号与预览一致');
-   await tx.leadSubmission.create({data:{customerId:customerId!,eventKey:row.key,leadId:f.leadId,ordinal,occurredAt:parseInquiryDate(f.inquiryAt,settings.timezone),values:JSON.stringify(f),raw:JSON.stringify(row.original),filename:draft.preview.filename,fileHash:draft.fileHash,translationPending:JSON.stringify(row.pending)}});
+   await tx.leadSubmission.create({data:{customerId:customerId!,eventKey:row.key,leadId:f.leadId,ordinal,occurredAt:sourceInstant(Object.entries(row.original).find(([header])=>draft.preview.mapping[header]==='inquiryAt')?.[1])||parseInquiryDate(f.inquiryAt,settings.timezone),values:JSON.stringify(f),raw:JSON.stringify(row.original),filename:draft.preview.filename,fileHash:draft.fileHash,translationPending:JSON.stringify(row.pending)}});
+   await rememberCustomerContacts(tx,customerId!,'META_CSV');
+   const original=(key:string)=>Object.entries(row.original).find(([header])=>normHeader(header)===normHeader(key))?.[1]?.replace(/^[a-z]:/i,'')||null;
+   await recordLeadAttribution(tx,{leadKey:row.key,leadId:f.leadId||null,customerId:customerId!,status:'MATCHED',matchMethod:draft.decisions[String(row.row)]?'MANUAL':row.status==='NEW'?'CREATED':'PHONE',confidence:100,
+     occurredAt:sourceInstant(Object.entries(row.original).find(([header])=>draft.preview.mapping[header]==='inquiryAt')?.[1])||parseInquiryDate(f.inquiryAt,settings.timezone),
+     phoneRaw:f.whatsapp||f.phone,phoneE164:canonicalPhone(f.whatsapp||f.phone,undefined,true),emailNormalized:canonicalEmail(f.email),platform:f.source||null,
+     accountId:original('account_id'),campaignId:original('campaign_id'),campaignName:f.campaignName||null,adsetId:original('adset_id'),adsetName:original('adset_name'),adId:original('ad_id'),adName:f.adName||null,creativeId:original('creative_id'),creativeName:original('creative_name'),formId:f.formId?.replace(/^f:/i,'')||null,formName:f.formName||null,source:'CSV',answers:row.original},
+     [f.phone,f.whatsapp].flatMap(raw=>{const normalized=canonicalPhone(raw,undefined,true);return normalized?[{raw,normalized}]:[];}));
    result.customerIds.push(customerId!);
   }
-  await tx.metaImportRun.create({data:{id:v.token,userId:user.id,result:JSON.stringify(result)}});
+  await tx.metaImportRun.create({data:{id:v.token,userId:user.id,result:JSON.stringify(result).length<=191?JSON.stringify(result):JSON.stringify({...result,customerIds:[]}),resultPayload:result}});
   return result;
- },{timeout:30000});
+ },{timeout:30000}));
 }

@@ -217,10 +217,12 @@ export async function syncAds() {
       metricsUpserted++;
     }
 
+    const adFacts=await (await import('./meta-ad-facts-service')).syncAdFacts(token,accountId);
     const dates = metrics.map(m => m.metricDate.getTime()).sort((a, b) => a - b);
     return {
       ok: true,
       account: { id: account.id, name: account.name, currency: account.currency, timezone: account.timezone_name, status: account.account_status },
+      adFacts,
       campaigns: { created, updated, total: campaigns.length },
       metrics: { upserted: metricsUpserted },
       window: dates.length ? { from: new Date(dates[0]).toISOString().slice(0, 10), to: new Date(dates[dates.length - 1]).toISOString().slice(0, 10) } : null,

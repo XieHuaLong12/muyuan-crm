@@ -1,0 +1,14 @@
+verification	applied_migrations
+clean upgrade 13 -> 16	16
+unresolved_failed_migrations
+0
+id	name	phone	whatsapp	email	notes	stage	updatedAt	phoneE164	emailNormalized	stageSource
+upgrade-customer	原有客户请保留	+44 (0)20 7946 0018	442079460018	original@example.test	升级前原始备注	NEW	2026-10-03 17:11:40.488	NULL	NULL	HUMAN
+id	userId	result	resultPayload
+legacy-import	upgrade-user	{"created":1,"repeated":0,"skipped":0,"customerIds":["upgrade-customer"]}	NULL
+original_user_preserved
+1
+original_customer_fields_preserved
+1
+original_import_result_preserved
+1

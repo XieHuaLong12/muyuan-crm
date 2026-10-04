@@ -257,3 +257,21 @@
 
 @media(max-width:1180px){.bos-order-layout{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:760px){.bos-detail-grid{grid-template-columns:1fr}.bos-flow{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:18px}}
+
+.bos .identity-analytics{max-width:1440px;margin:0 auto;display:grid;gap:24px;min-width:0}
+.bos .identity-filters{display:flex;flex-wrap:wrap;align-items:end;gap:16px}
+.bos .identity-filters label{display:grid;gap:8px;font-size:13px;min-width:0;flex:1 1 150px}
+.bos .identity-filters select{background:var(--bos-card);color:var(--bos-primary);border:1px solid var(--bos-border);border-radius:12px;min-height:40px;padding:8px;font:inherit;max-width:100%}
+.bos .identity-analytics td{overflow-wrap:anywhere;max-width:300px}
+@media(max-width:760px){.bos .identity-filters label{flex-basis:100%}.bos .identity-analytics{gap:16px}}
+
+.bos .identity-timeline { min-width: 0; overflow-wrap: anywhere; }
+.bos .identity-timeline details { margin: 16px 0; }
+.bos .identity-timeline summary { cursor: pointer; }
+.bos .identity-timeline article { padding: 12px 0; border-bottom: 1px solid var(--bos-border); }
+.bos .identity-timeline ol { list-style: none; padding: 0; }
+.bos .identity-timeline li { padding: 12px 0; border-bottom: 1px solid var(--bos-border); }
+.bos .identity-timeline li small { display: block; margin-top: 4px; }
+.bos .identity-timeline dd { margin: 0; }
+
+.bos .identity-filters textarea{background:var(--bos-card);color:var(--bos-primary);border:1px solid var(--bos-border);border-radius:12px;min-height:80px;padding:8px;font:inherit;max-width:100%;resize:vertical}

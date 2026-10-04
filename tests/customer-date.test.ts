@@ -1,3 +1,4 @@
+import { deleteTestCustomers, deleteTestOrders } from './identity-test-cleanup';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../lib/db';
@@ -77,9 +78,9 @@ test('历史询盘归因、日期修改、默认值、删除恢复及订单统�
     await db.followUp.deleteMany({where:{customerId:{in:ids}}});
     await db.deal.deleteMany({where:{customerId:{in:ids}}});
     // 订单随成交产生，且外键为 RESTRICT，必须先清掉
-    await db.order.deleteMany({where:{customerId:{in:ids}}});
+    await deleteTestOrders({where:{customerId:{in:ids}}});
     await db.stageHistory.deleteMany({where:{customerId:{in:ids}}});
-    await db.customer.deleteMany({where:{id:{in:ids}}});
+    await deleteTestCustomers({where:{id:{in:ids}}});
     await db.$disconnect();
   }
 });

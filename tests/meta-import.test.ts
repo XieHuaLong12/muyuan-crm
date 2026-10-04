@@ -1,3 +1,4 @@
+import { deleteTestCustomers } from './identity-test-cleanup';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../lib/db';
@@ -61,7 +62,7 @@ test('智能导入：预览零写入、幂等、重复留资、疑似重复、�
   const deleted=await preview(make(prefix+'-deleted','Deleted','+441111009999'));assert.equal(deleted.rows[0].status,'SUSPECT');assert.ok(deleted.rows[0].candidates[0].deleted);
   if((process.env.DATABASE_URL??'').startsWith('file:'))assert.deepEqual(await db.$queryRawUnsafe('PRAGMA foreign_key_check'),[]);
  }finally{
-  await db.leadSubmission.deleteMany({where:{customerId:{in:ids}}});await db.stageHistory.deleteMany({where:{customerId:{in:ids}}});await db.customer.deleteMany({where:{id:{in:ids}}});await db.metaImportRun.deleteMany({where:{id:{in:runIds}}});await db.$disconnect();
+  await db.leadSubmission.deleteMany({where:{customerId:{in:ids}}});await db.stageHistory.deleteMany({where:{customerId:{in:ids}}});await deleteTestCustomers({where:{id:{in:ids}}});await db.metaImportRun.deleteMany({where:{id:{in:runIds}}});await db.$disconnect();
  }
 });
 

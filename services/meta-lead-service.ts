@@ -2,9 +2,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor } from '@/lib/auth';
-import { saveCustomer, duplicates } from './customer-service';
+import { Actor,HttpError } from '@/lib/auth';
+import { canonicalEmail, canonicalPhone, metaLeadKey, sourceInstant } from '@/lib/contact-identity';
+import { lockIdentity, resolveContact, rememberCustomerContacts, recordLeadAttribution } from './contact-identity-service';
+import { retryTransaction } from '@/lib/transaction-retry';
 import { mapLeadFields, type LeadField } from '@/lib/meta-lead-fields';
+import { fetchLeadAdSnapshot } from './meta-lead-ad-snapshot';
 
 /**
  * Meta Facebook Lead Ads 接入
@@ -110,6 +113,11 @@ const graphLead = z.object({
   ad_id: z.string().optional(),
   adset_id: z.string().optional(),
   campaign_id: z.string().optional(),
+  ad_name: z.string().optional(),
+  adset_name: z.string().optional(),
+  campaign_name: z.string().optional(),
+  form_id: z.string().optional(),
+  platform: z.string().optional(),
   field_data: z.array(
     z.object({
       name: z.string().default(''),
@@ -127,7 +135,7 @@ export async function fetchLead(leadgenId: string) {
   if (!token) return { ok: false as const, error: 'META_PAGE_ACCESS_TOKEN 未配置' };
 
   const url = new URL(`https://graph.facebook.com/${graphVersion()}/${encodeURIComponent(leadgenId)}`);
-  url.searchParams.set('fields', 'id,created_time,field_data,form_id,ad_id,adset_id,campaign_id');
+  url.searchParams.set('fields', 'id,created_time,field_data,form_id,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,platform');
 
   try {
     const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000), headers: { Authorization: `Bearer ${token}` } });
@@ -210,43 +218,50 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
     );
     const mapped = mapLeadFields(fields, { leadgenId: event.leadgenId, formId: event.formId });
     const actor = await defaultActor();
-    const matched = await duplicates({ email: mapped.email, phone: mapped.phone, whatsapp: mapped.whatsapp });
-    const attribution = { adId: lead.lead.ad_id ?? null, campaignId: lead.lead.campaign_id ?? null, rawPayload: { webhook: payload, lead: JSON.parse(lead.raw) } as Prisma.InputJsonValue };
-    if (matched.length) {
-      await mark(event.leadgenId, claimedAt, 'LINKED', matched[0].id, '', attribution);
-      console.info('[meta-lead] customer linked', { requestId, leadgenId: event.leadgenId, customerId: matched[0].id });
-      return { leadgenId: event.leadgenId, status: 'LINKED' as const, customerId: matched[0].id, reason: '' };
-    }
-
-    const created = await saveCustomer(
-      {
-        name: mapped.name,
-        companyName: mapped.companyName,
-        country: mapped.country,
-        phone: mapped.phone,
-        whatsapp: mapped.whatsapp,
-        email: /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mapped.email) ? mapped.email : '',
-        source: 'FACEBOOK',
-        sourceDetail: 'Facebook Ads',
-        purchaseType: mapped.purchaseType,
-        productInterest: mapped.productInterest,
-        quantity: mapped.quantity,
-        notes: mapped.notes,
-        stage: 'NEW',
-        ownerId: actor.id,
-      },
-      actor,
-      undefined,
-      async (tx, customerId) => {
-        const updated = await tx.metaLeadEvent.updateMany({
-          where: { leadgenId: event.leadgenId, status: 'PROCESSING', processingStartedAt: claimedAt },
-          data: { ...attribution, status: 'CREATED', customerId, error: '', processingStartedAt: null },
-        });
-        if (updated.count !== 1) throw new Error('Meta lead processing claim expired');
-      },
-    );
-    console.info('[meta-lead] customer created', { requestId, leadgenId: event.leadgenId, customerId: created.id });
-    return { leadgenId: event.leadgenId, status: 'CREATED' as const, customerId: created.id, reason: '' };
+    if(lead.lead.id!==event.leadgenId)throw new Error('Graph lead ID 与请求不一致');
+    const occurredAt=sourceInstant(lead.lead.created_time);
+    const candidatePhones=[canonicalPhone(mapped.whatsapp,undefined,true),canonicalPhone(mapped.phone,undefined,true)].filter((p):p is string=>!!p);
+    const phoneE164=candidatePhones[0]||null;
+    const emailNormalized=canonicalEmail(mapped.email);
+    const [adSnapshot,formSnapshot]=await Promise.all([fetchLeadAdSnapshot(lead.lead.ad_id),db.metaLeadForm.findUnique({where:{formId:lead.lead.form_id||event.formId||''},select:{name:true}})]);
+    const attribution={adId:lead.lead.ad_id??null,campaignId:lead.lead.campaign_id??null,rawPayload:{webhook:payload,lead:JSON.parse(lead.raw)} as Prisma.InputJsonValue};
+    return await retryTransaction(()=>db.$transaction(async tx=>{
+      await lockIdentity(tx);
+      const resolved=await resolveContact({leadId:event.leadgenId,phones:candidatePhones,email:mapped.email},tx);
+      let customerId:string|null=resolved.status==='MATCHED'?resolved.customerId:null;
+      let status:'CREATED'|'LINKED'|'FAILED'=customerId?'LINKED':'FAILED';
+      if(customerId){
+        const active=await tx.customer.findUniqueOrThrow({where:{id:customerId},select:{deletedAt:true}});
+        if(active.deletedAt)throw new Error('该留资关联回收站客户，请人工恢复后重试');
+      }
+      if(resolved.status==='UNMATCHED'&&(phoneE164||emailNormalized)){
+        const settings=await tx.setting.findUniqueOrThrow({where:{id:'system'}});
+        const customer=await tx.customer.create({data:{name:mapped.name,companyName:mapped.companyName,country:mapped.country,
+          phone:mapped.phone,whatsapp:mapped.whatsapp,whatsappNormalized:phoneE164?.slice(1)||'',email:emailNormalized||'',
+          source:lead.lead.platform==='instagram'?'INSTAGRAM':'FACEBOOK',sourceDetail:lead.lead.ad_name||'Facebook Ads',purchaseType:mapped.purchaseType,productInterest:mapped.productInterest,
+          quantity:mapped.quantity,notes:mapped.notes,stage:'NEW',stageSource:'SYSTEM',ownerId:actor.id,currency:settings.currency,inquiryAt:occurredAt}});
+        customerId=customer.id;status='CREATED';
+        await tx.stageHistory.create({data:{customerId,toStage:'NEW',changedBy:actor.id,note:'Meta Lead webhook'}});
+      }
+      await recordLeadAttribution(tx,{leadKey:metaLeadKey(event.leadgenId),leadId:event.leadgenId,customerId,status:customerId?'MATCHED':resolved.status,
+        matchMethod:customerId?(status==='CREATED'?'CREATED':resolved.method):resolved.method,confidence:customerId?100:0,
+        occurredAt,phoneRaw:mapped.whatsapp||mapped.phone,phoneE164,emailNormalized,platform:lead.lead.platform||null,
+        accountId:adSnapshot?.account_id||null,campaignId:lead.lead.campaign_id||adSnapshot?.campaign_id||null,campaignName:lead.lead.campaign_name||adSnapshot?.campaign?.name||null,adsetId:lead.lead.adset_id||adSnapshot?.adset_id||null,adsetName:lead.lead.adset_name||adSnapshot?.adset?.name||null,
+        adId:lead.lead.ad_id||null,adName:lead.lead.ad_name||adSnapshot?.name||null,creativeId:adSnapshot?.creative?.id||null,creativeName:adSnapshot?.creative?.name||null,formId:lead.lead.form_id||event.formId||null,formName:formSnapshot?.name||null,source:'WEBHOOK',answers:JSON.parse(lead.raw)},
+        [mapped.phone,mapped.whatsapp].flatMap(raw=>{const normalized=canonicalPhone(raw,undefined,true);return normalized?[{raw,normalized}]:[];}));
+      if(customerId){
+        await rememberCustomerContacts(tx,customerId,'META_WEBHOOK');
+        const submission=await tx.leadSubmission.findUnique({where:{eventKey:metaLeadKey(event.leadgenId)}});
+        if(!submission){const previous=await tx.leadSubmission.aggregate({where:{customerId},_max:{ordinal:true}});
+          await tx.leadSubmission.create({data:{customerId,eventKey:metaLeadKey(event.leadgenId),leadId:event.leadgenId,ordinal:(previous._max.ordinal||0)+1,
+            occurredAt:occurredAt||new Date(),values:JSON.stringify(mapped),raw:lead.raw,filename:'Meta webhook',fileHash:'',translationPending:'[]'}});}
+      }
+      const reason=customerId?'':resolved.status==='AMBIGUOUS'?'AMBIGUOUS：联系方式对应多个客户，等待人工认领':'缺少可确认的手机号或邮箱，等待人工认领';
+      const updated=await tx.metaLeadEvent.updateMany({where:{leadgenId:event.leadgenId,status:'PROCESSING',processingStartedAt:claimedAt},
+        data:{...attribution,status,customerId,error:reason,processingStartedAt:null}});
+      if(updated.count!==1)throw new Error('Meta lead processing claim expired');
+      return {leadgenId:event.leadgenId,status,customerId,reason};
+    }));
   } catch (error) {
     const reason = safeReason(error);
     console.error('[meta-lead] customer processing failed', { requestId, leadgenId: event.leadgenId, errorType: error instanceof Error ? error.name : 'unknown' });
@@ -282,6 +297,7 @@ export async function handleWebhookPayload(body: unknown, requestId?: string) {
     results.push(await handleLeadgenEvent(event, body, requestId));
   }
 
+  if(results.some(r=>r.customerId))try{await (await import('./identity-chain-service')).reconcilePendingIdentityMessages({limit:50},await defaultActor());}catch{console.error('[meta-lead] conversation reconciliation remains pending');}
   const failures = results.filter(result => result.status === 'FAILED');
   return {
     accepted: events.length,
@@ -297,6 +313,19 @@ export async function recentMetaLeadEvents(limit = 20) {
     take: Math.min(limit, 100),
     select: { id: true, leadgenId: true, formId: true, status: true, error: true, customerId: true, createdAt: true },
   });
+}
+
+/** Recover persisted failures even after a provider's retry window has ended. */
+export async function retryPendingMetaLeads(input:unknown,user:Actor){
+  if(user.role!=='ADMIN')throw new HttpError(403,'留资重试需要管理员权限');
+  const {limit}=z.object({limit:z.coerce.number().int().min(1).max(5).default(3)}).parse(input);
+  if(!process.env.META_PAGE_ACCESS_TOKEN)return {status:'NOT_CONNECTED',succeeded:0,failed:0};
+  const rows=await db.metaLeadEvent.findMany({where:{OR:[{status:'RECEIVED'},{status:'FAILED',NOT:[{error:{contains:'AMBIGUOUS'}},{error:{contains:'缺少可确认'}},{error:{contains:'回收站'}}]},{status:'PROCESSING',processingStartedAt:{lt:new Date(Date.now()-CLAIM_TIMEOUT_MS)}}]},orderBy:{createdAt:'asc'},take:limit});
+  const job=await db.syncJob.create({data:{provider:'META',jobType:'LEAD_RETRY',status:'RUNNING',actorId:user.id}});
+  let succeeded=0,failed=0;
+  for(const row of rows)try{const result=await handleLeadgenEvent({leadgenId:row.leadgenId,pageId:row.pageId,formId:row.formId},row.rawPayload);if(result.status==='FAILED')failed++;else succeeded++;}catch{failed++;}
+  await db.syncJob.update({where:{id:job.id},data:{status:failed?'PARTIAL':'OK',completedAt:new Date(),processed:rows.length,succeeded,failed,error:failed?'LEAD_RETRY_FAILED':null}});
+  return {status:'CONNECTED',succeeded,failed};
 }
 
 export { DAY };

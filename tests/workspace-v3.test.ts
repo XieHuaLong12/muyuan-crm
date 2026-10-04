@@ -1,3 +1,4 @@
+import { deleteTestCustomers } from './identity-test-cleanup';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -97,7 +98,7 @@ test('V3 tasks, reminders, scope, workflow lifecycle and media integration',asyn
   await db.whatsAppReadState.create({data:{customerId,userId:actor.id,readAt:new Date(Date.now()+1000)}});
   assert.equal((await priorityCustomers(actor)).find(c=>c.id===customerId)?.unread,false);
  }finally{
-  await db.customer.delete({where:{id:customerId}});
+  await deleteTestCustomers({where:{id:customerId}});
   if(oldStorage===undefined)delete process.env.MEDIA_STORAGE_DIR;else process.env.MEDIA_STORAGE_DIR=oldStorage;
   await rm(storage,{recursive:true,force:true});await db.$disconnect();
  }

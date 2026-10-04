@@ -1,3 +1,7 @@
+import { canonicalPhone } from '@/lib/contact-identity';
+import { lockIdentity, resolveContact } from './contact-identity-service';
+import { ensureConversation, messageFacts } from './conversation-identity-service';
+import { retryTransaction } from '@/lib/transaction-retry';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
@@ -76,6 +80,9 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
 
   const destination = normalizeWhatsApp(customer.waId || customer.whatsapp || customer.phone);
   if (!/^[1-9]\d{6,14}$/.test(destination)) throw new HttpError(400, '客户 WhatsApp 号码需要有效国家码');
+  const identity=await resolveContact({phones:[canonicalPhone(destination,undefined,true)!].filter(Boolean)});
+  const manual=await db.whatsAppContact.findFirst({where:{provider:transport==='META'?'cloud_api':'gupshup',accountId:transport==='META'?phoneNumberId:source,phoneE164:canonicalPhone(destination,undefined,true),status:'MANUAL',customerId}});
+  if(!manual&&(identity.status!=='MATCHED'||identity.customerId!==customerId))throw new HttpError(409,'此号码身份不明确，请先人工认领后发送');
   if (!customer.lastInboundAt || Date.now() - customer.lastInboundAt.getTime() > 24 * 60 * 60 * 1000) {
     throw new HttpError(409, '客户的 24 小时会话窗口已关闭，请等待客户回复或使用已审核模板开启会话');
   }
@@ -163,14 +170,18 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
 
   const sentAt = new Date();
   // Keep persistence outside the network catch: a DB failure must not label an accepted message FAILED.
-  const saved = await db.$transaction(async tx => {
+  const saved = await retryTransaction(()=>db.$transaction(async tx => {
+    await lockIdentity(tx);
+    const linked=await ensureConversation(tx,{provider:transport==='META'?'cloud_api':'gupshup',accountId:transport==='META'?phoneNumberId:source,peerId:canonicalPhone(destination,undefined,true)||destination,phone:destination,externalId:destination,sentAt,direction:'OUTBOUND',sourceMessageId:providerMessageId});
+    if(linked.customerId!==customerId)await tx.identityAudit.create({data:{entityType:'OUTBOUND_MESSAGE',entityId:message.id,fromCustomerId:customerId,toCustomerId:linked.customerId,actorId:user.id,reason:'供应商已接受消息，期间身份发生变化；保存发送凭证，需人工核对'}});
     const saved = await tx.whatsAppMessage.update({ where: { id: message.id },
-      data: { status: 'SENT', providerMessageId, waMessageId: providerMessageId, sentAt } });
+      data: { conversationId:linked.conversation.id, status: 'SENT', providerMessageId, waMessageId: providerMessageId, sentAt } });
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastContactAt: null }, { lastContactAt: { lt: sentAt } }] }, data: { lastContactAt: sentAt } });
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastWhatsAppAt: null }, { lastWhatsAppAt: { lt: sentAt } }] }, data: { lastWhatsAppAt: sentAt } });
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastOutboundAt: null }, { lastOutboundAt: { lt: sentAt } }] }, data: { lastOutboundAt: sentAt } });
+    await messageFacts(tx,customerId,sentAt,'OUTBOUND');
     return saved;
-  });
+  }));
   await syncCustomerWorkflow(customerId);
   return { message: saved };
 }
