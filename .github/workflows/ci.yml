@@ -93,19 +93,20 @@ jobs:
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3306/muyuan_reuse
         run: |
-          # 复现已核对的线上状态：13 条旧迁移，再部署 3 条身份链增量迁移。
+          # 复现已核对的线上状态：13 条旧迁移，再部署身份链与 Gupshup 增量迁移。
           mysql -h127.0.0.1 -uroot -proot -e 'CREATE DATABASE muyuan_reuse'
           mkdir /tmp/identity-ci-migrations
           trap 'for migration in /tmp/identity-ci-migrations/*; do [ ! -d "$migration" ] || mv "$migration" prisma/migrations/; done' EXIT
           mv prisma/migrations/20261003153000_identity_chain_foundation /tmp/identity-ci-migrations/
           mv prisma/migrations/20261003163000_whatsapp_provider_account_identity /tmp/identity-ci-migrations/
           mv prisma/migrations/20261003170000_meta_import_result_payload /tmp/identity-ci-migrations/
+          mv prisma/migrations/20261004023000_gupshup_live_identity /tmp/identity-ci-migrations/
           pnpm exec prisma migrate deploy
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "13"
           mysql -h127.0.0.1 -uroot -proot muyuan_reuse -e "INSERT INTO User (id,name,email,passwordHash) VALUES ('reuse-sentinel','Existing user','existing@example.com','preserve-me')"
           mv /tmp/identity-ci-migrations/* prisma/migrations/
           pnpm exec prisma migrate deploy
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "16"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "17"
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM User WHERE id='reuse-sentinel' AND passwordHash='preserve-me'")" = "1"
           echo "reused-deployment upgrade path OK"
 

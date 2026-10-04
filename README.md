@@ -241,3 +241,14 @@ Growth Center 广告表现接入 Meta Marketing API（System User Token + ads_re
 管理员可点击“新建客户”旁的“智能导入”上传 Meta CSV，先预览识别字段及查重结果，再确认写入。支持二次留资历史、同 Lead 跳过、疑似重复人工处理及翻译服务配置。详情与测试边界见 [智能导入说明](智能导入说明.md)。
 
 更新已有安装时先备份数据库，再执行 `pnpm exec prisma migrate deploy`、`pnpm exec prisma generate`、`pnpm build` 并重新启动；不要对已有真实数据运行演示 Seed。所有回归测试应使用数据库副本：设置 `DATABASE_URL` 到副本，同时 HTTP 服务与测试程序使用相同的副本和 `TEST_BASE_URL`。
+
+
+## Gupshup CTWA 实时身份链（第一生产里程碑）
+
+Gupshup V2 与 Meta 格式 V3 通过带 `x-webhook-secret` 的回调进入已有 CRM。有效新号码自动建客；同号冲突与软删除客户保持待认领。CTWA referral 存入统一归因账本，`source_type=post` 不冒充广告，已获取的名称保留快照。旧 Lead Form、Cloud API、Local Sync 均保留。
+
+普通发送按当前 provider/business account 的已验证客户入站时间计算 24 小时窗口；历史同步与另一业务号码的聊天不能开放该窗口。缺少时间为 UNKNOWN，过期为 CLOSED。发送 API 接受只记录 ENQUEUED；sent/delivered/read 依真实回执推进。回执可先于发送落库，持久化后补齐，状态不倒退。客户 STOP/UNSUBSCRIBE/不要联系会退订，主动 CTWA 咨询不自动授予营销同意。
+
+接入检查：`/settings/integrations/whatsapp`；管理员按号码/客户/消息查看 `/admin/integration-debug`；`/whatsapp/inbox` 复用销售工作台。Token 与原始 webhook 不在默认前端投影中。`GUPSHUP_SOURCE_NUMBER` 兼容现有 `GUPSHUP_SOURCE`；可选 `GUPSHUP_APP_ID` 核验 V3 应用。Webhook 必须有服务器 `GUPSHUP_WEBHOOK_SECRET`。第一阶段 CAPI 默认关闭。
+
+模板中心、营销同意管理、召回队列和召回订单归因按 [实施计划](docs/GUPSHUP_CTWA_IMPLEMENTATION.md) 接续开发：先验收一条真实 CTWA 入站，不能用本地 fixture 宣称已接通生产。升级仅追加 `20261004023000_gupshup_live_identity`；回滚应用时保留新增列和回执表。

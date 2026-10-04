@@ -69,6 +69,11 @@ model Customer {
  lastWhatsAppAt DateTime?
  lastInboundAt DateTime?
  lastOutboundAt DateTime?
+ whatsappOptInStatus String @default("UNKNOWN") @db.VarChar(16)
+ whatsappOptInSource String? @db.VarChar(24)
+ whatsappOptInEvidence String? @db.Text
+ whatsappOptInAt DateTime?
+ whatsappOptOutAt DateTime?
  notes String @default("") @db.Text
  createdAt DateTime @default(now())
  inquiryAt DateTime?
@@ -109,6 +114,7 @@ model Customer {
  @@index([aiScore])
  @@index([aiPriority])
  @@index([lastWhatsAppAt])
+ @@index([whatsappOptInStatus])
 }
 model FollowUp {
  id String @id @default(cuid())
@@ -196,6 +202,13 @@ model LeadSubmission {
 
 model WhatsAppMessage {
  id String @id @default(cuid())
+ providerAccountId String? @db.VarChar(191)
+ sourcePhone String? @db.VarChar(16)
+ destinationPhone String? @db.VarChar(16)
+ providerOccurredAt DateTime?
+ deliveredAt DateTime?
+ readAt DateTime?
+ failedAt DateTime?
  conversationId String?
  conversation WhatsAppConversation? @relation(fields: [conversationId], references: [id], onDelete: Restrict)
  customerId String
@@ -930,6 +943,8 @@ model WhatsAppConversation {
  syncCursor String? @db.Text
  lastMessageAt DateTime?
  lastInboundAt DateTime?
+ // Verified live-provider evidence only. Historical imports never advance this field.
+ lastCustomerMessageAt DateTime?
  lastOutboundAt DateTime?
  lastSyncedAt DateTime?
  createdAt DateTime @default(now())
@@ -937,6 +952,22 @@ model WhatsAppConversation {
  messages WhatsAppMessage[]
  pendingMessages WhatsAppUnmatchedMessage[]
  @@index([contactId, lastMessageAt])
+}
+model WhatsAppStatusReceipt {
+ id String @id @default(cuid())
+ receiptKey String @unique @db.Char(64)
+ provider String @db.VarChar(24)
+ accountId String @db.VarChar(191)
+ messageId String @db.VarChar(191)
+ gsId String? @db.VarChar(191)
+ status String @db.VarChar(24)
+ occurredAt DateTime?
+ failureCode String? @db.VarChar(32)
+ appliedAt DateTime?
+ createdAt DateTime @default(now())
+ @@index([provider, accountId, appliedAt, createdAt])
+ @@index([messageId])
+ @@index([gsId])
 }
 model IdentityAudit {
  id String @id @default(cuid())

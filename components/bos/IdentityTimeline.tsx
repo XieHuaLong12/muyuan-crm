@@ -9,7 +9,7 @@ type Attribution={status:string;campaignId:string|null;adsetId:string|null;adId:
 type Chain={intelligence:IntelligenceRecord|null;customer:{id:string;phoneE164:string|null;stage:string;stageSource:string};leads:{id:string;leadKey:string;occurredAt:string|null;campaignName:string|null;campaignId:string|null;adsetName:string|null;adsetId:string|null;adName:string|null;adId:string|null;creativeName:string|null;creativeId:string|null}[];
   conversations:{id:string;contact:{provider:string;status:string}}[];timeline:{id:string;kind:string;at:string;source:string}[];messages:{id:string;content:string}[];nextCursor:string|null;
   selectedOrder:{id:string;attribution:Attribution|null}|null;orders:{id:string;orderNo:string;attribution:Attribution|null}[]};
-const labels:Record<string,string>={LEAD_SUBMISSION:'Meta 留资',INBOUND_MESSAGE:'客户消息',OUTBOUND_MESSAGE:'销售消息',QUOTE_SENT:'报价已发送',ORDER_REGISTERED:'订单登记',CATALOG_SENT:'已发目录',PRODUCT_CONFIRMED:'已确认产品',PAYMENT_RECEIVED:'付款记录',ORDER_COMPLETED:'订单完成'};
+const labels:Record<string,string>={CTWA_REFERRAL:'广告来源消息（referral 证据）',LEAD_SUBMISSION:'Meta 留资',INBOUND_MESSAGE:'客户消息',OUTBOUND_MESSAGE:'销售消息',QUOTE_SENT:'报价已发送',ORDER_REGISTERED:'订单登记',CATALOG_SENT:'已发目录',PRODUCT_CONFIRMED:'已确认产品',PAYMENT_RECEIVED:'付款记录',ORDER_COMPLETED:'订单完成'};
 const instant=(value:string|null,timezone:string)=>value?new Intl.DateTimeFormat('zh-CN',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(value)):'—';
 
 export function IdentityTimeline({customerId,orderId,timezone}:{customerId?:string;orderId?:string;timezone:string}){
