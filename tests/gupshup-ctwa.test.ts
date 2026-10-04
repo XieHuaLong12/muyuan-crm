@@ -42,6 +42,17 @@ test('Gupshup CTWA database: concurrent create, immutable referral, scoped windo
   try{
     process.env.GUPSHUP_SOURCE_NUMBER=business;process.env.GUPSHUP_APP_NAME='CTWA_TEST';process.env.GUPSHUP_API_KEY='isolated-test-key';
     process.env.GUPSHUP_WEBHOOK_SECRET='isolated-callback-secret';process.env.META_AD_ACCOUNT_ID=`ctwa-${marker}`;delete process.env.DEEPSEEK_API_KEY;
+    const legacyPhone='+33658917982';
+    const legacy=await db.customer.create({data:{name:'Existing legacy buyer',phone:'+33 6 58 91 79 82',whatsapp:'+33 6 58 91 79 82',ownerId:admin.id,stage:'QUOTED'}});
+    created.push(legacy.id);
+    const legacyResult=await ingestWhatsAppWebhook(event(`legacy-${marker}`,legacyPhone));
+    assert.equal(legacyResult.createdCustomers,0);assert.equal(legacyResult.matchedCustomers,1);
+    const normalizedLegacy=await db.customer.findUniqueOrThrow({where:{id:legacy.id}});
+    assert.equal(normalizedLegacy.phoneE164,legacyPhone);assert.equal(normalizedLegacy.stage,'QUOTED');assert.equal(normalizedLegacy.ownerId,admin.id);
+    assert.equal(normalizedLegacy.phone,'+33 6 58 91 79 82');assert.equal(normalizedLegacy.name,'Existing legacy buyer');
+    assert.equal(await db.contactIdentity.count({where:{customerId:legacy.id,kind:'PHONE',normalized:legacyPhone}}),1);
+    assert.equal((await customerServiceWindow(legacy.id,actor)).conversationWindowStatus,'OPEN');
+    assert.ok((await integrationDebug({q:legacyPhone},actor)).checks.some(check=>check.name==='Phone identity'&&check.status==='PASS'));
     await db.adDimension.create({data:{accountId:`ctwa-${marker}`,adId,adName:'Initial Ad Snapshot',adsetId:'set-fixture',adsetName:'Actual Set',campaignId:'campaign-fixture',campaignName:'Actual Campaign',creativeId:'creative-fixture',creativeName:'Actual Creative',syncedAt:new Date()}});
     const input=event(marker,peer,'I import sofas');
     input.payload.referral={source_type:'ad',source_id:adId,source_url:'https://fb.me/test',headline:'Actual heading',body:'Actual body',ctwa_clid:'actual-click-fixture'};

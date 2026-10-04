@@ -154,6 +154,10 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
       await rememberCustomerContacts(tx,c.id,'GUPSHUP_INBOUND');
       linked=await ensureConversation(tx,conversationInput);delta.createdCustomers++;
     }
+    if(linked.customerId&&input.source==='gupshup'&&direction==='INBOUND'){
+      // Legacy customers can match through raw contacts before canonical fields exist.
+      await rememberCustomerContacts(tx,linked.customerId,'GUPSHUP_INBOUND');
+    }
     if(input.referral)await recordCtwaAttribution(tx,{provider:input.source||'cloud_api',accountId:input.accountId||'primary',messageId:input.id,
       customerId:linked.customerId,phoneRaw:input.phone,phoneE164:validPhone,at:input.providerOccurredAt||null,referral:input.referral,status:linked.status});
     if(linked.customerId&&input.source==='gupshup'&&await exactCrossSourceMessage(tx,{nativeId:input.id,accountPhone:input.accountId||'',peerPhone:input.phone,direction,source:'gupshup',customerId:linked.customerId})){
