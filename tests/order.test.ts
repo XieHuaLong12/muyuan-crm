@@ -1,3 +1,4 @@
+import { deleteTestCustomers, deleteTestOrders } from './identity-test-cleanup';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -49,8 +50,8 @@ test('订单概况列表按生产、运输和付款分别筛选，分页保留�
   assert.equal((await orderList(actor, { payment: 'UNPAID', tab: 'PRODUCING', country: 'France' })).total, 1);
   assert.equal((await orderList({ ...actor, id: 'order-list-outsider' }, { payment: 'UNPAID' })).total, 0);
  } finally {
-  await db.order.deleteMany({ where: { customerId: customer.id } });
-  await db.customer.delete({ where: { id: customer.id } });
+  await deleteTestOrders({ where: { customerId: customer.id } });
+  await deleteTestCustomers({ where: { id: customer.id } });
   await db.user.delete({ where: { id: owner.id } });
  }
 });
@@ -122,8 +123,8 @@ test('成交自动建单：幂等、人民币换算、按客户隔离', async ()
   await assert.rejects(() => changeOrderMilestone(actor, order.id, { status: 'PRODUCING', expectedUpdatedAt: delivered.updatedAt }), (e: { status?: number }) => e.status === 409);
 
  } finally {
-  await db.order.deleteMany({ where: { customerId: customer.id } });
+  await deleteTestOrders({ where: { customerId: customer.id } });
   await db.deal.delete({ where: { id: deal.id } });
-  await db.customer.delete({ where: { id: customer.id } });
+  await deleteTestCustomers({ where: { id: customer.id } });
  }
 });

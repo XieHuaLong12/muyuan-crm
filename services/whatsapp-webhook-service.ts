@@ -3,7 +3,9 @@ import { HttpError } from '@/lib/auth';
 import { parseGupshup, statusPredecessors } from '@/lib/gupshup';
 import { db } from '@/lib/db';
 import { normalizeWhatsApp } from '@/lib/whatsapp';
-import { resolveWhatsAppCustomer } from '@/services/whatsapp-identity-service';
+import { ensureConversation, messageFacts } from './conversation-identity-service';
+import { identityKey, canonicalPhone } from '@/lib/contact-identity';
+import { retryTransaction } from '@/lib/transaction-retry';
 
 type WebhookMessage = Record<string, unknown> & {
   from?: string;
@@ -15,6 +17,7 @@ type WebhookMessage = Record<string, unknown> & {
 
 type WebhookValue = {
   messaging_product?: string;
+  metadata?: {phone_number_id?: string;display_phone_number?: string};
   contacts?: Array<{ profile?: { name?: string }; wa_id?: string }>;
   messages?: WebhookMessage[];
   message_echoes?: WebhookMessage[];
@@ -96,58 +99,58 @@ function parseTimestamp(value: string | undefined) {
   return Number.isFinite(seconds) && seconds > 0 && seconds < 8e12 ? new Date(seconds * 1000) : new Date();
 }
 
-type Incoming = { id: string; phone: string; name: string; content: string; messageType: string; sentAt: Date; raw: unknown; source?: 'cloud_api' | 'gupshup'; direction?: 'INBOUND' | 'OUTBOUND'; sender?: string; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null };
+type Incoming = { id: string; phone: string; name: string; content: string; messageType: string; sentAt: Date; raw: unknown; accountId?: string; source?: 'cloud_api' | 'gupshup'; direction?: 'INBOUND' | 'OUTBOUND'; sender?: string; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null };
 
 async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
   const waId = normalizeWhatsApp(input.phone);
-  if (!/^[1-9]\d{6,14}$/.test(waId)) throw new HttpError(400, 'Webhook 电话号码不合法');
+  const validPhone=canonicalPhone(input.phone,undefined,true);
   const direction = input.direction || 'INBOUND';
   if (direction === 'INBOUND') result.received++; else result.outboundEchoes++;
-  await db.$transaction(async tx => {
+  let delta:Pick<WhatsAppWebhookResult,'customerIds'|'matchedCustomers'|'duplicateMessages'|'ambiguous'>={customerIds:[],matchedCustomers:0,duplicateMessages:0,ambiguous:0};
+  await retryTransaction(()=>db.$transaction(async tx => {
+    delta={customerIds:[],matchedCustomers:0,duplicateMessages:0,ambiguous:0};
     // One short database lock serializes identity resolution across app instances.
     // No provider or AI requests run while holding this lock.
     await tx.$queryRaw(Prisma.sql`SELECT id FROM Setting WHERE id = 'system' FOR UPDATE`);
-    const existing = await tx.whatsAppMessage.findUnique({ where: { waMessageId: input.id } });
-    if (existing) {
-      if (direction === 'INBOUND') result.customerIds.push(existing.customerId);
-      result.duplicateMessages++; return;
+    const key=identityKey(input.source||'cloud_api',input.accountId||'primary',waId,input.id);
+    const existing = await tx.whatsAppMessage.findUnique({ where: { waMessageId: input.id },include:{conversation:{include:{contact:true}}} });
+    const sameAccount=existing?.conversation?.contact.provider===(input.source||'cloud_api')&&existing.conversation.contact.accountId===(input.accountId||'primary');
+    if (existing && sameAccount) {
+      if (direction === 'INBOUND') delta.customerIds.push(existing.customerId);
+      delta.duplicateMessages++; return;
     }
-    const resolved = await resolveWhatsAppCustomer({ waId, phone: input.phone }, tx);
-    if (resolved.status === 'AMBIGUOUS') {
-      throw new HttpError(409, '多个客户匹配此 WhatsApp 号码，请合并重复客户后重试');
+    const duplicate=await tx.whatsAppUnmatchedMessage.findUnique({where:{sourceKey:key}});
+    if(duplicate){delta.duplicateMessages++;return;}
+    const linked=await ensureConversation(tx,{provider:input.source||'cloud_api',accountId:input.accountId||'primary',peerId:validPhone||waId||identityKey(input.phone),
+      phone:input.phone,name:input.name,externalId:waId||identityKey(input.phone),sentAt:input.sentAt,direction,sourceMessageId:input.id});
+    const owner=await tx.user.findFirstOrThrow({where:{role:'ADMIN'},orderBy:{createdAt:'asc'},select:{id:true}});
+    if(!linked.customerId||existing){
+      await tx.whatsAppUnmatchedMessage.create({data:{sourceKey:key,provider:input.source||'cloud_api',userId:owner.id,
+        accountPhone:'primary',providerAccountId:input.accountId||'primary',conversationId:waId||identityKey(input.phone),canonicalConversationId:linked.conversation.id,sourceMessageId:input.id,
+        peerPhone:linked.contact.phoneE164,peerName:input.name,direction:direction.toLowerCase(),sentAt:input.sentAt,content:input.content,
+        attachments:JSON.stringify({messageType:input.messageType,mediaUrl:input.mediaUrl,mimeType:input.mimeType,fileName:input.fileName,raw:input.raw}),
+        reason:!validPhone?'INVALID_PHONE':existing?'MESSAGE_ID_CONFLICT':linked.status==='AMBIGUOUS'?'AMBIGUOUS':'NO_MATCH'}});
+      if(linked.status==='AMBIGUOUS')delta.ambiguous++;
+      return;
     }
-    let customerId: string;
-    if (resolved.status === 'MATCHED') { customerId = resolved.customerId; result.matchedCustomers++; }
-    else {
-      const email = process.env.WHATSAPP_DEFAULT_OWNER_EMAIL?.trim().toLowerCase();
-      const owner = (email ? await tx.user.findUnique({ where: { email } }) : null) ||
-        await tx.user.findFirst({ where: { role: 'ADMIN' }, orderBy: { createdAt: 'asc' } });
-      if (!owner) throw new Error('CRM 中没有可分配的新客户负责人');
-      const customer = await tx.customer.create({ data: { name: input.name || `WhatsApp ${waId.slice(-4)}`,
-        ownerId: owner.id, phone: waId, whatsapp: waId, whatsappNormalized: waId, waId,
-        source: 'WHATSAPP', stage: 'NEW', inquiryAt: input.sentAt } });
-      customerId = customer.id;
-      await tx.stageHistory.create({ data: { customerId, toStage: 'NEW', changedBy: owner.id, note: 'WhatsApp 首次消息自动创建客户' } });
-      result.createdCustomers++;
-    }
-    if (direction === 'INBOUND') result.customerIds.push(customerId);
-    const customer = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
-    const latest = (previous: Date | null) => previous && previous > input.sentAt ? previous : input.sentAt;
-    await tx.whatsAppMessage.create({ data: { customerId, waMessageId: input.id, waId, direction, source:input.source||'cloud_api',
+    const customerId=linked.customerId;
+    delta.matchedCustomers++;
+    if(direction==='INBOUND')delta.customerIds.push(customerId);
+    await tx.whatsAppMessage.create({ data: { customerId, conversationId:linked.conversation.id, sourceKey:key, waMessageId: input.id, waId, direction, source:input.source||'cloud_api',
       sender: input.sender || (direction === 'INBOUND' ? waId : 'BUSINESS'), content: input.content,
       messageType: input.messageType, mediaUrl: input.mediaUrl?.startsWith('https://') ? input.mediaUrl : null, mimeType: input.mimeType, fileName: input.fileName, status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT',
       sentAt: input.sentAt, raw: JSON.stringify(input.raw) } });
-    await tx.customer.update({ where: { id: customerId }, data: { waId,
-      lastContactAt: latest(customer.lastContactAt), lastWhatsAppAt: latest(customer.lastWhatsAppAt),
-      ...(direction === 'INBOUND' ? { lastInboundAt: latest(customer.lastInboundAt) } : { lastOutboundAt: latest(customer.lastOutboundAt) }) } });
-  });
+    await messageFacts(tx,customerId,input.sentAt,direction);
+  }));
+  result.customerIds.push(...delta.customerIds);result.matchedCustomers+=delta.matchedCustomers;result.duplicateMessages+=delta.duplicateMessages;result.ambiguous+=delta.ambiguous;
 }
 
-export async function applyWhatsAppStatus(id: string, status: string, gsId?: string) {
+export async function applyWhatsAppStatus(id: string, status: string, gsId?: string,account?:{provider:string;accountId:string}) {
   const predecessors = statusPredecessors(status);
   if (!predecessors.length) return 0;
   const updated = await db.whatsAppMessage.updateMany({ where: {
     direction: 'OUTBOUND', status: { in: predecessors },
+    ...(account?{conversation:{contact:{provider:account.provider,accountId:account.accountId}}}:{}),
     OR: [{ waMessageId: id }, { providerMessageId: gsId || id }],
   }, data: { status, ...(gsId ? { waMessageId: id } : {}) } });
   return updated.count;
@@ -160,18 +163,19 @@ export async function ingestWhatsAppWebhook(input: unknown): Promise<WhatsAppWeb
   if (!root) throw new HttpError(400, 'Webhook 必须为 JSON 对象');
   if (root.object !== 'whatsapp_business_account') {
     const parsed = parseGupshup(input);
-    if (parsed.kind === 'message') await storeMessage({...parsed,source:'gupshup'}, result);
-    if (parsed.kind === 'status') result.statusesUpdated = await applyWhatsAppStatus(parsed.id, parsed.status, parsed.gsId);
+    if (parsed.kind === 'message') await storeMessage({...parsed,source:'gupshup',accountId:process.env.GUPSHUP_SOURCE||'primary'}, result);
+    if (parsed.kind === 'status') result.statusesUpdated = await applyWhatsAppStatus(parsed.id, parsed.status, parsed.gsId,{provider:'gupshup',accountId:process.env.GUPSHUP_SOURCE||'primary'});
     return result;
   }
   const payload = input as WhatsAppWebhookPayload;
+  let recordFailures=0;
   for (const entry of payload.entry || []) {
     for (const change of entry.changes || []) {
       const value = change.value;
       if (!value) continue;
       if (change.field === 'messages') {
         for (const status of value.statuses || []) {
-          if (status.id && status.status) result.statusesUpdated += await applyWhatsAppStatus(status.id, status.status.toUpperCase());
+          if(status.id&&status.status)try{result.statusesUpdated+=await applyWhatsAppStatus(status.id,status.status.toUpperCase(),undefined,{provider:'cloud_api',accountId:value.metadata?.phone_number_id||'primary'});}catch{recordFailures++;}
         }
       }
       const outbound = change.field === 'smb_message_echoes';
@@ -180,11 +184,14 @@ export async function ingestWhatsAppWebhook(input: unknown): Promise<WhatsAppWeb
         const phone = outbound ? message.to : message.from;
         if (!message.id || !phone) continue;
         const name = value.contacts?.find(c => normalizeWhatsApp(c.wa_id) === normalizeWhatsApp(phone))?.profile?.name || '';
-        await storeMessage({ id: message.id, phone, name, content: extractWhatsAppMessageText(message),
+        try{await storeMessage({ id: message.id, phone, name, content: extractWhatsAppMessageText(message),
           messageType: (message.type || 'unknown').toUpperCase(), sentAt: parseTimestamp(message.timestamp), raw: message,
-          direction: outbound ? 'OUTBOUND' : 'INBOUND', sender: message.from }, result);
+          mimeType:typeof asObject(message[message.type||''])?.mime_type==='string'?String(asObject(message[message.type||''])!.mime_type):null,
+          fileName:typeof asObject(message.document)?.filename==='string'?String(asObject(message.document)!.filename):null,
+          accountId:value.metadata?.phone_number_id||'primary', direction: outbound ? 'OUTBOUND' : 'INBOUND', sender: message.from }, result);}catch{recordFailures++;}
       }
     }
   }
+  if(recordFailures)throw new HttpError(503,'部分消息暂未保存，其他消息已保存，请重试');
   return result;
 }

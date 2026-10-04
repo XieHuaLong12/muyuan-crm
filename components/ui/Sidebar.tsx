@@ -8,6 +8,7 @@ import { api } from '@/lib/client';
 const primary=[
  ['/command-center','Dashboard',LayoutDashboard],
  ['/growth','Growth Center',TrendingUp],
+ ['/analytics/ads','Ads Analytics',TrendingUp],
  ['/crm','CRM Center',Users],
  ['/communication','Communication Center',MessagesSquare],
  ['/orders','Order Center',Package],
@@ -22,7 +23,7 @@ export function Sidebar({name,role}:{name:string;role:string}){
  useEffect(()=>{try{setCollapsed(window.localStorage.getItem(STORAGE_KEY)==='1');}catch{/* Storage can be unavailable. */}},[]);
  function toggle(){setCollapsed(value=>{const next=!value;try{window.localStorage.setItem(STORAGE_KEY,next?'1':'0');}catch{}return next;});}
  async function logout(){try{await api('auth/logout','POST');router.push('/login');}catch(e){setError((e as Error).message);}}
- const active=path.startsWith('/sales')||path.startsWith('/customers')?'/crm':path.startsWith('/whatsapp')?'/communication':path.startsWith('/products')?'/orders':path;
+ const active=path.startsWith('/analytics/')?'/analytics/ads':path.startsWith('/sales')||path.startsWith('/customers')?'/crm':path.startsWith('/whatsapp')?'/communication':path.startsWith('/products')?'/orders':path;
  return <aside className={`bos-sidebar bos-v2-sidebar${collapsed?' is-collapsed':''}`}>
   <div className="bos-sidebar-head"><Link href="/command-center" className="bos-brand"><span className="bos-brand-mark">L</span><span>LVANJU<small>BUSINESS OS</small></span></Link><button type="button" className="bos-sidebar-toggle" onClick={toggle} aria-expanded={!collapsed} aria-label={collapsed?'展开侧边栏':'折叠侧边栏'}>{collapsed?<PanelLeftOpen size={16}/>:<PanelLeftClose size={16}/>}</button></div>
   <div className="bos-nav-group"><span>WORKSPACE</span><nav aria-label="主导航">{primary.filter(([url])=>url!=='/finance'||role==='ADMIN').map(([url,label,Icon])=><Link href={url} key={url} aria-current={active===url||active.startsWith(`${url}/`)?'page':undefined} title={collapsed?label:undefined}><Icon size={18} strokeWidth={1.7}/><span>{label}</span></Link>)}</nav></div>

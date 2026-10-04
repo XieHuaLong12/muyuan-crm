@@ -1,0 +1,244 @@
+$ node --env-file=.env --import ./scripts/test-database-guard.mjs node_modules/tsx/dist/cli.mjs --test --test-concurrency=1 tests/*.test.ts
+✔ BOS read services preserve CRM, scope customers/marketing, and separate currencies (64.807583ms)
+✔ BOS uses local day boundaries, including DST (1.846292ms)
+✔ BOS maps existing sales stages without claiming a purchase confirmation is a won deal (0.090834ms)
+✔ disconnected marketing spend is unknown, not zero (0.486583ms)
+✔ CRM board stage move is scoped, records history, and rejects stale moves or direct wins (27.943042ms)
+✔ growth ranges respect business timezone and inclusive dates (2.612125ms)
+✔ custom range rejects invalid and reversed dates (6.554416ms)
+✔ kanban exposes only persisted customer stages (0.422375ms)
+✔ 驾驶舱成交、报价与目标都遵循所选周期 (39.419042ms)
+✔ 驾驶舱周期在上海时区使用正确的自然日边界 (1.942625ms)
+✔ 图表粒度跟随所选范围，旧趋势参数不能把今日或本月变成年度 (0.396083ms)
+✔ 漏斗按客户去重且阶段单调递减 (0.459208ms)
+✔ 沟通档案筛选参数限制无效页码 (1.542166ms)
+✔ 沟通档案只显示有消息的客户，按真实消息时间排序并可翻阅 (47.789875ms)
+✔ 批量删除/恢复：权限、成交保护、事务回滚、去重与关联记录保留 (37.858417ms)
+✔ 询盘日期校验、闰日、时区及周/月/年边界 (3.020375ms)
+✔ 历史询盘归因、日期修改、默认值、删除恢复及订单统计相互独立 (139.022791ms)
+✔ DeepSeek客户分析：评分自动映射为稳定优先级 (1.411666ms)
+✔ DeepSeek客户分析：拒绝越界评分和非法销售阶段 (6.022ms)
+✔ feedback claims are exclusive and network retries retain the same event_id and actual value (61.943208ms)
+✔ 500-row CSV commits and repeat lead batches preserve 500 customer identities and 1000 source records (7007.187208ms)
+✔ Canonical identity handles trunk zero, 00, country-specific local phone and never guesses market (3.89ms)
+✔ AI rechecks current stage and ownership after the model request before persisting analysis or follow-up tasks (48.825875ms)
+[meta-lead] payload parsed { requestId: undefined, accepted: 1 }
+[meta-lead] lead fetched {
+  requestId: undefined,
+  leadgenId: 'fad5f095-2600-452a-8562-ecde522ad0eb-1'
+}
+[meta-lead] payload parsed { requestId: undefined, accepted: 1 }
+[meta-lead] lead fetched {
+  requestId: undefined,
+  leadgenId: 'fad5f095-2600-452a-8562-ecde522ad0eb-2'
+}
+[meta-lead] payload parsed { requestId: undefined, accepted: 1 }
+[meta-lead] lead fetched {
+  requestId: undefined,
+  leadgenId: 'fad5f095-2600-452a-8562-ecde522ad0eb-csv'
+}
+[meta-lead] payload parsed { requestId: undefined, accepted: 1 }
+[meta-lead] lead fetched {
+  requestId: undefined,
+  leadgenId: 'fad5f095-2600-452a-8562-ecde522ad0eb-ambiguous'
+}
+[meta-lead] payload parsed { requestId: undefined, accepted: 1 }
+[meta-lead] graph api failed {
+  requestId: undefined,
+  leadgenId: 'fad5f095-2600-452a-8562-ecde522ad0eb-expired',
+  httpStatus: 401,
+  graphCode: 190
+}
+✔ A–F: lead → contact → conversation → real quote/order → immutable ad + retryable feedback (285.881458ms)
+✔ phone changes preserve historical aliases and phone wins over a different email match (36.100833ms)
+[meta-lead] payload parsed { requestId: undefined, accepted: 1 }
+[meta-lead] lead fetched {
+  requestId: undefined,
+  leadgenId: 'b17fe15f-7188-41f1-995e-60003d9271e2-webhook'
+}
+✔ repeat forms keep distinct phone and WhatsApp aliases; Lead and Contacted feedback use stable factual events (114.522334ms)
+✔ manual lead claim retains the submitted phone alias; provider accounts and bad phones cannot corrupt another conversation (45.493708ms)
+✔ identity worker rejects missing and unequal-byte secrets and validates work before database mutations (15.077667ms)
+[meta-lead] payload parsed { requestId: undefined, accepted: 1 }
+[meta-lead] graph api failed {
+  requestId: undefined,
+  leadgenId: 'recovery-b81ecf53-bb46-49e4-9ef6-d45697cb46be',
+  httpStatus: 401,
+  graphCode: 190
+}
+[meta-lead] lead fetched {
+  requestId: undefined,
+  leadgenId: 'recovery-b81ecf53-bb46-49e4-9ef6-d45697cb46be'
+}
+[meta-lead] payload parsed { requestId: undefined, accepted: 1 }
+✔ expired lead credentials are visible and persisted leads recover with immutable creative snapshots (53.334958ms)
+✔ historical submissions without lead IDs backfill idempotently, dry-run stays read-only and human events remain facts (49.102583ms)
+✔ upgrade order backfills wait for historical lead reconciliation and never automatically enqueue old Purchase events (52.226875ms)
+✔ 广告账户 ID 归一化：act_ 前缀与空白都能处理 (0.521125ms)
+✔ 线索数从 actions 提取：优先 lead，回退 lead_grouped，异常值归零 (5.364375ms)
+✔ insights 行 → 指标行：金额/数量解析、日期取 date_start、脏数据跳过 (1.709167ms)
+✔ leadgen_forms 原始行 → 表单行：字段映射与脏数据跳过 (1.388875ms)
+✔ Meta CSV：多分隔符、BOM、引号/换行、字符串 ID、法文问题及严格日期 (3.226291ms)
+✔ 智能导入：预览零写入、幂等、重复留资、疑似重复、保留原数据、翻译待处理 (277.440542ms)
+✔ 翻译设置加密、专有信息保护与服务失败保留原文 (10.859208ms)
+[meta-lead] POST received { requestId: '06855d91', bytes: 28, hasSignature: true }
+[meta-lead] signature valid { requestId: '06855d91' }
+[meta-lead] payload parsed { requestId: '06855d91', accepted: 0 }
+[meta-lead] processing summary {
+  requestId: '06855d91',
+  accepted: 0,
+  statuses: [],
+  hasProcessingError: false
+}
+[meta-lead] no leadgen changes in signed payload { requestId: '06855d91' }
+[meta-lead] 已处理 0 条 leadgen 事件
+▶ Meta Lead Ads webhook persists and deduplicates real events
+  ✔ valid signature with empty entry returns 200 without DB writes (62.314417ms)
+[meta-lead] POST received { requestId: '772c6852', bytes: 286, hasSignature: true }
+[meta-lead] signature failed { requestId: '772c6852', reason: '签名不匹配' }
+[meta-lead] POST received { requestId: '6f874484', bytes: 286, hasSignature: true }
+[meta-lead] signature valid { requestId: '6f874484' }
+[meta-lead] payload parsed { requestId: '6f874484', accepted: 1 }
+  ✔ invalid signature returns 401 without DB writes (2.550333ms)
+[meta-lead] lead fetched {
+  requestId: '6f874484',
+  leadgenId: 'new-34a35fd9-93fc-45af-a5da-588538247dc9'
+}
+[meta-lead] processing summary {
+  requestId: '6f874484',
+  accepted: 1,
+  statuses: [ 'CREATED' ],
+  hasProcessingError: false
+}
+[meta-lead] 已处理 1 条 leadgen 事件
+  ✔ Graph success creates Customer and CREATED event (89.93625ms)
+[meta-lead] POST received { requestId: 'cc16f6d1', bytes: 289, hasSignature: true }
+[meta-lead] signature valid { requestId: 'cc16f6d1' }
+[meta-lead] payload parsed { requestId: 'cc16f6d1', accepted: 1 }
+[meta-lead] lead fetched {
+  requestId: 'cc16f6d1',
+  leadgenId: 'linked-5ecd1cf1-1826-4a05-af06-a79fda2702e5'
+}
+[meta-lead] processing summary {
+  requestId: 'cc16f6d1',
+  accepted: 1,
+  statuses: [ 'LINKED' ],
+  hasProcessingError: false
+}
+[meta-lead] 已处理 1 条 leadgen 事件
+[meta-lead] POST received { requestId: '395a0e84', bytes: 289, hasSignature: true }
+[meta-lead] signature valid { requestId: '395a0e84' }
+[meta-lead] payload parsed { requestId: '395a0e84', accepted: 1 }
+  ✔ existing email and phone link to one Customer (22.847625ms)
+[meta-lead] graph api failed {
+  requestId: '395a0e84',
+  leadgenId: 'failed-426896df-bdf6-45d2-af54-39ebb75f1371',
+  httpStatus: 403,
+  graphCode: 200
+}
+[meta-lead] processing summary {
+  requestId: '395a0e84',
+  accepted: 1,
+  statuses: [ 'FAILED' ],
+  hasProcessingError: true
+}
+[meta-lead] customer processing failed { requestId: '395a0e84', failed: 1 }
+[meta-lead] POST received { requestId: '1bf8507e', bytes: 289, hasSignature: true }
+[meta-lead] POST received { requestId: 'f2fadd33', bytes: 289, hasSignature: true }
+[meta-lead] signature valid { requestId: '1bf8507e' }
+[meta-lead] payload parsed { requestId: '1bf8507e', accepted: 1 }
+[meta-lead] signature valid { requestId: 'f2fadd33' }
+[meta-lead] payload parsed { requestId: 'f2fadd33', accepted: 1 }
+  ✔ Graph failure leaves FAILED event with HTTP status and Meta code (3.261417ms)
+[meta-lead] processing summary {
+  requestId: 'f2fadd33',
+  accepted: 1,
+  statuses: [ 'FAILED' ],
+  hasProcessingError: true
+}
+[meta-lead] customer processing failed { requestId: 'f2fadd33', failed: 1 }
+[meta-lead] lead fetched {
+  requestId: '1bf8507e',
+  leadgenId: 'repeat-20a90d50-7604-44bf-b8f8-307c83bdaab1'
+}
+[meta-lead] processing summary {
+  requestId: '1bf8507e',
+  accepted: 1,
+  statuses: [ 'CREATED' ],
+  hasProcessingError: false
+}
+[meta-lead] 已处理 1 条 leadgen 事件
+[meta-lead] POST received { requestId: '90d0b39e', bytes: 289, hasSignature: true }
+[meta-lead] signature valid { requestId: '90d0b39e' }
+[meta-lead] payload parsed { requestId: '90d0b39e', accepted: 1 }
+[meta-lead] processing summary {
+  requestId: '90d0b39e',
+  accepted: 1,
+  statuses: [ 'SKIPPED' ],
+  hasProcessingError: false
+}
+[meta-lead] 已处理 1 条 leadgen 事件
+  ✔ simultaneous and repeated webhook never creates a second Customer (53.748542ms)
+✔ Meta Lead Ads webhook persists and deduplicates real events (236.257625ms)
+✔ Facebook 表单答案按字段结构化落库，其余进备注并保留 JSON 原文 (0.897417ms)
+✔ 字段映射对未知问题与缺失姓名有兜底 (5.549709ms)
+✔ X-Hub-Signature-256 校验：正确签名通过，篡改或缺失一律拒绝 (0.312958ms)
+✔ 缺少 META_APP_SECRET 时拒绝一切推送（不静默放行） (0.059209ms)
+✔ 解析 Meta 推送体，只取 leadgen 字段 (1.083209ms)
+✔ Graph API 版本走配置，并有默认值 (0.073292ms)
+✔ Webhook 路由顶部不得引入 service / Prisma —— 否则 GET 会被加载期拖垮 (0.24825ms)
+✔ Webhook 预登记 RECEIVED 不得跳过导入；只跳过已成功处理的事件 (0.078125ms)
+✔ Webhook 应等待事件处理完成，并对失败返回可重试响应 (1.117875ms)
+✔ Graph pagination retains cursor/query, uses one version and never sends credentials to another host (11.126417ms)
+✔ 单笔毛利与加权整体毛利 (0.910125ms)
+✔ 客户有效、回复、报价、成交率按去重客户计算 (5.409959ms)
+✔ 回复率按当前阶段判断，不依赖首次联系时间戳 (0.074209ms)
+✔ 零分母与超额目标 (0.081792ms)
+✔ 年度预测与闰年 (0.06175ms)
+✔ 电话规范化识别空格、括号和国际区号前缀 (0.112042ms)
+✔ 上海周一边界与 ISO 跨年周 (1.821625ms)
+✔ 表单校验拒绝负金额、缺失成本与无效原因 (1.659292ms)
+✔ 订单进度按七段流程推导 (3.002541ms)
+✔ 订单概况列表按生产、运输和付款分别筛选，分页保留未付款口径 (49.997792ms)
+✔ 成交自动建单：幂等、人民币换算、按客户隔离 (34.551167ms)
+✔ 成本仅管理员可见，且不会泄漏到普通产品接口 (37.438125ms)
+✔ 单箱包装 (0.856166ms)
+✔ 件数后缀 = 体积倍数（用报价表真实数据验证） (0.202834ms)
+✔ 4 个数字：带 CTNS 与裸数字都识别为箱数 (0.070708ms)
+✔ 多段相加：不同箱型 (0.09125ms)
+✔ 多段混合后缀 (0.0735ms)
+✔ C 系列三箱装（报价表 CBM 0.2） (0.0555ms)
+✔ 无法识别的段记入 notes，不猜测 (0.169167ms)
+✔ 毛重：单值、倍数、多段、明示合计 (0.365875ms)
+✔ 40HQ 装载量与 CBM 冲突判定 (0.133208ms)
+✔ restarts the transaction after 500ms and 1000ms, returning the committed result (0.836708ms)
+✔ third conflict propagates the original error without another delay (0.288083ms)
+✔ validation, optimistic concurrency and unique errors are not retried (0.12275ms)
+✔ WhatsApp Coexistence：授权码交换、WABA订阅和密钥加密保存 (18.674083ms)
+✔ WhatsApp号码标准化：保留国家码并移除格式字符 (0.882416ms)
+✔ AI/WhatsApp基础模型：客户标准化号码、消息和智能画像可关联保存 (59.61125ms)
+✔ WhatsApp身份识别：号码匹配后绑定 waId (32.296834ms)
+✔ WhatsApp身份识别：重复号码返回冲突而不是随便绑定 (14.005458ms)
+✔ Gupshup V2: parses message milliseconds and prevents status regression (1.526833ms)
+✔ AI stage: protects terminal/manual stages, evidence and forward progression (6.039042ms)
+✔ WhatsApp V2 integration: ingestion, Meta sends, receipts, scoped history and AI (164.61575ms)
+✔ legacy WhatsApp digits match +E.164 search and reconcile pending messages exactly once (137.227333ms)
+✔ E.164 requires explicit international prefix and rejects ambiguous local numbers (2.071959ms)
+✔ exact phone only; duplicate numbers remain ambiguous regardless of names (1.034958ms)
+✔ WhatsApp international digits with or without + identify the same customer (0.316375ms)
+✔ web identity is stable and account-scoped (0.140375ms)
+✔ payload accepts attachment metadata and rejects URLs, cookies or extra fields (1.70525ms)
+✔ WhatsApp webhook: 提取文本消息 (0.632042ms)
+✔ WhatsApp webhook: 提取图片、文件与交互回复 (5.799542ms)
+✔ WhatsApp webhook: 未支持的类型仍保留可读占位 (0.080625ms)
+✔ WhatsApp Coexistence: 手机 Business App 发出的消息作为 OUTBOUND 入库 (35.776542ms)
+✔ media transport types match Gupshup supported types (0.504292ms)
+✔ V3 tasks, reminders, scope, workflow lifecycle and media integration (714.223541ms)
+ℹ tests 99
+ℹ suites 0
+ℹ pass 99
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16033.083291

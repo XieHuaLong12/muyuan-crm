@@ -1,0 +1,159 @@
+$ prisma generate && node scripts/production-init.mjs && next build
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+
+✔ Generated Prisma Client (v6.19.0) to ./node_modules/.pnpm/@prisma+client@6.19.0_prisma@6.19.0_typescript@5.9.3__typescript@5.9.3/node_modules/@prisma/client in 183ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to turn off tips and other hints? https://pris.ly/tip-4-nohints
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma/schema.prisma
+Datasource "db": MySQL database "lvanju_identity_test" at "127.0.0.1:13316"
+
+16 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+Product OS: seeding product library (currently 30 products)...
+Product OS seed 完成：30 个型号、66 个变体、81 条纸箱记录，其中 44 个变体标记为待核对。
+Product OS：分类 6 个（两层），人民币价格 62 条。
+Product OS：以下型号暂无产品图，需补充：Y-616、Y-617、M-801、M-802
+Product OS: 种子完成，当前 30 个型号、26 张产品图、6 个分类。
+订单：无需补单，当前共 13 张订单。
+Orders: 补单完成，订单数 13 → 13。
+Meta Lead Ads: ✗ 未配置  META_LEAD_WEBHOOK_SECRET — Webhook 验证（hub.verify_token）
+Meta Lead Ads: ✗ 未配置  META_LEAD_VERIFY_TOKEN — 兼容旧名（META_LEAD_WEBHOOK_SECRET 未配时回退）
+Meta Lead Ads: ✗ 未配置  META_PAGE_ACCESS_TOKEN — Graph API 读取 leadgen 详情
+Meta Lead Ads: ✗ 未配置  META_APP_SECRET — X-Hub-Signature-256 验签
+Meta Lead Ads: ✗ 未配置  META_GRAPH_VERSION — Graph API 版本（默认 v26.0）
+Meta Lead Ads: 缺少 META_LEAD_WEBHOOK_SECRET、META_PAGE_ACCESS_TOKEN、META_APP_SECRET —— Meta Webhook 验证或线索拉取将无法工作。
+Meta Lead Ads: 请在 Hostinger 面板 → Environment variables 中补齐后重新部署。
+Meta Ads Sync: ✗ 未配置  META_AD_ACCOUNT_ID — 广告账户 ID（act_ 开头），Marketing API 同步
+Meta Ads Sync: ✗ 未配置  META_ADS_ACCESS_TOKEN — System User Token（ads_read），读取花费/展示/线索
+Meta Ads Sync: ✗ 未配置  META_PAGE_ID — 主页 ID，拉取 leadgen_forms 表单目录
+Meta Ads Sync: ✗ 未配置  META_PAGE_ACCESS_TOKEN — Page Token，读取 leadgen 详情与表单目录
+Meta Ads Sync: ✗ 未配置  META_SYNC_SECRET — 定时同步入口 /api/cron/meta-sync 的密钥
+Meta Ads Sync: 缺少 META_AD_ACCOUNT_ID、META_ADS_ACCESS_TOKEN、META_PAGE_ID、META_PAGE_ACCESS_TOKEN、META_SYNC_SECRET —— 广告数据 / 表单目录同步将跳过。
+Meta Ads Sync: 配置方法见 docs/META_ADS_SYNC.md（System User Token 需 ads_read 权限）。
+Production database is ready.
+   ▲ Next.js 15.5.27
+   - Environments: .env
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 4.5s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/24) ...
+   Generating static pages (6/24) 
+   Generating static pages (12/24) 
+   Generating static pages (18/24) 
+ ✓ Generating static pages (24/24)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                  Size  First Load JS
+┌ ○ /                                       327 B         103 kB
+├ ○ /_not-found                              1 kB         104 kB
+├ ○ /analytics                              327 B         103 kB
+├ ƒ /analytics/[section]                  2.03 kB         113 kB
+├ ƒ /analytics/ads/[adId]                   187 B         111 kB
+├ ƒ /api/[...path]                          327 B         103 kB
+├ ƒ /api/action-center                      327 B         103 kB
+├ ƒ /api/action-center/[taskId]             327 B         103 kB
+├ ƒ /api/action-center/[taskId]/complete    327 B         103 kB
+├ ƒ /api/action-center/auto                 327 B         103 kB
+├ ƒ /api/advertising-feedback               327 B         103 kB
+├ ƒ /api/analytics/ads                      327 B         103 kB
+├ ƒ /api/analytics/conversations            327 B         103 kB
+├ ƒ /api/analytics/daily-insight            327 B         103 kB
+├ ƒ /api/analytics/data-quality             327 B         103 kB
+├ ƒ /api/analytics/loss-reasons             327 B         103 kB
+├ ƒ /api/bos/command-center                 327 B         103 kB
+├ ƒ /api/bos/crm-stage                      327 B         103 kB
+├ ƒ /api/bos/growth                         327 B         103 kB
+├ ƒ /api/bos/sales                          327 B         103 kB
+├ ƒ /api/cron/identity-chain                327 B         103 kB
+├ ƒ /api/cron/meta-sync                     327 B         103 kB
+├ ƒ /api/customer-intelligence              327 B         103 kB
+├ ƒ /api/identity-chain                     327 B         103 kB
+├ ƒ /api/identity-chain/ad                  327 B         103 kB
+├ ƒ /api/identity-chain/claim               327 B         103 kB
+├ ƒ /api/identity-chain/reconcile           327 B         103 kB
+├ ƒ /api/identity-chain/review              327 B         103 kB
+├ ƒ /api/leads/webhook                      327 B         103 kB
+├ ƒ /api/meta/retry                         327 B         103 kB
+├ ƒ /api/meta/status                        327 B         103 kB
+├ ƒ /api/meta/sync                          327 B         103 kB
+├ ƒ /api/meta/webhook                       327 B         103 kB
+├ ƒ /api/orders                             327 B         103 kB
+├ ƒ /api/orders/[id]                        327 B         103 kB
+├ ƒ /api/orders/export                      327 B         103 kB
+├ ƒ /api/product-costs                      327 B         103 kB
+├ ƒ /api/product-variants/[id]              327 B         103 kB
+├ ƒ /api/product-variants/[id]/cost         327 B         103 kB
+├ ƒ /api/products                           327 B         103 kB
+├ ƒ /api/products/[id]                      327 B         103 kB
+├ ƒ /api/products/[id]/cost                 327 B         103 kB
+├ ƒ /api/products/[id]/quote-price          327 B         103 kB
+├ ƒ /api/quotations                         327 B         103 kB
+├ ƒ /api/quotations/[id]                    327 B         103 kB
+├ ƒ /api/reminders                          327 B         103 kB
+├ ƒ /api/reminders/[id]                     327 B         103 kB
+├ ƒ /api/sales-workspace                    327 B         103 kB
+├ ƒ /api/settings/exchange-rate             327 B         103 kB
+├ ƒ /api/tasks                              327 B         103 kB
+├ ƒ /api/tasks/[id]                         327 B         103 kB
+├ ƒ /api/tasks/[id]/complete                327 B         103 kB
+├ ƒ /api/whatsapp/ai-reply                  327 B         103 kB
+├ ƒ /api/whatsapp/connect                   327 B         103 kB
+├ ƒ /api/whatsapp/media                     327 B         103 kB
+├ ƒ /api/whatsapp/media/[id]                327 B         103 kB
+├ ƒ /api/whatsapp/messages                  327 B         103 kB
+├ ƒ /api/whatsapp/read                      327 B         103 kB
+├ ƒ /api/whatsapp/send                      327 B         103 kB
+├ ƒ /api/whatsapp/web-sync/claim            327 B         103 kB
+├ ƒ /api/whatsapp/web-sync/customers        327 B         103 kB
+├ ƒ /api/whatsapp/web-sync/preview          327 B         103 kB
+├ ƒ /api/whatsapp/web-sync/reconcile        327 B         103 kB
+├ ƒ /api/whatsapp/web-sync/state            327 B         103 kB
+├ ƒ /api/whatsapp/web-sync/sync             327 B         103 kB
+├ ƒ /api/whatsapp/web-sync/tokens           327 B         103 kB
+├ ƒ /api/whatsapp/web-sync/tokens/[id]      327 B         103 kB
+├ ƒ /api/whatsapp/webhook                   327 B         103 kB
+├ ƒ /api/workflow-events                    327 B         103 kB
+├ ƒ /api/workflows/sync                     327 B         103 kB
+├ ƒ /api/workspace-customers                327 B         103 kB
+├ ƒ /command-center                         579 B         112 kB
+├ ƒ /command-center/legacy                  199 B         244 kB
+├ ƒ /communication                          182 B         111 kB
+├ ƒ /communication/whatsapp-sync           3.3 kB         114 kB
+├ ƒ /crm                                   3.4 kB         115 kB
+├ ○ /customer-directory                     327 B         103 kB
+├ ƒ /customers/[[...customerPath]]          144 B         310 kB
+├ ƒ /finance                                187 B         111 kB
+├ ○ /funnel                                 327 B         103 kB
+├ ƒ /growth                                 187 B         111 kB
+├ ○ /login                                 2.1 kB         105 kB
+├ ƒ /orders                                 189 B         116 kB
+├ ƒ /orders/detail/[id]                     190 B         116 kB
+├ ƒ /orders/list                            179 B         116 kB
+├ ƒ /products                             3.42 kB         115 kB
+├ ƒ /products/[id]                        3.53 kB         115 kB
+├ ƒ /products/margin                      3.71 kB         115 kB
+├ ƒ /sales                                16.5 kB         146 kB
+├ ƒ /settings                               145 B         310 kB
+├ ƒ /targets                                145 B         310 kB
+├ ƒ /tasks                                5.17 kB         116 kB
+├ ƒ /today                                 3.5 kB         128 kB
+└ ○ /whatsapp                               327 B         103 kB
++ First Load JS shared by all              103 kB
+  ├ chunks/49892a19-e629c54f7df9e8a6.js   54.2 kB
+  ├ chunks/7249-f5c591ba9cf47a5a.js       46.5 kB
+  └ other shared chunks (total)           1.96 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

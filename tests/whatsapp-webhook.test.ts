@@ -1,3 +1,4 @@
+import { deleteTestCustomers } from './identity-test-cleanup';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../lib/db';
@@ -71,7 +72,7 @@ test('WhatsApp Coexistence: 手机 Business App 发出的消息作为 OUTBOUND �
     assert.ok(updated.lastOutboundAt);
   } finally {
     await db.whatsAppMessage.deleteMany({ where: { customerId: customer.id } });
-    await db.customer.delete({ where: { id: customer.id } });
+    await deleteTestCustomers({ where: { id: customer.id } });
     await db.$disconnect();
   }
 });

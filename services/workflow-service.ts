@@ -1,3 +1,4 @@
+import { lockIdentity } from './contact-identity-service';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
@@ -80,24 +81,26 @@ export async function dismissReminder(id: string, user: Actor) {
   return { dismissed: true };
 }
 export async function recordWorkflowEvent(input: unknown, user: Actor) {
-  const v = z.object({ customerId: z.string().min(1), requestId: z.string().uuid(), kind: z.enum(['SAMPLE_SENT','PRODUCTION_STARTED','PAYMENT_DUE']),
-    expectedAt: z.string().datetime({ offset: true }), description: z.string().max(3000).default('') }).parse(input);
+  const v = z.object({ customerId: z.string().min(1), requestId: z.string().uuid(), kind: z.enum(['SAMPLE_SENT','PRODUCTION_STARTED','PAYMENT_DUE','CATALOG_SENT','PRODUCT_CONFIRMED','PAYMENT_RECEIVED','ORDER_COMPLETED']),
+    expectedAt:z.string().datetime({offset:true}).optional(),description:z.string().max(3000).default('') }).superRefine((v,ctx)=>{if(['SAMPLE_SENT','PRODUCTION_STARTED','PAYMENT_DUE'].includes(v.kind)&&!v.expectedAt)ctx.addIssue({code:'custom',path:['expectedAt'],message:'请填写预计时间'});}).parse(input);
   const c = await accessible(v.customerId, user);
-  const now = new Date(), expectedAt = new Date(v.expectedAt);
-  if (expectedAt < now) throw new HttpError(400, '预计时间不能早于现在');
+  const now=new Date(),expectedAt=v.expectedAt?new Date(v.expectedAt):null;
+  if(expectedAt&&expectedAt<now) throw new HttpError(400, '预计时间不能早于现在');
   return retryTransaction(() => db.$transaction(async tx => {
+    await lockIdentity(tx);
     const old = await tx.workflowEvent.findUnique({ where: { requestId: v.requestId } });
-    if (old) { if (old.customerId !== c.id || old.kind !== v.kind || old.expectedAt?.getTime() !== expectedAt.getTime() || old.description !== v.description) throw new HttpError(409, '请求编号已使用'); return old; }
+    if (old) { if (old.customerId !== c.id || old.kind !== v.kind || (old.expectedAt?.getTime()??null)!==(expectedAt?.getTime()??null) || old.description !== v.description) throw new HttpError(409, '请求编号已使用'); return old; }
     const event = await tx.workflowEvent.create({ data: { ...v, expectedAt, happenedAt: now, createdBy: user.id } });
     const add = (title: string, type: string, dueDate: Date, key: string) => automatedTask(tx, { customerId: c.id, createdBy: c.ownerId, title, type, dueDate,
       description: v.description, automationKey: `event:${event.id}:${key}` });
-    if (v.kind === 'SAMPLE_SENT') await add('确认样品签收与使用反馈', 'SAMPLE', expectedAt, 'sample');
-    if (v.kind === 'PAYMENT_DUE') await add('确认客户付款与到账', 'PAYMENT', expectedAt, 'payment');
+    if (v.kind === 'SAMPLE_SENT') await add('确认样品签收与使用反馈', 'SAMPLE', expectedAt!, 'sample');
+    if (v.kind === 'PAYMENT_DUE') await add('确认客户付款与到账', 'PAYMENT', expectedAt!, 'payment');
     if (v.kind === 'PRODUCTION_STARTED') {
-      await add('确认生产进度与交期', 'PRODUCTION', new Date(Math.min(now.getTime()+3*86400000, expectedAt.getTime())), 'production');
-      await add('出货前质检与包装确认', 'PRODUCTION', new Date(Math.max(now.getTime(),expectedAt.getTime()-2*86400000)), 'inspection');
-      await add('确认发货与物流追踪', 'SHIPPING', expectedAt, 'shipping');
+      await add('确认生产进度与交期', 'PRODUCTION', new Date(Math.min(now.getTime()+3*86400000, expectedAt!.getTime())), 'production');
+      await add('出货前质检与包装确认', 'PRODUCTION', new Date(Math.max(now.getTime(),expectedAt!.getTime()-2*86400000)), 'inspection');
+      await add('确认发货与物流追踪', 'SHIPPING', expectedAt!, 'shipping');
     }
+    if(['CATALOG_SENT','PRODUCT_CONFIRMED'].includes(v.kind)){const current=await tx.customer.findUniqueOrThrow({where:{id:c.id}});const allowed=v.kind==='CATALOG_SENT'?['NEW','CONTACTED','REPLIED']:['NEW','CONTACTED','REPLIED','CATALOG_SENT','NEEDS_CONFIRMED'];if(allowed.includes(current.stage)){await tx.customer.update({where:{id:c.id},data:{stage:v.kind,stageSource:'HUMAN'}});await tx.stageHistory.create({data:{customerId:c.id,fromStage:current.stage,toStage:v.kind,changedBy:user.id,note:'人工登记业务事实'}});}}
     return event;
   }));
 }

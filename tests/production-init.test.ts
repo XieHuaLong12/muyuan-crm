@@ -1,0 +1,66 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { db } from '../lib/db';
+
+function assertIsolatedDatabase() {
+  const url = new URL(process.env.DATABASE_URL ?? '');
+  assert.ok(['localhost', '127.0.0.1', 'mysql'].includes(url.hostname) && url.pathname.endsWith('_test'));
+}
+
+function bootstrap() {
+  return spawnSync(process.execPath, ['scripts/production-init.mjs'], {
+    encoding: 'utf8',
+    env: { ...process.env, SEED_ADMIN_PASSWORD: 'different-bootstrap-password' },
+    timeout: 120_000,
+  });
+}
+
+test('deployment preserves the existing administrator and manually edited product packaging across restarts', async () => {
+  assertIsolatedDatabase();
+  const admin = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } });
+  const variant = await db.productVariant.findFirstOrThrow();
+  const cartons = await db.packingCarton.findMany({ where: { variantId: variant.id }, orderBy: { id: 'asc' } });
+  try {
+    const expectedAdmin = await db.user.update({ where: { id: admin.id }, data: {
+      name: 'Manually corrected administrator', passwordHash: 'preserve-manual-password-hash',
+    } });
+    const expectedVariant = await db.productVariant.update({ where: { id: variant.id }, data: {
+      packingRaw: 'Manually verified packaging', cartonCount: 7, cbm: '0.4321', grossWeightKg: '87.65',
+      needsReview: false, reviewNote: 'Human verification must survive deployment',
+    } });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = bootstrap();
+      assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+      assert.deepEqual(await db.user.findUniqueOrThrow({ where: { id: admin.id } }), expectedAdmin);
+      assert.deepEqual(await db.productVariant.findUniqueOrThrow({ where: { id: variant.id } }), expectedVariant);
+      assert.deepEqual(await db.packingCarton.findMany({ where: { variantId: variant.id }, orderBy: { id: 'asc' } }), cartons);
+    }
+  } finally {
+    await db.user.update({ where: { id: admin.id }, data: { name: admin.name, role: admin.role, passwordHash: admin.passwordHash } });
+    await db.productVariant.update({ where: { id: variant.id }, data: {
+      packingRaw: variant.packingRaw, cartonCount: variant.cartonCount, cbm: variant.cbm,
+      grossWeightKg: variant.grossWeightKg, needsReview: variant.needsReview, reviewNote: variant.reviewNote,
+      updatedAt: variant.updatedAt,
+    } });
+  }
+});
+
+test('deployment stops at an unresolved missing migration without falsifying rollback metadata', async () => {
+  assertIsolatedDatabase();
+  const id = randomUUID();
+  const name = `missing_acceptance_${id.replaceAll('-', '')}`;
+  try {
+    await db.$executeRaw`INSERT INTO _prisma_migrations (id, checksum, migration_name, started_at, applied_steps_count)
+      VALUES (${id}, ${'0'.repeat(64)}, ${name}, NOW(3), 0)`;
+    const result = bootstrap();
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /未解决的失败迁移/);
+    const rows = await db.$queryRaw<Array<{ rolled_back_at: Date | null; finished_at: Date | null }>>`
+      SELECT rolled_back_at, finished_at FROM _prisma_migrations WHERE id = ${id}`;
+    assert.deepEqual(rows, [{ rolled_back_at: null, finished_at: null }]);
+  } finally {
+    await db.$executeRaw`DELETE FROM _prisma_migrations WHERE id = ${id} AND migration_name = ${name}`;
+  }
+});

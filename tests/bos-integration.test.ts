@@ -1,3 +1,4 @@
+import { deleteTestCustomers, deleteTestOrders } from './identity-test-cleanup';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -36,7 +37,7 @@ test('BOS read services preserve CRM, scope customers/marketing, and separate cu
  }finally{
   await db.campaign.deleteMany({where:{createdBy:{in:[a.id,b.id]}}});
   if(customerId)await db.deal.deleteMany({where:{customerId}});
-  if(customerId)await db.order.deleteMany({where:{customerId}});
-  await db.customer.deleteMany({where:{ownerId:{in:[a.id,b.id]}}});await db.user.deleteMany({where:{id:{in:[a.id,b.id]}}});await db.$disconnect();
+  if(customerId)await deleteTestOrders({where:{customerId}});
+  await deleteTestCustomers({where:{ownerId:{in:[a.id,b.id]}}});await db.user.deleteMany({where:{id:{in:[a.id,b.id]}}});await db.$disconnect();
  }
 });

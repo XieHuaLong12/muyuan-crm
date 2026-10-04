@@ -1,3 +1,4 @@
+import { deleteTestCustomers } from './identity-test-cleanup';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -22,7 +23,7 @@ test('CRM board stage move is scoped, records history, and rejects stale moves o
   assert.equal((await db.customer.findUniqueOrThrow({where:{id:customer.id}})).stage,'CONTACTED');
  }finally{
   await db.stageHistory.deleteMany({where:{customerId:customer.id}});
-  await db.customer.delete({where:{id:customer.id}});
+  await deleteTestCustomers({where:{id:customer.id}});
   await db.user.deleteMany({where:{id:{in:[owner.id,outsider.id]}}});
   await db.$disconnect();
  }

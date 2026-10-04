@@ -25,11 +25,11 @@ test('Facebook 表单答案按字段结构化落库，其余进备注并保留 J
   assert.equal(mapped.name, 'Killian Dupont');
   assert.equal(mapped.email, 'killian@nordichome.se');
   assert.equal(mapped.whatsapp, '+46 70 123 45 67');
-  assert.equal(mapped.country, 'Sweden');
+  assert.equal(mapped.country, '');assert.ok(mapped.notes.includes('销售市场'));
   // 自由文本归一为 CRM 的采购类型枚举
   assert.equal(mapped.purchaseType, 'IMPORTER');
-  // 「100-500」取上限
-  assert.equal(mapped.quantity, 500);
+  // 区间原文保留，不猜测明确数量
+  assert.equal(mapped.quantity, null);
   assert.equal(mapped.productInterest, 'Yes');
   // 未映射到字段的问题保留在备注
   assert.ok(mapped.notes.includes('是否从中国进口：No, first time'));

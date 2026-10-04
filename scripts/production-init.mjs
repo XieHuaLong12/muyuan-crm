@@ -39,36 +39,15 @@ if (needsBaseline) {
 
 const prismaCli = 'node_modules/prisma/build/index.js';
 
-// ── 解除「失败且文件已不存在」的迁移记录 ──────────────────────
-// 背景：某个 migration 已被部署过，之后又被改名或重写，Prisma 会留下一条
-// finished_at 为空的失败记录。这条记录会让后续所有迁移永久报 P3009 而无法应用。
-//
-// 只在**本地已无该 migration 文件**时才自动解除 —— 那种记录必然是历史遗留。
-// 如果文件还在，说明是真的迁移失败，交给人处理，不擅自改动。
+// 失败迁移必须根据备份与实际 DDL 人工核对。文件缺失不代表已回滚。
 const migrationProbe = new PrismaClient();
 try {
   const failed = await migrationProbe.$queryRaw`
     SELECT migration_name AS name
     FROM _prisma_migrations
     WHERE finished_at IS NULL AND rolled_back_at IS NULL`;
-  for (const row of failed) {
-    const file = `prisma/migrations/${row.name}/migration.sql`;
-    if (fs.existsSync(file)) {
-      console.warn(`Prisma: 迁移 ${row.name} 失败但文件仍在，需要人工检查，未自动处理。`);
-      continue;
-    }
-    console.warn(`Prisma: 迁移 ${row.name} 失败且本地已无对应文件，标记为已回滚以解除阻塞。`);
-    const resolved = spawnSync(
-      process.execPath,
-      [prismaCli, 'migrate', 'resolve', '--rolled-back', row.name],
-      { stdio: 'inherit', env: process.env },
-    );
-    if (resolved.status !== 0) {
-      console.error(
-        `Prisma: 自动解除失败。请在服务器上运行：npx prisma migrate resolve --rolled-back ${row.name}`,
-      );
-      process.exit(resolved.status ?? 1);
-    }
+  if (failed.length) {
+    throw new Error(`Prisma: 存在未解决的失败迁移：${failed.map(row => row.name).join(', ')}。启动已停止；未自动修改迁移记录，请核对备份和实际 DDL。`);
   }
 } catch (error) {
   // _prisma_migrations 尚未建立时跳过（全新数据库）
@@ -99,11 +78,8 @@ try {
       role: 'ADMIN',
       passwordHash: hashPassword(adminPassword),
     },
-    update: {
-      name: 'Jason',
-      role: 'ADMIN',
-      passwordHash: hashPassword(adminPassword),
-    },
+    // 配置密码仅用于首次创建；部署不能重置现有账号。
+    update: {},
   });
 
   await db.setting.upsert({
@@ -117,24 +93,19 @@ try {
     update: {},
   });
 
-  // Product OS：每次都跑一遍种子。
-  //
-  // 种子本身完全幂等（按 Product.model / ProductVariant.sku / storageKey upsert），
-  // 所以重复执行是安全的，代价只是几秒。
-  //
-  // 之前用「产品库为空才跑」的条件，结果第一次部署后再改分类/加型号都不会生效 ——
-  // 这类「守卫条件过期」的 bug 已经发生过两次（空产品库、缺产品图），
-  // 因此这里不再做条件判断：宁可每次多花几秒，也不要再出现「部署成功但数据是旧的」。
-  //
+  // 产品种子仅初始化空库。现有产品及包装资料包含人工修正，部署不得覆盖。
+  // 需要更新产品目录时，单独审阅并执行现有 db:seed:products 命令。
   // 注意：这里**不能**传 `--env-file=.env`。生产环境（Hostinger 等）没有 .env 文件，
   // 环境变量由平台注入；`node --env-file=<缺失文件>` 会直接以退出码 9 结束，
   // 造成「页面能用但没数据」的静默失败。环境变量已通过 env 继承。
   try {
     const tsxCli = 'node_modules/tsx/dist/cli.mjs';
-    if (!fs.existsSync(tsxCli)) {
+    const before = await db.product.count();
+    if (before > 0) {
+      console.log(`Product OS: 保留现有 ${before} 个产品及人工资料，跳过部署种子。`);
+    } else if (!fs.existsSync(tsxCli)) {
       console.warn(`Product OS: 缺少 ${tsxCli}，跳过种子。请在服务器上运行 pnpm db:seed:products。`);
     } else {
-      const before = await db.product.count();
       console.log(`Product OS: seeding product library (currently ${before} products)...`);
       const seed = spawnSync(process.execPath, [tsxCli, 'prisma/seed-product-os.ts'], {
         stdio: 'inherit',

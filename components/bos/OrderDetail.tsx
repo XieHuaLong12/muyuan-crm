@@ -1,8 +1,9 @@
+import { IdentityTimeline } from './IdentityTimeline';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Card,Header } from '@/components/ui/bos';
 import { ORDER_STAGES } from '@/lib/order-status';
-import { rmb } from './OrderManagement';
+import { rmb } from '@/lib/order-format';
 
 /** 订单详情：客户信息 · 订单信息 · 七段流程。本阶段不含物流 API 与支付系统。 */
 
@@ -30,7 +31,7 @@ export type OrderDetailData = {
 
 const day = (iso: string | null) => (iso ? iso.slice(0, 10) : '—');
 
-export function OrderDetail({ data }: { data: OrderDetailData }) {
+export function OrderDetail({ data, timezone }: { data: OrderDetailData; timezone: string }) {
   const completed = data.progress.done.filter(Boolean).length;
   return (
     <>
@@ -77,6 +78,7 @@ export function OrderDetail({ data }: { data: OrderDetailData }) {
         </Card>
       </div>
 
+      <IdentityTimeline orderId={data.id} timezone={timezone}/>
       <Card>
         <div className="bos-section-title">
           <div>

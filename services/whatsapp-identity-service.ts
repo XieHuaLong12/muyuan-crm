@@ -1,4 +1,6 @@
 import type { Prisma } from '@prisma/client';
+import { canonicalPhone } from '@/lib/contact-identity';
+import { resolveContact } from './contact-identity-service';
 import { db } from '@/lib/db';
 import { normalizeWhatsApp } from '@/lib/whatsapp';
 
@@ -19,65 +21,13 @@ export async function resolveWhatsAppCustomer(input: {
 }, client: Prisma.TransactionClient = db): Promise<WhatsAppCustomerResolution> {
   const waId = normalizeWhatsApp(input.waId);
   const normalized = normalizeWhatsApp(input.phone || input.waId);
-
-  if (!waId && !normalized) {
-    return { status: 'NOT_FOUND', normalized: '' };
-  }
-
-  if (waId) {
-    const byWaId = await client.customer.findMany({
-      where: { deletedAt: null, waId },
-      select: { id: true },
-      take: 3,
-    });
-    if (byWaId.length === 1) {
-      return { status: 'MATCHED', customerId: byWaId[0].id, matchedBy: 'WA_ID' };
-    }
-    if (byWaId.length > 1) {
-      return {
-        status: 'AMBIGUOUS',
-        normalized,
-        customerIds: byWaId.map((customer) => customer.id),
-      };
-    }
-  }
-
-  if (!normalized) {
-    return { status: 'NOT_FOUND', normalized: '' };
-  }
-
-  let byNumber = await client.customer.findMany({
-    where: { deletedAt: null, whatsappNormalized: normalized },
-    select: { id: true, waId: true },
-    take: 3,
-  });
-
-  if (byNumber.length === 0) {
-    const legacy = await client.customer.findMany({
-      where: { deletedAt: null }, select: { id: true, waId: true, phone: true, whatsapp: true },
-    });
-    byNumber = legacy.filter(c => [c.phone, c.whatsapp].some(number => normalizeWhatsApp(number) === normalized));
-  }
-
-  if (byNumber.length === 0) {
-    return { status: 'NOT_FOUND', normalized };
-  }
-
-  if (byNumber.length > 1) {
-    return {
-      status: 'AMBIGUOUS',
-      normalized,
-      customerIds: byNumber.map((customer) => customer.id),
-    };
-  }
-
-  const customer = byNumber[0];
-  if (waId && !customer.waId) {
-    await client.customer.update({
-      where: { id: customer.id },
-      data: { waId },
-    });
-  }
-
-  return { status: 'MATCHED', customerId: customer.id, matchedBy: 'NUMBER' };
+  const phone = canonicalPhone(input.phone || input.waId, undefined, true);
+  const resolved = await resolveContact({ phones: phone ? [phone] : [] }, client);
+  if (resolved.status === 'AMBIGUOUS') return { status:'AMBIGUOUS', normalized, customerIds:resolved.customerIds };
+  if (resolved.status !== 'MATCHED') return { status:'NOT_FOUND', normalized };
+  const c = await client.customer.findUniqueOrThrow({where:{id:resolved.customerId}});
+  if(c.deletedAt)return {status:'AMBIGUOUS',normalized,customerIds:[c.id]};
+  const matchedBy = waId && c.waId === waId ? 'WA_ID' : 'NUMBER';
+  if(waId && !c.waId)await client.customer.update({where:{id:c.id},data:{waId}});
+  return {status:'MATCHED',customerId:c.id,matchedBy};
 }

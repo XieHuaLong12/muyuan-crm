@@ -1,3 +1,5 @@
+import { freezeOrderAttribution } from './order-attribution-service';
+import { purchaseFeedback } from './advertising-feedback-service';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
@@ -104,7 +106,8 @@ export async function orderList(user: Actor, input: unknown = {}) {
       where,
       include: {
         customer: { select: { id: true, name: true, companyName: true, country: true, whatsapp: true, email: true, phone: true } },
-        deal: { select: { id: true, orderNumber: true, dealDate: true, currency: true, dealAmount: true } },
+        attribution: true,
+      deal: { select: { id: true, orderNumber: true, dealDate: true, currency: true, dealAmount: true } },
       },
       orderBy: [{ orderDate: 'desc' }, { id: 'asc' }],
       skip: (query.page - 1) * PAGE_SIZE,
@@ -182,6 +185,7 @@ export async function orderDetail(user: Actor, id: string) {
   const order = await db.order.findFirst({
     where: orderWhere(user, { id }),
     include: {
+      attribution: true,
       customer: {
         select: { id: true, name: true, companyName: true, country: true, countryCode: true, city: true, whatsapp: true, email: true, phone: true, language: true, stage: true },
       },
@@ -228,6 +232,7 @@ export async function orderDetail(user: Actor, id: string) {
           quantity: order.deal.quantity,
         }
       : null,
+    attribution: order.attribution,
     quotations: quotations.map(q => ({
       id: q.id,
       quoteNumber: q.quoteNumber,
@@ -261,7 +266,7 @@ export async function nextOrderNo(date: Date): Promise<string> {
  */
 export async function ensureOrderForDeal(
   tx: Prisma.TransactionClient,
-  input: { dealId: string; customerId: string; amount: Prisma.Decimal | number; currency: string; orderDate: Date; createdBy: string },
+  input: { dealId: string; customerId: string; amount: Prisma.Decimal | number; currency: string; orderDate: Date; createdBy: string; historical?: boolean },
 ) {
   const existing = await tx.order.findUnique({ where: { dealId: input.dealId }, select: { id: true } });
   if (existing) return existing;
@@ -277,7 +282,7 @@ export async function ensureOrderForDeal(
         : source;
 
   const orderNo = await nextOrderNoInTx(tx, input.orderDate);
-  return tx.order.create({
+  const order = await tx.order.create({
     data: {
       orderNo,
       customerId: input.customerId,
@@ -295,6 +300,12 @@ export async function ensureOrderForDeal(
     },
     select: { id: true, orderNo: true },
   });
+  // Upgrade backfills run before legacy lead reconciliation. Do not prematurely lock unknown attribution or emit an old Purchase.
+  if(!input.historical){
+    await freezeOrderAttribution(tx,order.id,input.customerId,input.orderDate);
+    await purchaseFeedback(tx,order.id);
+  }
+  return order;
 }
 
 /** nextOrderNo 的事务版本，避免在成交事务里再开一个连接。 */
