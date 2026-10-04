@@ -9,6 +9,7 @@ import { retryTransaction } from '@/lib/transaction-retry';
 import { rememberCustomerContacts } from './contact-identity-service';
 import { recordCtwaAttribution } from './ctwa-attribution-service';
 import { z } from 'zod';
+import { exactCrossSourceMessage } from './whatsapp-dedup-service';
 
 const externalId=z.string().max(191);
 const cloudMessage=z.object({from:externalId.optional(),to:externalId.optional(),id:externalId.optional(),
@@ -155,6 +156,17 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
     }
     if(input.referral)await recordCtwaAttribution(tx,{provider:input.source||'cloud_api',accountId:input.accountId||'primary',messageId:input.id,
       customerId:linked.customerId,phoneRaw:input.phone,phoneE164:validPhone,at:input.providerOccurredAt||null,referral:input.referral,status:linked.status});
+    if(linked.customerId&&input.source==='gupshup'&&await exactCrossSourceMessage(tx,{nativeId:input.id,accountPhone:input.accountId||'',peerPhone:input.phone,direction,source:'gupshup',customerId:linked.customerId})){
+      await tx.whatsAppUnmatchedMessage.create({data:{sourceKey:key,provider:'gupshup',providerAccountId:input.accountId,userId:owner.id,
+        accountPhone:input.accountId!,conversationId:waId,canonicalConversationId:linked.conversation.id,sourceMessageId:input.id,peerPhone:validPhone,
+        direction:direction.toLowerCase(),sentAt:input.sentAt,content:input.content,attachments:JSON.stringify({raw:input.raw}),reason:'CROSS_SOURCE_DUPLICATE',status:'IMPORTED',customerId:linked.customerId}});
+      if(direction==='INBOUND'&&input.providerOccurredAt)await tx.whatsAppConversation.updateMany({where:{id:linked.conversation.id,OR:[{lastCustomerMessageAt:null},{lastCustomerMessageAt:{lt:input.providerOccurredAt}}]},data:{lastCustomerMessageAt:input.providerOccurredAt}});
+      if(direction==='INBOUND'&&/^(stop|unsubscribe|不要联系|请勿联系|停止联系|退订)[.!。！\s]*$/i.test(input.content.trim())){
+        await tx.customer.update({where:{id:linked.customerId},data:{whatsappOptInStatus:'OPTED_OUT',whatsappOptOutAt:input.providerOccurredAt||new Date()}});
+        await tx.identityAudit.create({data:{entityType:'WHATSAPP_CONSENT',entityId:linked.customerId,actorId:'SYSTEM',reason:'客户明确退订',detail:{messageId:input.id,provider:input.source}}});
+      }
+      delta.customerIds.push(linked.customerId);delta.matchedCustomers++;delta.duplicateMessages++;return;
+    }
     if(!linked.customerId||(existing&&input.source!=='gupshup')){
       await tx.whatsAppUnmatchedMessage.create({data:{sourceKey:key,provider:input.source||'cloud_api',userId:owner.id,
         accountPhone:'primary',providerAccountId:input.accountId||'primary',conversationId:waId||identityKey(input.phone),canonicalConversationId:linked.conversation.id,sourceMessageId:input.id,

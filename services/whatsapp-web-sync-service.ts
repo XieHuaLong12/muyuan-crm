@@ -8,6 +8,7 @@ import { ensureConversation, messageFacts } from './conversation-identity-servic
 import { canonicalPhone } from '@/lib/contact-identity';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { e164, storedE164, exactCustomerPhone, matchPhone, sourceKey, webBatch, type WebMessage } from '@/lib/whatsapp-web-sync';
+import { exactCrossSourceMessage } from './whatsapp-dedup-service';
 
 export const tokenInput = z.object({label:z.string().trim().min(1).max(80),accountPhone:z.string().max(32)}).strict();
 const customerSelect = {id:true,name:true,phone:true,whatsapp:true,whatsappNormalized:true,waId:true} as const;
@@ -42,6 +43,7 @@ function metadata(m:WebMessage){return JSON.stringify(m.attachments);}
 function messageType(m:WebMessage){return m.attachments[0]?.kind.toUpperCase()||'TEXT';}
 function dbMessage(m:WebMessage,key:string,accountPhone:string,customerId:string) {
   return {customerId,source:'whatsapp_web',sourceMessageId:m.sourceMessageId,sourceKey:key,
+    providerAccountId:accountPhone,sourcePhone:m.direction==='inbound'?e164(m.peerPhone):accountPhone,destinationPhone:m.direction==='inbound'?accountPhone:e164(m.peerPhone),
     attachmentMetadata:metadata(m),direction:m.direction.toUpperCase(),sentAt:new Date(m.sentAt),
     sender:m.direction==='outbound'?accountPhone:(e164(m.peerPhone)||''),waId:e164(m.peerPhone)?.slice(1)||'',
     messageType:messageType(m),content:m.text,raw:'{}',status:m.direction==='inbound'?'RECEIVED':'SENT',
@@ -63,6 +65,9 @@ export async function previewWebSync(input:unknown, user:Actor, accountPhone:str
     seen.add(key);
     const match=matchPhone(m.peerPhone,list);
     const global=await resolveContact({phones:e164(m.peerPhone)?[e164(m.peerPhone)!]:[]});
+    if(match.status==='matched'&&global.status==='MATCHED'&&await exactCrossSourceMessage(db,{nativeId:m.sourceMessageId,accountPhone,peerPhone:m.peerPhone||'',direction:m.direction,source:'whatsapp_web',customerId:match.customer.id})){
+      items.push({sourceMessageId:m.sourceMessageId,phone:match.phone,status:'duplicate' as const,reason:'同一业务号码的原生 WhatsApp ID 已在实时渠道保存'});continue;
+    }
     items.push({sourceMessageId:m.sourceMessageId,...(global.status==='AMBIGUOUS'?{status:'ambiguous' as const,phone:e164(m.peerPhone),reason:'号码身份需要人工核对'}:match)});
   }
   const counts={matched:0,unmatched:0,ambiguous:0,duplicate:0,invalid:0};
@@ -78,9 +83,11 @@ export async function syncWebMessages(input:unknown,user:Actor,accountPhone:stri
   let success=0,skipped=0,failed=0,unmatched=0;
   const errors:{sourceMessageId?:string;message:string}[]=[];
   for(const m of messages){
+    let crossDuplicate=false;
     const key=sourceKey(accountPhone,m);let match:{status:'matched';phone:string;customer:{id:string;name:string}}|{status:'ambiguous'|'unmatched';phone:string|null;reason:string}=matchPhone(m.peerPhone,list);
     try{
       await retryTransaction(()=>db.$transaction(async tx=>{
+        crossDuplicate=false;
         await lockIdentity(tx);
         const linked=await ensureConversation(tx,{provider:'whatsapp_web',accountId:accountPhone,peerId:canonicalPhone(m.peerPhone,undefined,true)||m.conversationId,phone:m.peerPhone,name:m.peerName,externalId:m.conversationId,sentAt:new Date(m.sentAt),direction:m.direction,sourceMessageId:m.sourceMessageId});
         const visible=linked.customerId?await tx.customer.findFirst({where:{id:linked.customerId,...scope(user)},select:{id:true,name:true}}):null;
@@ -88,16 +95,17 @@ export async function syncWebMessages(input:unknown,user:Actor,accountPhone:stri
         if(match.status==='matched'){
           const current=await tx.customer.findFirst({where:{id:match.customer.id,...scope(user)},select:{id:true}});
           if(!current)throw new HttpError(403,'客户权限已变化');
+          crossDuplicate=!!await exactCrossSourceMessage(tx,{nativeId:m.sourceMessageId,accountPhone,peerPhone:m.peerPhone||'',direction:m.direction,source:'whatsapp_web',customerId:match.customer.id});
         }
         // The queue row is the unique ledger for both matched and unmatched messages.
         await tx.whatsAppUnmatchedMessage.create({data:{sourceKey:key,userId:user.id,accountPhone,
           conversationId:m.conversationId,canonicalConversationId:linked.conversation.id,sourceMessageId:m.sourceMessageId,peerPhone:match.phone,
           peerName:m.peerName,direction:m.direction,sentAt:new Date(m.sentAt),content:m.text,
-          attachments:metadata(m),reason:match.status==='matched'?'MATCHED':match.status==='ambiguous'?'AMBIGUOUS':'NO_MATCH',
+          attachments:metadata(m),reason:crossDuplicate?'CROSS_SOURCE_DUPLICATE':match.status==='matched'?'MATCHED':match.status==='ambiguous'?'AMBIGUOUS':'NO_MATCH',
           status:match.status==='matched'?'IMPORTED':'PENDING',customerId:match.status==='matched'?match.customer.id:null}});
-        if(match.status==='matched'){await tx.whatsAppMessage.create({data:{...dbMessage(m,key,accountPhone,match.customer.id),conversationId:linked.conversation.id}});await messageFacts(tx,match.customer.id,new Date(m.sentAt),m.direction);}
+        if(match.status==='matched'&&!crossDuplicate){await tx.whatsAppMessage.create({data:{...dbMessage(m,key,accountPhone,match.customer.id),conversationId:linked.conversation.id}});await messageFacts(tx,match.customer.id,new Date(m.sentAt),m.direction);}
       }));
-      if(match.status==='matched')success++;else unmatched++;
+      if(crossDuplicate)skipped++;else if(match.status==='matched')success++;else unmatched++;
     }catch(error){
       if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002'){skipped++;continue;}
       failed++;errors.push({sourceMessageId:m.sourceMessageId,message:'消息保存失败'});

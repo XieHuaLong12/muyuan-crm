@@ -47,3 +47,5 @@ Reuse the existing Sales communication center for `/whatsapp/inbox`. Add BOS tem
 2026-10-04: JasonCRM live on +8619966852192; business portfolio limit shown 2K customers/24h. Jason4430 has incomplete embedded signup. JasonCRM has no custom templates. These facts do not prove webhook delivery, valid server credentials, template approval or CTWA referral ingestion. The portfolio recipient limit is not messages/second and must not be converted into one.
 
 Phase-one migration: `20261004023000_gupshup_live_identity` (Prisma-generated), Customer consent default UNKNOWN, WhatsAppMessage provider/account and receipt timestamps, Conversation live inbound evidence, one receipt journal. All original 16 migration files unchanged. Template/campaign models remain a next-phase design until the required real first milestone is accepted.
+
+Cross-source dedup is implemented bidirectionally for exact shared native `wamid` + business phone + customer phone + direction. Provider raw evidence remains in the imported ingestion ledger; canonical chat displays one message. DOM-only historical IDs cannot be proven equal to API IDs and are never fuzzy-merged.

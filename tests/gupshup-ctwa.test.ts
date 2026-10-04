@@ -10,6 +10,7 @@ import { sendWhatsAppMessage } from '../services/whatsapp-message-service';
 import { gupshupIntegrationStatus,integrationDebug } from '../services/gupshup-integration-service';
 import { deleteTestCustomers } from './identity-test-cleanup';
 import { POST } from '../app/api/whatsapp/webhook/route';
+import { syncWebMessages } from '../services/whatsapp-web-sync-service';
 
 const business='+19195550101',peer='+33658917981';
 const event=(id:string,phone=peer,text='Please quote compressed sofas',timestamp:unknown=Date.now(),referral?:Record<string,unknown>)=>({
@@ -60,9 +61,16 @@ test('Gupshup CTWA database: concurrent create, immutable referral, scoped windo
     assert.equal((await customerServiceWindow(c.id,actor)).conversationWindowStatus,'CLOSED');
     const unknown=event(`unknown-${marker}`);delete (unknown as {timestamp?:unknown}).timestamp;
     await ingestWhatsAppWebhook(unknown);assert.equal((await customerServiceWindow(c.id,actor)).conversationWindowStatus,'CLOSED');
-    const v3=cloud(`v3-${marker}`);v3.entry[0].changes[0].value.messages[0].referral.source_id=adId;
+    const v3=cloud(`wamid.v3-${marker}`);v3.entry[0].changes[0].value.messages[0].referral.source_id=adId;
     const request=new NextRequest('https://crm.example/api/whatsapp/webhook',{method:'POST',headers:{'content-type':'application/json','x-webhook-secret':'isolated-callback-secret'},body:JSON.stringify(v3)});
     assert.equal((await POST(request)).status,200);assert.equal((await customerServiceWindow(c.id,actor)).conversationWindowStatus,'OPEN');
+    const history={accountPhone:business,messages:[{sourceMessageId:`wamid.v3-${marker}`,conversationId:'cross-source-fixture',peerPhone:peer,direction:'inbound',sentAt:new Date().toISOString(),text:'Same native message',attachments:[]}]};
+    const cross=await syncWebMessages(history,actor,business);assert.equal(cross.skipped,1);assert.equal(cross.success,0);
+    assert.equal(await db.whatsAppMessage.count({where:{customerId:c.id,sourceMessageId:`wamid.v3-${marker}`}}),1);
+    history.messages[0].sourceMessageId=`wamid.local-first-${marker}`;
+    assert.equal((await syncWebMessages(history,actor,business)).success,1);
+    assert.equal((await ingestWhatsAppWebhook(event(history.messages[0].sourceMessageId,peer))).duplicateMessages,1);
+    assert.equal(await db.whatsAppMessage.count({where:{customerId:c.id,sourceMessageId:history.messages[0].sourceMessageId}}),1);
     const failed=new NextRequest('https://crm.example/api/whatsapp/webhook',{method:'POST',body:JSON.stringify(v3)});assert.equal((await POST(failed)).status,401);
     await assert.rejects(ingestWhatsAppWebhook(cloud(`wrong-${marker}`,'+19195550202')),/号码/);
     const earlyId=`out-${marker}`,waId=`wamid.${marker}`;

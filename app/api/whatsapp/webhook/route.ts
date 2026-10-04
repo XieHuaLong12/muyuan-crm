@@ -2,7 +2,7 @@ import { ZodError } from 'zod';
 import { HttpError } from '@/lib/auth';
 import { normalizeProviderEnvelope } from '@/lib/gupshup';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
 import { syncCustomerWorkflow } from '@/services/workflow-service';
 import { updateWhatsAppStage } from '@/services/whatsapp-stage-service';
@@ -482,10 +482,6 @@ export async function POST(
             );
 
 
-            await updateWhatsAppStage(
-              customerId
-            );
-
 
           } catch(error) {
 
@@ -504,7 +500,10 @@ export async function POST(
 
     );
 
-
+    // Messages/cursors are durable before acknowledgment. AI never holds up the provider callback.
+    if(process.env.DEEPSEEK_API_KEY&&result.customerIds.length)after(async()=>{
+      for(const customerId of new Set(result.customerIds))try{await updateWhatsAppStage(customerId);}catch{console.error('[WhatsApp Analysis] RETRY_PENDING');}
+    });
 
     return NextResponse.json(
       {
