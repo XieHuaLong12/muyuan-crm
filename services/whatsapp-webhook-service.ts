@@ -235,6 +235,24 @@ export async function replayWhatsAppReceipts(provider:string,accountId:string,me
   for(const r of rows)await recordWhatsAppReceipt({id:r.messageId,gsId:r.gsId||undefined,status:r.status,provider,accountId,occurredAt:r.occurredAt,failureCode:r.failureCode});
 }
 
+export function validateWhatsAppWebhook(input: unknown) {
+  const root = z.record(z.unknown()).parse(input);
+  if (root.object !== 'whatsapp_business_account') {
+    parseGupshup(root);
+    return root;
+  }
+  const payload = cloudWebhookSchema.parse(root);
+  if (typeof root.gs_app_id === 'string') {
+    const accountId = gupshupSource();
+    for (const entry of payload.entry || []) for (const change of entry.changes || []) {
+      if (change.value && (!accountId || canonicalPhone(change.value.metadata?.display_phone_number, undefined, true) !== accountId)) {
+        throw new HttpError(400, 'Gupshup 回调业务号码与服务器配置不一致');
+      }
+    }
+  }
+  return root;
+}
+
 async function ingest(input: unknown): Promise<WhatsAppWebhookResult> {
   const result: WhatsAppWebhookResult = { customerIds: [], received: 0, outboundEchoes: 0, createdCustomers: 0,
     matchedCustomers: 0, duplicateMessages: 0, ambiguous: 0, statusesUpdated: 0 };

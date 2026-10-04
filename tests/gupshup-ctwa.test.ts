@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { NextRequest } from 'next/server';
 import { db } from '../lib/db';
 import { normalizeProviderEnvelope,parseGupshup,providerTime } from '../lib/gupshup';
@@ -32,6 +33,8 @@ test('Gupshup envelope and window: never replace missing/future time with a live
 });
 
 test('Gupshup CTWA database: concurrent create, immutable referral, scoped window, opt-out, receipts and authenticated V2/V3',async t=>{
+  const background:Array<()=>Promise<unknown>>=[];
+  t.mock.method(createRequire(import.meta.url)('next/server'),'after',(callback:()=>Promise<unknown>)=>{background.push(callback);});
   const env={...process.env},created:string[]=[],receiptIds:string[]=[];
   const admin=await db.user.findUniqueOrThrow({where:{email:'admin@example.com'}}),actor={id:admin.id,name:admin.name,email:admin.email,role:'ADMIN'};
   const marker=randomUUID(),adId=`ctwa-ad-${marker}`;
@@ -63,7 +66,10 @@ test('Gupshup CTWA database: concurrent create, immutable referral, scoped windo
     await ingestWhatsAppWebhook(unknown);assert.equal((await customerServiceWindow(c.id,actor)).conversationWindowStatus,'CLOSED');
     const v3=cloud(`wamid.v3-${marker}`);v3.entry[0].changes[0].value.messages[0].referral.source_id=adId;
     const request=new NextRequest('https://crm.example/api/whatsapp/webhook',{method:'POST',headers:{'content-type':'application/json','x-webhook-secret':'isolated-callback-secret'},body:JSON.stringify(v3)});
-    assert.equal((await POST(request)).status,200);assert.equal((await customerServiceWindow(c.id,actor)).conversationWindowStatus,'OPEN');
+    const response=await POST(request);assert.equal(response.status,200);assert.equal(await response.text(),'');
+    assert.equal((await customerServiceWindow(c.id,actor)).conversationWindowStatus,'CLOSED','actual ingestion is after acknowledgement');
+    assert.equal(background.length,1);await background.shift()!();
+    assert.equal((await customerServiceWindow(c.id,actor)).conversationWindowStatus,'OPEN');
     const history={accountPhone:business,messages:[{sourceMessageId:`wamid.v3-${marker}`,conversationId:'cross-source-fixture',peerPhone:peer,direction:'inbound',sentAt:new Date().toISOString(),text:'Same native message',attachments:[]}]};
     const cross=await syncWebMessages(history,actor,business);assert.equal(cross.skipped,1);assert.equal(cross.success,0);
     assert.equal(await db.whatsAppMessage.count({where:{customerId:c.id,sourceMessageId:`wamid.v3-${marker}`}}),1);

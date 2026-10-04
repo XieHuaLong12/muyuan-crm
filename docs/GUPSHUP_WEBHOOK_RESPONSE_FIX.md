@@ -1,0 +1,13 @@
+# Gupshup empty webhook response repair
+
+1. Requirement: ordinary GET and HEAD return empty 204; authenticated POST returns empty 200 quickly and processes messages after the response. Preserve real parser, persistence and security.
+2. BOS impact: Communication ingress only. Customer, attribution, stage, workflow and AI rules are unchanged; no UI or template/campaign work.
+3. Modules/callers: `app/api/whatsapp/webhook/route.ts`, `services/whatsapp-webhook-service.ts`, a receipt processing service and webhook tests. Gupshup v2/v3, Cloud API and the legacy Lead Ads branch share the endpoint. The default data-quality SyncJob projection excludes raw inbox receipts; processed summaries remain available through the existing ingestion jobs.
+4. Data: no schema or migration changes. Store authenticated payload in an existing SyncJob receipt before acknowledgement so an interrupted background task does not erase received evidence. Failed/pending receipts remain durable; no new automatic retry feature. No headers or credentials stored. Existing business writes retain their services and idempotence.
+5. API: successful ordinary GET/HEAD become empty 204; successful POST becomes empty 200. Error status codes remain non-2xx with empty bodies. Valid Meta subscription verification keeps its required plaintext challenge. HMAC, constant-time Gupshup secret checks, app/account checks and bounded payload validation precede acceptance.
+6. UI: none.
+7. Plan/verification: persist the receipt, schedule existing ingestion/workflow/incremental AI with Next.js `after()`, test acknowledgement before processing and retained failures, security rejection and Meta verification; run isolated database tests, lint, TypeScript, build and both database CI jobs; deploy through main and measure production GET/HEAD status/body. Rollback is application-only.
+
+Official contract: [Gupshup webhook key points](https://docs.gupshup.io/docs/what-is-a-webhook) requires 2xx with an empty response. [Next.js after](https://nextjs.org/docs/app/api-reference/functions/after) runs callbacks after the response and is supported by the Node server. Background completion is not proof of delivery; actual incoming acceptance is still separately required.
+
+Local verification: 106 tests pass, lint, strict TypeScript and production build pass. A built Next.js Node server returned GET/HEAD 204 with zero body bytes; authenticated POST returned 200 with zero body bytes in 12 ms for an ignored fixture event, and the persisted receipt reached OK via actual `after()` execution. This fixture contains no real customer message and does not prove production Gupshup delivery. Before deployment, production still returned GET 200 with 42 body bytes and HEAD 200.
