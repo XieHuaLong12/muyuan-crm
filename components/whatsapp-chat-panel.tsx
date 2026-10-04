@@ -7,7 +7,7 @@ import { stages } from '@/lib/constants';
 import type { WhatsAppMessage } from '@/lib/types';
 
 type ChatMessage = Pick<WhatsAppMessage, 'id' | 'content' | 'direction' | 'status' | 'sentAt' | 'messageType' | 'source' | 'attachmentMetadata'>;
-type History = { messages: ChatMessage[]; nextCursor: string | null; stage: string; lastInboundAt: string | null; configured: boolean };
+type History = { messages: ChatMessage[]; nextCursor: string | null; stage: string; lastInboundAt: string | null; configured: boolean; conversationWindowStatus:'OPEN'|'CLOSED'|'UNKNOWN'; conversationWindowExpiresAt:string|null };
 const statuses: Record<string, string> = { PENDING: '发送中', SENT: '已提交', ENQUEUED: '排队中', DELIVERED: '已送达', READ: '已读', FAILED: '发送失败', UNKNOWN: '结果未知', RECEIVED: '已接收' };
 const merge = (old: ChatMessage[], incoming: ChatMessage[]) => Array.from(new Map([...old, ...incoming].map(m => [m.id, m])).values())
   .sort((a, b) => a.sentAt.localeCompare(b.sentAt) || a.id.localeCompare(b.id));
@@ -71,7 +71,7 @@ export function WhatsappChatPanel({ customerId, customerName, stage, timezone, o
         customerId, content: request.current.content, requestId: request.current.id,
       });
       setMessages(old => merge(old, [result.message])); nearBottom.current = true;
-      if (['SENT', 'DELIVERED', 'READ'].includes(result.message.status)) { setContent(''); request.current = null; }
+      if (['ENQUEUED', 'SENT', 'DELIVERED', 'READ'].includes(result.message.status)) { setContent(''); request.current = null; }
       if (result.message.status === 'FAILED') request.current = null;
       setError(result.error || (result.message.status === 'UNKNOWN' ? '发送结果未知，请先核对 WhatsApp。' : ''));
     } catch (e) { setError((e as Error).message); }
@@ -92,7 +92,7 @@ export function WhatsappChatPanel({ customerId, customerName, stage, timezone, o
     } catch (e) { setError((e as Error).message); }
     finally { setMoreLoading(false); }
   }
-  const windowOpen = !!history?.lastInboundAt && Date.now() - Date.parse(history.lastInboundAt) < 86400000;
+  const windowOpen = history?.conversationWindowStatus==='OPEN' && !!history.conversationWindowExpiresAt && Date.parse(history.conversationWindowExpiresAt)>Date.now();
   return <aside className="whatsapp-chat-panel card" aria-label="WhatsApp 工作台">
     <header className="whatsapp-chat-header">
       <span className="avatar large" aria-label={`${customerName} 的头像`}>{customerName.slice(0, 1)}</span>

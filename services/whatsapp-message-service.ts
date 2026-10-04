@@ -11,13 +11,16 @@ import { signedMediaUrl,mediaKind } from './whatsapp-media-service';
 import { syncCustomerWorkflow } from './workflow-service';
 import { normalizeWhatsApp } from '@/lib/whatsapp';
 import { decryptWhatsAppAccessToken } from './whatsapp-connect-service';
+import { gupshupSource } from '@/lib/gupshup';
+import { customerServiceWindow, requireOpenWindow } from './whatsapp-window-service';
+import { replayWhatsAppReceipts } from './whatsapp-webhook-service';
 
 export const sendMessageSchema = z.object({ customerId: z.string().min(1).max(191),
   content: z.string().trim().max(4096).default(''), mediaAssetId: z.string().min(1).optional(), requestId: z.string().uuid() }).refine(v=>v.content.length>0||!!v.mediaAssetId,'请输入消息或选择附件');
 export const messageSelect = { id: true, customerId: true, waMessageId: true, source: true, sourceMessageId: true, attachmentMetadata: true, content: true,
   mediaUrl: true, mimeType: true, fileName: true, sender: true, direction: true, messageType: true, status: true, sentAt: true, createdAt: true, updatedAt: true } as const;
 
-const gupshupReady = () => !!(process.env.GUPSHUP_API_KEY?.trim() && normalizeWhatsApp(process.env.GUPSHUP_SOURCE) && process.env.GUPSHUP_APP_NAME?.trim());
+const gupshupReady = () => !!(process.env.GUPSHUP_API_KEY?.trim() && gupshupSource() && process.env.GUPSHUP_APP_NAME?.trim());
 
 export async function listWhatsAppMessages(customerId: string, user: Actor, before?: string) {
   const customer = await accessible(customerId, user);
@@ -30,8 +33,9 @@ export async function listWhatsAppMessages(customerId: string, user: Actor, befo
   const hasMore = messages.length > 50;
   const page = messages.slice(0, 50);
   const metaReady = integration?.status === 'CONNECTED' && !!integration.phoneNumberId && !!integration.encryptedAccessToken;
+  const window = await customerServiceWindow(customerId,user,gupshupReady()?undefined:{provider:'cloud_api',accountId:integration?.phoneNumberId||'NOT_CONNECTED'});
   return { messages: page.reverse(), nextCursor: hasMore ? page[0].id : null, stage: customer.stage,
-    lastInboundAt: customer.lastInboundAt, configured: metaReady || gupshupReady() };
+    lastInboundAt: customer.lastInboundAt, configured: metaReady || gupshupReady(), ...window };
 }
 
 export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: string) {
@@ -54,7 +58,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
   let gupshupApiKey = '';
   let gupshupAppName = '';
 
-  if (integration?.status === 'CONNECTED') {
+  if (!gupshupReady() && integration?.status === 'CONNECTED') {
     if (!integration.phoneNumberId || !integration.encryptedAccessToken) {
       throw new HttpError(503, 'Meta WhatsApp 连接信息不完整，请重新连接 WhatsApp');
     }
@@ -72,7 +76,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
     source = normalizeWhatsApp(integration.displayPhoneNumber) || phoneNumberId;
   } else {
     gupshupApiKey = process.env.GUPSHUP_API_KEY?.trim() || '';
-    source = normalizeWhatsApp(process.env.GUPSHUP_SOURCE);
+    source = normalizeWhatsApp(gupshupSource());
     gupshupAppName = process.env.GUPSHUP_APP_NAME?.trim() || '';
     if (!gupshupApiKey || !source || !gupshupAppName) throw new HttpError(503, 'Meta WhatsApp 尚未连接，且未配置 Gupshup 发送服务');
     transport = 'GUPSHUP';
@@ -81,11 +85,11 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
   const destination = normalizeWhatsApp(customer.waId || customer.whatsapp || customer.phone);
   if (!/^[1-9]\d{6,14}$/.test(destination)) throw new HttpError(400, '客户 WhatsApp 号码需要有效国家码');
   const identity=await resolveContact({phones:[canonicalPhone(destination,undefined,true)!].filter(Boolean)});
-  const manual=await db.whatsAppContact.findFirst({where:{provider:transport==='META'?'cloud_api':'gupshup',accountId:transport==='META'?phoneNumberId:source,phoneE164:canonicalPhone(destination,undefined,true),status:'MANUAL',customerId}});
+  const provider=transport==='META'?'cloud_api':'gupshup', providerAccountId=transport==='META'?phoneNumberId:gupshupSource()!;
+  const manual=await db.whatsAppContact.findFirst({where:{provider,accountId:providerAccountId,phoneE164:canonicalPhone(destination,undefined,true),status:'MANUAL',customerId}});
   if(!manual&&(identity.status!=='MATCHED'||identity.customerId!==customerId))throw new HttpError(409,'此号码身份不明确，请先人工认领后发送');
-  if (!customer.lastInboundAt || Date.now() - customer.lastInboundAt.getTime() > 24 * 60 * 60 * 1000) {
-    throw new HttpError(409, '客户的 24 小时会话窗口已关闭，请等待客户回复或使用已审核模板开启会话');
-  }
+  await requireOpenWindow(customerId,user,{provider,accountId:providerAccountId});
+  if(customer.whatsappOptInStatus==='OPTED_OUT')throw new HttpError(409,'客户已明确退订，请先人工核对后续沟通许可');
   const mediaOrigin=process.env.PUBLIC_APP_URL?.replace(/\/$/,'')||origin;
   if(asset && !mediaOrigin)throw new HttpError(503,'附件发送需要可访问的应用地址');
   const kind=asset?mediaKind(asset.mimeType):'text';
@@ -93,7 +97,8 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
 
   let message;
   try {
-    message = await db.whatsAppMessage.create({ data: { customerId, requestId, waId: destination, source: transport === 'META' ? 'cloud_api' : 'gupshup',
+    message = await db.whatsAppMessage.create({ data: { customerId, requestId, waId: destination, source: provider,providerAccountId,
+      sourcePhone:canonicalPhone(source,undefined,true),destinationPhone:canonicalPhone(destination,undefined,true),
       direction: 'OUTBOUND', sender: source, content, mediaUrl, mimeType:asset?.mimeType, fileName:asset?.fileName, messageType: kind.toUpperCase(), status: 'PENDING', sentAt: new Date(), raw: '{}' } });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -172,16 +177,17 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
   // Keep persistence outside the network catch: a DB failure must not label an accepted message FAILED.
   const saved = await retryTransaction(()=>db.$transaction(async tx => {
     await lockIdentity(tx);
-    const linked=await ensureConversation(tx,{provider:transport==='META'?'cloud_api':'gupshup',accountId:transport==='META'?phoneNumberId:source,peerId:canonicalPhone(destination,undefined,true)||destination,phone:destination,externalId:destination,sentAt,direction:'OUTBOUND',sourceMessageId:providerMessageId});
+    const linked=await ensureConversation(tx,{provider,accountId:providerAccountId,peerId:canonicalPhone(destination,undefined,true)||destination,phone:destination,externalId:destination,sentAt,direction:'OUTBOUND',sourceMessageId:providerMessageId});
     if(linked.customerId!==customerId)await tx.identityAudit.create({data:{entityType:'OUTBOUND_MESSAGE',entityId:message.id,fromCustomerId:customerId,toCustomerId:linked.customerId,actorId:user.id,reason:'供应商已接受消息，期间身份发生变化；保存发送凭证，需人工核对'}});
     const saved = await tx.whatsAppMessage.update({ where: { id: message.id },
-      data: { conversationId:linked.conversation.id, status: 'SENT', providerMessageId, waMessageId: providerMessageId, sentAt } });
+      data: { conversationId:linked.conversation.id, status: 'ENQUEUED', providerMessageId, waMessageId: providerMessageId, sentAt } });
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastContactAt: null }, { lastContactAt: { lt: sentAt } }] }, data: { lastContactAt: sentAt } });
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastWhatsAppAt: null }, { lastWhatsAppAt: { lt: sentAt } }] }, data: { lastWhatsAppAt: sentAt } });
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastOutboundAt: null }, { lastOutboundAt: { lt: sentAt } }] }, data: { lastOutboundAt: sentAt } });
     await messageFacts(tx,customerId,sentAt,'OUTBOUND');
     return saved;
   }));
+  await replayWhatsAppReceipts(provider,providerAccountId,providerMessageId);
   await syncCustomerWorkflow(customerId);
-  return { message: saved };
+  return { message: await db.whatsAppMessage.findUniqueOrThrow({where:{id:saved.id}}) };
 }

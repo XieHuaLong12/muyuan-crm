@@ -122,9 +122,10 @@ test('WhatsApp V2 integration: ingestion, Meta sends, receipts, scoped history a
       return Response.json({ messages: [{ id: providerId }] });
     });
 
+    await ingestWhatsAppWebhook({object:'whatsapp_business_account',entry:[{changes:[{field:'messages',value:{metadata:{phone_number_id:'333333'},messages:[{id:randomUUID(),from:phone,timestamp:String(Math.floor(Date.now()/1000)),type:'text',text:{body:'Hello from Cloud account'}}]}}]}]});
     const requestId = randomUUID();
     const sent = await sendWhatsAppMessage({ customerId, content: 'Hello buyer', requestId }, actor);
-    assert.equal(sent.message.status, 'SENT');
+    assert.equal(sent.message.status, 'ENQUEUED');
     assert.equal(sent.message.waMessageId, providerId);
     const repeated = await sendWhatsAppMessage({ customerId, content: 'Hello buyer', requestId }, actor);
     assert.equal(repeated.message.id, sent.message.id); assert.equal(calls, 1);
@@ -149,6 +150,7 @@ test('WhatsApp V2 integration: ingestion, Meta sends, receipts, scoped history a
     await sendWhatsAppMessage({ customerId, content: 'Timeout', requestId: unknownId }, actor);
     assert.equal(fetchMock.mock.callCount(), count);
 
+    await db.whatsAppConversation.updateMany({where:{contact:{customerId,provider:'cloud_api',accountId:'333333'}},data:{lastCustomerMessageAt:new Date(Date.now()-2*86400000)}});
     await db.customer.update({ where: { id: customerId }, data: { lastInboundAt: new Date(Date.now() - 2 * 86400000) } });
     await assert.rejects(sendWhatsAppMessage({ customerId, content: 'Expired', requestId: randomUUID() }, actor), /24 小时/);
     for (let i = 0; i < 52; i++) await db.whatsAppMessage.create({ data: { customerId, waMessageId: randomUUID(), direction: 'INBOUND',

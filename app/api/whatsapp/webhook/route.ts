@@ -1,5 +1,6 @@
 import { ZodError } from 'zod';
 import { HttpError } from '@/lib/auth';
+import { normalizeProviderEnvelope } from '@/lib/gupshup';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -149,8 +150,9 @@ export async function POST(
 ) {
 
 
-  const raw =
-    await req.text();
+  if(Number(req.headers.get('content-length')||0)>1_048_576)return NextResponse.json({success:false,error:'Payload too large'},{status:413});
+  const raw = await req.text();
+  if(Buffer.byteLength(raw)>1_048_576)return NextResponse.json({success:false,error:'Payload too large'},{status:413});
 
 
   console.log(
@@ -186,7 +188,7 @@ export async function POST(
     }
 
 
-    payload = parsed;
+    payload = normalizeProviderEnvelope(parsed);
 
 
   } catch {
@@ -295,38 +297,10 @@ export async function POST(
   }
 
 
-  /**
-   * Normalize Gupshup wrapper
-   *
-   * Example:
-   *
-   * {
-   *   app:"JasonCRM",
-   *   payload:{}
-   * }
-   *
-   */
-
-  if (
-    isObject(payload.payload)
-  ) {
-
-    payload = {
-
-      ...(payload.payload),
-
-      app:
-        payload.app,
-
-    };
-
-  }
-
-
+  payload = normalizeProviderEnvelope(payload);
 
   const isMetaWebhook =
-    payload.object ===
-    'whatsapp_business_account';
+    payload.object === 'whatsapp_business_account' && typeof payload.gs_app_id !== 'string';
 
 
 
@@ -344,6 +318,7 @@ export async function POST(
 
 
 
+    if (!secret) return NextResponse.json({success:false,error:'Webhook authentication is not configured'},{status:503});
     if (secret) {
 
 
@@ -395,11 +370,8 @@ export async function POST(
 
 
 
-    if (
-      app &&
-      payload.app &&
-      payload.app !== app
-    ) {
+    if (!app) return NextResponse.json({success:false,error:'Gupshup app configuration required'},{status:503});
+    if (typeof payload.gs_app_id==='string' ? process.env.GUPSHUP_APP_ID && payload.gs_app_id !== process.env.GUPSHUP_APP_ID : payload.app !== app) {
 
       return NextResponse.json(
         {
@@ -521,7 +493,7 @@ export async function POST(
             console.error(
               '[WhatsApp Workflow Failed]',
               customerId,
-              error
+              error instanceof HttpError ? error.status : 'WORKFLOW_FAILED'
             );
 
           }
@@ -555,7 +527,7 @@ export async function POST(
 
     console.error(
       '[WhatsApp Webhook Error]',
-      error
+      error instanceof HttpError ? error.status : error instanceof ZodError ? 'INVALID_PAYLOAD' : 'PROCESSING_FAILED'
     );
 
 
@@ -569,8 +541,7 @@ export async function POST(
       return NextResponse.json(
         {
           success:false,
-          error:
-            error.message,
+          error: error instanceof HttpError ? error.message : 'Webhook payload validation failed',
         },
         {
           status:
