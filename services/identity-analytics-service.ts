@@ -154,7 +154,7 @@ export async function identityDataQuality(input:unknown,user:Actor){
     db.whatsAppUnmatchedMessage.count({where:{status:'PENDING',reason:'AMBIGUOUS',...(admin?{}:{userId:user.id})}}),
     db.customerIntelligence.count({where:{customer:where,analysisPending:true}}),db.customerIntelligence.count({where:{customer:where,analysisError:{not:null}}}),
     db.advertisingFeedback.groupBy({by:['status'],where:{customer:where},_count:{_all:true}}),
-    db.syncJob.findMany({where:admin?{}:{actorId:user.id},orderBy:{startedAt:'desc'},take:20}),
+    db.syncJob.findMany({where:{jobType:{not:'WEBHOOK_INBOX'},...(admin?{}:{actorId:user.id})},orderBy:{startedAt:'desc'},take:20}),
     admin?db.metaSyncRun.findMany({orderBy:{startedAt:'desc'},take:10}):Promise.resolve([]),
     db.customerLeadAttribution.count({where:{customer:where,adId:{not:null},creativeId:null}}),
     admin?db.contactIdentity.groupBy({by:['normalized'],where:{kind:'PHONE',customer:{deletedAt:null}},_count:{_all:true},having:{normalized:{_count:{gt:1}}},orderBy:{normalized:'asc'},take:100}):Promise.resolve([]),
