@@ -49,3 +49,5 @@ Reuse the existing Sales communication center for `/whatsapp/inbox`. Add BOS tem
 Phase-one migration: `20261004023000_gupshup_live_identity` (Prisma-generated), Customer consent default UNKNOWN, WhatsAppMessage provider/account and receipt timestamps, Conversation live inbound evidence, one receipt journal. All original 16 migration files unchanged. Template/campaign models remain a next-phase design until the required real first milestone is accepted.
 
 Cross-source dedup is implemented bidirectionally for exact shared native `wamid` + business phone + customer phone + direction. Provider raw evidence remains in the imported ingestion ledger; canonical chat displays one message. DOM-only historical IDs cannot be proven equal to API IDs and are never fuzzy-merged.
+
+MariaDB CI uncovered ER_CHECKREAD 1020 in the existing concurrent task/workflow test. Phase one therefore extends the existing bounded whole-transaction retry classifier to this exact Prisma connector error, without retrying network requests or weakening optimistic task updates. This shared-helper change is covered by recovery/exhaustion/non-retryable tests and both database CI jobs.
