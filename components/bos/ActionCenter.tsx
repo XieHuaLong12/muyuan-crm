@@ -14,6 +14,8 @@ import { Card,EmptyState,Header,Table } from '@/components/ui/bos';
 export type TaskCard = {
   id: string;
   title: string;
+  responsibleName?: string | null;
+  assigneeId?: string | null;
   description: string;
   type: string;
   source: string;
@@ -95,7 +97,8 @@ function qs(query: ActionCenterData['query'], patch: Partial<ActionCenterData['q
   return text ? `/tasks?${text}` : '/tasks';
 }
 
-export function ActionCenter({ data, name }: { data: ActionCenterData; name: string }) {
+/** people: active accounts an administrator can hand a standalone task to (empty for salespeople). */
+export function ActionCenter({ data, name, people = [] }: { data: ActionCenterData; name: string; people?: { id: string; name: string }[] }) {
   const [insight, setInsight] = useState<Insight | null>(null);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
@@ -218,6 +221,7 @@ export function ActionCenter({ data, name }: { data: ActionCenterData; name: str
           title: String(form.get('title') ?? '').trim(),
           description: String(form.get('description') ?? '').trim(),
           priority: String(form.get('priority') ?? 'MEDIUM'),
+          assigneeId: String(form.get('assigneeId') ?? '') || null,
           type: 'FOLLOW_UP',
           dueDate: new Date(String(form.get('dueDate') || Date.now())).toISOString(),
         }),
@@ -236,9 +240,9 @@ export function ActionCenter({ data, name }: { data: ActionCenterData; name: str
   return (
     <>
       <Header
-        eyebrow="AI ACTION CENTER"
-        title="AI 行动中心"
-        description="今天应该优先完成什么？"
+        eyebrow="TASKS · AI 行动中心"
+        title={people.length ? '团队任务' : '我的任务'}
+        description={people.length ? '全团队今天应该优先完成什么？客户任务由客户当前负责人执行。' : '今天应该优先完成什么？'}
         actions={
           <div className="bos-order-actions">
             <button type="button" className="bos-button" onClick={() => setShowCreate(v => !v)}><Plus size={15} />创建任务</button>
@@ -263,6 +267,12 @@ export function ActionCenter({ data, name }: { data: ActionCenterData; name: str
               <option value="LOW">○ 低优先级</option>
             </select>
             <input type="date" name="dueDate" aria-label="截止日期" defaultValue={new Date().toISOString().slice(0, 10)} />
+            {people.length > 0 && (
+              <select name="assigneeId" aria-label="执行人" defaultValue="">
+                <option value="">执行人：我自己</option>
+                {people.map(person => <option key={person.id} value={person.id}>执行人：{person.name}</option>)}
+              </select>
+            )}
             <button className="bos-button bos-button-primary" type="submit" disabled={busy === 'create'}>保存</button>
             <button className="bos-button" type="button" onClick={() => setShowCreate(false)}>取消</button>
           </form>
@@ -345,6 +355,7 @@ export function ActionCenter({ data, name }: { data: ActionCenterData; name: str
                 ) : (
                   <span>个人任务</span>
                 )}
+                {people.length > 0 && <span>执行人 {task.responsibleName ?? people.find(person => person.id === task.assigneeId)?.name ?? '—'}</span>}
                 <span>预计价值 {rmb(task.amount ?? task.order?.amountRMB ?? null)}</span>
                 <span className={task.overdue ? 'bos-overdue' : undefined}><Clock size={12} />{when(task.dueDate)}</span>
                 <span>{task.statusLabel}</span>

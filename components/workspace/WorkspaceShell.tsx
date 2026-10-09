@@ -11,18 +11,14 @@ const links=[['/command-center','LVANJU BOS',Sun],['/','Today',Sun],['/customers
 export function WorkspaceShell({boot,children,embedded}:{boot:Bootstrap;children:React.ReactNode;embedded?:boolean}){
  const visibleLinks=boot.user.role==='ADMIN'?links:links.filter(([url])=>!['/command-center','/whatsapp','/funnel','/targets','/analytics','/settings'].includes(url));
  const path=usePathname(),router=useRouter();const [mobile,setMobile]=useState(false),[open,setOpen]=useState(false),[notices,setNotices]=useState<Notice[]>([]),[error,setError]=useState('');
+ // Embedded inside the BOS shell, which already polls reminders and runs the safety-net task sync.
  useEffect(()=>{
-  let active=true;let timer:ReturnType<typeof setTimeout>;
+  if(embedded)return;
   const controller=new AbortController();
-  async function sync(){
-   try{const response=await fetch('/api/workflows/sync',{method:'POST',signal:controller.signal});
-    if(!response.ok)throw new Error('sync failed');
-   }catch{if(active)setError('自动任务同步暂时失败，将自动重试');}
-   if(active)timer=setTimeout(sync,60000);
-  }
-  void sync();return()=>{active=false;controller.abort();clearTimeout(timer);};
- },[]);
- useEffect(()=>{let active=true;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();async function poll(){try{const response=await fetch('/api/reminders',{signal:controller.signal,cache:'no-store'});const body=await response.json();if(active&&body.success){setNotices(body.data);setError('');}}catch{if(active)setError('提醒暂时无法同步');}if(active)timer=setTimeout(poll,30000);}void poll();return()=>{active=false;controller.abort();clearTimeout(timer);};},[]);
+  fetch('/api/workflows/sync',{method:'POST',signal:controller.signal}).then(response=>{if(!response.ok)throw new Error('sync failed');}).catch(()=>{if(!controller.signal.aborted)setError('自动任务同步暂时失败');});
+  return()=>controller.abort();
+ },[embedded]);
+ useEffect(()=>{if(embedded)return;let active=true;let timer:ReturnType<typeof setTimeout>;const controller=new AbortController();async function poll(){try{const response=await fetch('/api/reminders',{signal:controller.signal,cache:'no-store'});const body=await response.json();if(active&&body.success){setNotices(body.data);setError('');}}catch{if(active)setError('提醒暂时无法同步');}if(active)timer=setTimeout(poll,30000);}void poll();return()=>{active=false;controller.abort();clearTimeout(timer);};},[embedded]);
  useEffect(()=>{const handler=(e:KeyboardEvent)=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();document.getElementById('workspace-search')?.focus();}if(e.key==='Escape'){setOpen(false);setMobile(false);}};window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[]);
  async function dismiss(id:string){const old=notices;setNotices(items=>items.filter(n=>n.id!==id));try{await api(`reminders/${id}`,'PATCH');}catch(e){setNotices(old);setError((e as Error).message);}}
  // embedded：只提供内容与 .v3-shell 作用域，外壳（侧边栏/顶栏）由白色 BOS 外壳负责

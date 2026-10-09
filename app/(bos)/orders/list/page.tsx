@@ -16,5 +16,5 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
  const description = data.query.payment === 'UNPAID'
   ? `共 ${data.total} 张匹配订单 · 按定金未付筛选，包含不同生产和物流阶段。`
   : `共 ${data.total} 张匹配订单 · 查看客户、交付进度和订单详情。`;
- return <BOSShell boot={boot}><div className="bos-v2-order-list"><OrderManagement data={data} basePath="/orders/list" title={title} description={description}/></div></BOSShell>;
+ return <BOSShell boot={boot}><div className="bos-v2-order-list"><OrderManagement data={data} basePath="/orders/list" title={title} description={description} admin={user.role==='ADMIN'}/></div></BOSShell>;
 }

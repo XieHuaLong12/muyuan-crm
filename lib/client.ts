@@ -1,4 +1,5 @@
-export class ApiError extends Error{constructor(message:string,public details?:{potentialDuplicate?:boolean;customers?:{id:string;name:string}[]}){super(message);}}
+export type ApiErrorDetails={potentialDuplicate?:boolean;canForce?:boolean;holders?:string[];customers?:{id:string;name:string;ownerName?:string}[]};
+export class ApiError extends Error{constructor(message:string,public details?:ApiErrorDetails){super(message);}}
 export async function api<T>(path:string,method='GET',body?:unknown):Promise<T>{const response=await fetch(`/api/${path}`,{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const result=await response.json();if(!result.success){if(response.status===401&&path!=='auth/login')window.location.href='/login';throw new ApiError(result.error,result.details);}return result.data;}
 export function money(value:number|string,currency='CNY'){return new Intl.NumberFormat('zh-CN',{style:'currency',currency,maximumFractionDigits:0}).format(Number(value));}
 export function dateText(value:string|null|undefined,tz='Asia/Shanghai'){return value?new Intl.DateTimeFormat('zh-CN',{timeZone:tz,month:'2-digit',day:'2-digit'}).format(new Date(value)):'—';}

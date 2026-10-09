@@ -1,4 +1,5 @@
 import { IdentityTimeline } from './IdentityTimeline';
+import { CancelOrderButton } from './CancelOrderButton';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Card,Header } from '@/components/ui/bos';
@@ -14,6 +15,7 @@ export type OrderDetailData = {
   currency: string;
   sourceAmount: string | null;
   status: string;
+  updatedAt: string;
   statusLabel: string;
   paymentLabel: string;
   productionLabel: string;
@@ -31,7 +33,7 @@ export type OrderDetailData = {
 
 const day = (iso: string | null) => (iso ? iso.slice(0, 10) : '—');
 
-export function OrderDetail({ data, timezone }: { data: OrderDetailData; timezone: string }) {
+export function OrderDetail({ data, timezone, admin = false }: { data: OrderDetailData; timezone: string; admin?: boolean }) {
   const completed = data.progress.done.filter(Boolean).length;
   return (
     <>
@@ -39,7 +41,7 @@ export function OrderDetail({ data, timezone }: { data: OrderDetailData; timezon
         eyebrow="ORDER MANAGEMENT · 订单详情"
         title={data.orderNo}
         description={`${data.customer.name}${data.customer.country ? ` · ${data.customer.country}` : ''} · ${data.statusLabel} · 七段流程已完成 ${completed} / ${ORDER_STAGES.length}`}
-        actions={<Link className="bos-button" href="/orders"><ArrowLeft size={15} />返回订单列表</Link>}
+        actions={<>{admin && data.status !== 'CANCELLED' && <CancelOrderButton orderId={data.id} orderNo={data.orderNo} updatedAt={data.updatedAt} hasDeal={!!data.deal} />}<Link className="bos-button" href="/orders"><ArrowLeft size={15} />返回订单列表</Link></>}
       />
 
       <div className="bos-detail-grid">
