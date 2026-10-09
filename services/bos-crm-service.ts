@@ -31,6 +31,7 @@ export async function moveCustomerStage(user:Actor,input:unknown){
   const updated=await tx.customer.updateMany({where:{id:customerId,...scope(user),stage:fromStage},data:{stage:toStage,...(field&&!current[field]?{[field]:new Date()}:{}),...(toStage==='NEEDS_CONFIRMED'?{isQualified:true}:{})}});
   if(updated.count!==1)throw new HttpError(409,'客户阶段已更新，请刷新看板');
   await tx.stageHistory.create({data:{customerId,fromStage,toStage,changedBy:user.id,note:'CRM 看板移动'}});
+  if(toStage==='CONTACTED')await (await import('./workflow-service')).recordFirstContact(tx,customerId,current.contactedAt||new Date(),user.id);
   return {stage:toStage};
  }));
 }

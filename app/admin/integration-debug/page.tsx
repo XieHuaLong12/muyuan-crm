@@ -2,11 +2,11 @@ import Link from 'next/link';
 import { BOSShell } from '@/components/bos/BOSShell';
 import { Header,Card,Table,Badge,Input,Button,EmptyState } from '@/components/ui/bos';
 import { IdentityTimeline } from '@/components/bos/IdentityTimeline';
-import { workspacePage } from '@/services/workspace-page';
+import { adminWorkspacePage } from '@/services/workspace-page';
 import { integrationDebug } from '@/services/gupshup-integration-service';
 export const dynamic='force-dynamic';
 export default async function Page({searchParams}:{searchParams:Promise<{q?:string}>}){
-  const {user,boot}=await workspacePage();const {q}=await searchParams;
+  const {user,boot}=await adminWorkspacePage();const {q}=await searchParams;
   if(user.role!=='ADMIN')return <BOSShell boot={boot}><Card><p>需要管理员权限。</p></Card></BOSShell>;
   const result=q?await integrationDebug({q},user):null;
   return <BOSShell boot={boot}><Header eyebrow="INTEGRATION DEBUG" title="接入链路检查" description="按国际号码、客户 ID 或消息 ID 核对真实身份链。"/>

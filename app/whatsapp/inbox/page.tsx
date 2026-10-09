@@ -1,2 +1,4 @@
 import { redirect } from 'next/navigation';
-export default function Page(){redirect('/sales?queue=waiting');}
+import { adminWorkspacePage } from '@/services/workspace-page';
+export const dynamic='force-dynamic';
+export default async function Page(){await adminWorkspacePage();redirect('/communication');}

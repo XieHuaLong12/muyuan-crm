@@ -27,6 +27,7 @@ export async function markQuoteSent(id: string, user: Actor) {
     await tx.customer.update({where:{id:c.id},data:{stage,stageSource:stage!==c.stage?'SYSTEM':c.stageSource,quotedAt:c.quotedAt||sentAt,...(quote.currency===c.currency?{quotedAmount:quote.unitPrice.mul(quote.quantity)}:{})}});
     if(stage!==c.stage)await tx.stageHistory.create({data:{customerId:c.id,fromStage:c.stage,toStage:stage,changedBy:user.id,note:`报价 ${quote.quoteNumber} 已发送`}});
     const lead=await tx.customerLeadAttribution.findFirst({where:{customerId:c.id,status:'MATCHED',occurredAt:{lte:sentAt}},orderBy:[{occurredAt:'desc'},{leadKey:'desc'}]});
+    await (await import('./workflow-service')).recordFirstContact(tx,c.id,sentAt,user.id);
     await enqueueFeedback(tx,{eventId:`quote:${q.id}:v1`,eventName:'QuoteSent',customerId:c.id,leadKey:lead?.leadKey,eventTime:sentAt});
     return q;
   }));

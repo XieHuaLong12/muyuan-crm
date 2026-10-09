@@ -2,12 +2,12 @@ import Link from 'next/link';
 import { BOSShell } from '@/components/bos/BOSShell';
 import { Header } from '@/components/ui/bos';
 import { Funnel,Analytics } from '@/components/dashboard';
-import { workspacePage,jsonForClient } from '@/services/workspace-page';
+import { adminWorkspacePage,jsonForClient } from '@/services/workspace-page';
 import { dashboard } from '@/services/dashboard-service';
 import type { Dashboard } from '@/lib/types';
 export const dynamic='force-dynamic';
 export default async function Page({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
- const {user,boot}=await workspacePage();const query=await searchParams;
+ const {user,boot}=await adminWorkspacePage();const query=await searchParams;
  const period=(['WEEK','MONTH','YEAR'].includes(query.period||'')?query.period:'MONTH') as 'WEEK'|'MONTH'|'YEAR';
  const currency=['CNY','USD','EUR'].includes(query.currency||'')?query.currency!:'CNY';
  const today=new Date().toISOString().slice(0,10);const date=query.date&&/^\d{4}-\d{2}-\d{2}$/.test(query.date)?query.date:today;

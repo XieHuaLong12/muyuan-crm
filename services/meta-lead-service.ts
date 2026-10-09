@@ -163,7 +163,7 @@ export async function fetchLead(leadgenId: string) {
 
 /** 取第一个管理员作为线索负责人（与其他自动建客户的地方保持一致）。 */
 async function defaultActor(): Promise<Actor> {
-  const owner = await db.user.findFirstOrThrow({ where: { role: 'ADMIN' }, select: { id: true, name: true, email: true, role: true } });
+  const owner = await db.user.findFirstOrThrow({ where: { role: 'ADMIN', isActive: true }, select: { id: true, name: true, email: true, role: true } });
   return owner;
 }
 
@@ -241,6 +241,7 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
           source:lead.lead.platform==='instagram'?'INSTAGRAM':'FACEBOOK',sourceDetail:lead.lead.ad_name||'Facebook Ads',purchaseType:mapped.purchaseType,productInterest:mapped.productInterest,
           quantity:mapped.quantity,notes:mapped.notes,stage:'NEW',stageSource:'SYSTEM',ownerId:actor.id,currency:settings.currency,inquiryAt:occurredAt}});
         customerId=customer.id;status='CREATED';
+        await (await import('./workflow-service')).initializeFirstContact(tx,customer.id,actor.id);
         await tx.stageHistory.create({data:{customerId,toStage:'NEW',changedBy:actor.id,note:'Meta Lead webhook'}});
       }
       await recordLeadAttribution(tx,{leadKey:metaLeadKey(event.leadgenId),leadId:event.leadgenId,customerId,status:customerId?'MATCHED':resolved.status,

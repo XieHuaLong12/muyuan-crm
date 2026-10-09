@@ -13,6 +13,22 @@ export async function automatedTask(tx: Prisma.TransactionClient, data: { custom
   if (task.status !== 'DONE' && !await tx.reminder.findFirst({ where: { taskId: task.id } })) await taskReminders(tx, task.id, task.dueDate, 30);
   return task;
 }
+/** New assignments receive a durable deadline; legacy contact times are not guessed. */
+export async function initializeFirstContact(tx:Prisma.TransactionClient,customerId:string,actorId:string,fromOwnerId:string|null=null){
+  const c=await tx.customer.findUniqueOrThrow({where:{id:customerId}});
+  const settings=await tx.setting.findUniqueOrThrow({where:{id:'system'}}),at=new Date();
+  const hasContact=!!(c.firstContactAt||c.contactedAt||c.lastOutboundAt||c.lastFollowUpAt);
+  const due=!hasContact&&!['WON','LOST','INVALID','PAUSED'].includes(c.stage)?new Date(at.getTime()+settings.firstContactHours*3600000):null;
+  await tx.customer.update({where:{id:customerId},data:{assignedAt:at,firstContactDueAt:due}});
+  await tx.customerAssignment.create({data:{customerId,fromOwnerId,toOwnerId:c.ownerId,actorId,assignedAt:at,reason:fromOwnerId?'管理员转交客户':'新客户进入工作空间'}});
+  await resolveRule(tx,c.id,`first-contact:${c.id}:`);
+  if(due)await automatedTask(tx,{customerId:c.id,createdBy:c.ownerId,title:`首次联系 ${c.name}`,description:`新分配客户，请在 ${settings.firstContactHours} 小时内联系并记录跟进。`,type:'FOLLOW_UP',priority:'HIGH',dueDate:due,automationKey:`first-contact:${c.id}:${at.getTime()}`});
+}
+export async function recordFirstContact(tx:Prisma.TransactionClient,customerId:string,at:Date,actorId:string){
+  // Preserve the earliest recorded fact. Replayed callbacks cannot move first contact later.
+  await tx.customer.updateMany({where:{id:customerId,OR:[{firstContactAt:null},{firstContactAt:{gt:at}}]},data:{firstContactAt:at,firstContactBy:actorId}});
+  await resolveRule(tx,customerId,`first-contact:${customerId}:`);
+}
 async function resolveRule(tx: Prisma.TransactionClient, customerId: string, prefix: string, activeKey?: string) {
   const where = { customerId, status: { not: 'DONE' }, automationKey: { startsWith: prefix, ...(activeKey ? { not: activeKey } : {}) } };
   const tasks = await tx.task.findMany({ where, select: { id: true }, orderBy: { id: 'asc' } });
@@ -30,9 +46,12 @@ export async function syncCustomerWorkflow(customerId: string) {
     const c = await tx.customer.findUnique({ where: { id: customerId } });
     if (!c) return;
     if (c.deletedAt || ['LOST','INVALID','PAUSED'].includes(c.stage)) {
-      for (const rule of ['reply','quote','follow']) await resolveRule(tx,c.id,`${rule}:${c.id}:`);
+      for (const rule of ['first-contact','reply','quote','follow']) await resolveRule(tx,c.id,`${rule}:${c.id}:`);
       return;
     }
+    const firstKey=c.firstContactDueAt&&!c.firstContactAt&&!c.contactedAt&&!c.lastOutboundAt&&!c.lastFollowUpAt&&!['WON','LOST','INVALID','PAUSED'].includes(c.stage)?`first-contact:${c.id}:${c.assignedAt?.getTime()||c.firstContactDueAt.getTime()}`:undefined;
+    await resolveRule(tx,c.id,`first-contact:${c.id}:`,firstKey);
+    if(firstKey)await automatedTask(tx,{customerId:c.id,createdBy:c.ownerId,title:`首次联系 ${c.name}`,description:'新分配客户，请联系并记录跟进。',type:'FOLLOW_UP',priority:'HIGH',dueDate:c.firstContactDueAt!,automationKey:firstKey});
     const needsReply = c.lastInboundAt && (!c.lastOutboundAt || c.lastInboundAt > c.lastOutboundAt);
     const replyKey = needsReply ? `reply:${c.id}:${c.lastInboundAt!.getTime()}` : undefined;
     await resolveRule(tx, c.id, `reply:${c.id}:`, replyKey);
@@ -63,7 +82,7 @@ export async function syncWorkflows(user: Actor) {
   finally { entry.running = false; }
 }
 async function syncAll(user: Actor) {
-  const customers = await db.customer.findMany({ where: { ...scope(user), OR: [{ lastInboundAt: { not: null } }, { quotedAt: { not: null } }, { nextFollowUpAt: { not: null } }] }, select: { id: true } });
+  const customers = await db.customer.findMany({ where: { ...scope(user), OR: [{ firstContactDueAt: { not: null } },{ lastInboundAt: { not: null } }, { quotedAt: { not: null } }, { nextFollowUpAt: { not: null } }] }, select: { id: true } });
   for (const customer of customers.sort((a, b) => a.id.localeCompare(b.id))) await syncCustomerWorkflow(customer.id);
 }
 export async function getReminders(user: Actor) {

@@ -103,6 +103,8 @@ test('Meta Lead Ads webhook persists and deduplicates real events', async t => {
         assert.equal(customer.companyName, 'Test Furniture Ltd');
         assert.equal(customer.country, 'Sweden');
         assert.equal(customer.quantity, null);
+        assert.ok(customer.assignedAt && customer.firstContactDueAt);
+        assert.equal(await db.task.count({where:{customerId:customer.id,automationKey:{startsWith:'first-contact:'},status:'TODO'}}),1);
       } finally {
         await cleanup(leadgenId, customerId);
       }
