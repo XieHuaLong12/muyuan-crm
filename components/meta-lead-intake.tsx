@@ -5,6 +5,19 @@ import { api, dateTimeText } from '@/lib/client';
 import type { MetaLeadHealth } from '@/services/meta-lead-intake-service';
 
 const seconds = (value: number | null) => value === null ? '—' : value < 90 ? `${Math.round(value)} 秒` : `${Math.round(value / 60)} 分钟`;
+const tokenTypes: Record<string, string> = { PAGE: '主页 Token', USER: '用户 Token', SYSTEM_USER: '系统用户 Token' };
+
+function permissionText(p: NonNullable<MetaLeadHealth['live']>['permissions'], timezone: string) {
+  if (!p.ok) return `无法检测 · ${p.error}`;
+  return [
+    p.type ? tokenTypes[p.type] ?? p.type : null,
+    p.valid ? null : '已失效',
+    p.missing.length ? `缺少 ${p.missing.join('、')}` : '读取线索所需权限齐全',
+    p.pageGranted === false ? 'leads_retrieval 未包含该主页' : null,
+    p.expiresAt ? `${dateTimeText(p.expiresAt, timezone)} 过期` : '不过期',
+    p.appMatches ? null : '不是本应用（META_APP_ID）生成的',
+  ].filter(Boolean).join(' · ');
+}
 
 /**
  * Administrator view of the ad lead pipeline: is every form submission reaching the CRM, how fast, and what
@@ -15,8 +28,8 @@ export function MetaLeadIntake({ timezone }: { timezone: string }) {
   const [busy, setBusy] = useState(''), [error, setError] = useState(''), [message, setMessage] = useState('');
   const [days, setDays] = useState(7);
   const load = useCallback(async (live = false) => {
-    try { setHealth(await api<MetaLeadHealth>(`meta/leads${live ? '?live=1' : ''}`)); setError(''); }
-    catch (e) { setError((e as Error).message); }
+    try { const next = await api<MetaLeadHealth>(`meta/leads${live ? '?live=1' : ''}`); setHealth(next); setError(''); return next; }
+    catch (e) { setError((e as Error).message); return null; }
   }, []);
   useEffect(() => { void load(); }, [load]);
   const run = async (key: string, action: () => Promise<string>) => {
@@ -37,7 +50,15 @@ export function MetaLeadIntake({ timezone }: { timezone: string }) {
         <>
           {health.alerts.length ? (
             <ul className="notice" role="status">{health.alerts.map(alert => <li key={alert}>⚠ {alert}</li>)}</ul>
-          ) : <div className="notice">● 线索接入正常</div>}
+          ) : !health.problems.length && <div className="notice">● 线索接入正常</div>}
+          {health.problems.map(problem => (
+            <div key={problem.cause} className="meta-lead-problem" role="alert">
+              <strong>⚠ {problem.cause}</strong>
+              <p className="muted">出现在：{problem.sources.join('；')}</p>
+              <ol>{problem.fix.map(step => <li key={step}>{step}</li>)}</ol>
+              <p className="muted">原始报错：{problem.errors.map(e => <code key={e}>{e}</code>)}</p>
+            </div>
+          ))}
           <dl>
             <div><dt>今天收到</dt><dd>{health.today.received} 条（Webhook {health.today.viaWebhook} · 补拉 {health.today.viaPoll}）</dd></div>
             <div><dt>今天建档</dt><dd>新客户 {health.today.created} · 老客户再次留资 {health.today.linked} · 失败 {health.today.failed}</dd></div>
@@ -50,6 +71,10 @@ export function MetaLeadIntake({ timezone }: { timezone: string }) {
           {live && (
             <dl>
               <div><dt>主页 Token</dt><dd>{live.token.ok ? `可用 · ${live.token.pageName ?? ''}${live.token.pageMatches === false ? '（不是 META_PAGE_ID 对应的主页）' : ''}` : `不可用 · ${live.token.error}`}</dd></div>
+              <div><dt>Token 权限</dt><dd>{permissionText(live.permissions, timezone)}</dd></div>
+              <div><dt>读取线索</dt><dd className="meta-lead-checks">{live.leadRead.length ? live.leadRead.map(check => (
+                <span key={check.target}>{check.ok ? `✓ ${check.target}：可以读取` : `✗ ${check.target}：读取失败，原因见上方`}</span>
+              )) : '还没有表单或线索可供检测'}</dd></div>
               <div><dt>leadgen 订阅</dt><dd>{!live.subscription ? '未配置 META_PAGE_ID，无法检测' : !live.subscription.ok ? `检测失败 · ${live.subscription.error}` : live.subscription.leadgen ? `已订阅（${live.subscription.appName ?? '本应用'}）` : live.subscription.appFound ? '本应用未订阅 leadgen' : '主页没有订阅本应用'}</dd></div>
             </dl>
           )}
@@ -76,11 +101,15 @@ export function MetaLeadIntake({ timezone }: { timezone: string }) {
         </>
       )}
       <div className="inline-form meta-lead-actions">
-        <button disabled={!!busy} onClick={() => run('live', async () => { await load(true); return '已完成连接检测'; })}>{busy === 'live' ? '检测中…' : '检测连接'}</button>
+        <button disabled={!!busy} onClick={() => run('live', async () => {
+          const next = await load(true);
+          const readable = next?.live?.leadRead.length && next.live.leadRead.every(check => check.ok);
+          return readable && next.retrying ? `线索可以正常读取，点「立即重试失败线索」导入等待中的 ${next.retrying} 条` : '已完成连接检测';
+        })}>{busy === 'live' ? '检测中…' : '检测连接'}</button>
         <button className="primary" disabled={!!busy} onClick={() => run('poll', async () => {
           const r = await api<{ status: string; fetched: number; recovered: number; retried: number; failed: number; errors: unknown[] }>('meta/leads', 'POST', { action: 'poll', days });
           await load();
-          return r.status === 'NOT_CONNECTED' ? '未配置 META_PAGE_ACCESS_TOKEN，无法补拉' : `读取 ${r.fetched} 条，补回 ${r.recovered} 条，重新导入 ${r.retried} 条，失败 ${r.failed} 条${r.errors.length ? `，${r.errors.length} 个表单读取失败` : ''}`;
+          return r.status === 'NOT_CONNECTED' ? '未配置 META_PAGE_ACCESS_TOKEN，无法补拉' : `读取 ${r.fetched} 条，补回 ${r.recovered} 条，重新导入 ${r.retried} 条，失败 ${r.failed} 条${r.errors.length ? `，${r.errors.length} 个表单读取失败（原因见上方）` : ''}`;
         })}>{busy === 'poll' ? '补拉中…' : `补拉最近 ${days} 天`}</button>
         <select aria-label="补拉天数" value={days} onChange={e => setDays(Number(e.target.value))}>
           {[1, 7, 30, 90].map(d => <option key={d} value={d}>{d} 天</option>)}

@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
+import { AD_LEAD_FRESH_HOURS } from '@/lib/constants';
 import { accessible } from './customer-service';
 import { taskReminders, taskScope, taskInclude } from './task-service';
 
@@ -14,7 +15,6 @@ export async function automatedTask(tx: Prisma.TransactionClient, data: { custom
   return task;
 }
 /** An ad lead is fresh when the customer submitted a Meta form or clicked a WhatsApp ad within this window. */
-export const AD_LEAD_FRESH_HOURS=24;
 export async function freshAdLead(tx:Prisma.TransactionClient,customerId:string,at=new Date()){
   const since=new Date(at.getTime()-AD_LEAD_FRESH_HOURS*3600000);
   return !!await tx.customerLeadAttribution.findFirst({where:{customerId,status:'MATCHED',OR:[{occurredAt:{gte:since}},{occurredAt:null,createdAt:{gte:since}}]},select:{id:true}});

@@ -7,7 +7,7 @@ import type { Actor } from '../lib/auth';
 import { POST as webhook } from '../app/api/leads/webhook/route';
 import { POST as cron } from '../app/api/cron/meta-leads/route';
 import { pollMetaLeads, metaLeadHealth } from '../services/meta-lead-intake-service';
-import { retryDueMetaLeads, retryDelayMs } from '../services/meta-lead-service';
+import { retryDueMetaLeads, retryDelayMs, TEST_LEAD_NOTE } from '../services/meta-lead-service';
 import { assignCustomers } from '../services/lead-assignment-service';
 import { addFollowUp } from '../services/customer-service';
 import { notificationFeed } from '../services/notification-service';
@@ -18,7 +18,7 @@ import { deleteTestCustomers } from './identity-test-cleanup';
 const appSecret = 'realtime-test-app-secret', token = 'realtime-test-page-token', cronSecret = 'realtime-test-cron-secret';
 const actor = (u: { id: string; name: string; email: string; role: string }): Actor => ({ id: u.id, name: u.name, email: u.email, role: u.role });
 
-type GraphRow = { id: string; created_time: string; form_id: string; field_data: { name: string; values: string[] }[] };
+type GraphRow = { id: string; created_time: string; form_id: string; platform?: string; field_data: { name: string; values: string[] }[] };
 const leadRow = (id: string, formId: string, email: string, minutesAgo = 1): GraphRow => ({
   id, form_id: formId, created_time: new Date(Date.now() - minutesAgo * 60_000).toISOString().replace('Z', '+0000'),
   field_data: [{ name: 'full_name', values: [`Realtime ${id}`] }, { name: 'email', values: [email] }, { name: 'country', values: ['Germany'] }],
@@ -152,6 +152,32 @@ test('ad leads arrive in real time, are recovered by the poll, and reach a sales
       assert.ok(adminFeed.counts.reminders >= 1);
       await addFollowUp(first.customerId!, { type: 'WHATSAPP', content: '已回复再次留资', followUpAt: new Date().toISOString() }, sales);
       assert.equal((await db.task.findUniqueOrThrow({ where: { id: task.id } })).status, 'DONE');
+      // A catch-up that finds a submission from days ago records it without asking for a call within minutes.
+      const old = `rt-${tag}-old`;
+      leads.set(old, { ...leadRow(old, formId, email, 3 * 24 * 60), field_data: [{ name: 'email', values: [email] }] });
+      forms.get(formId)!.push(old); leadIds.push(old);
+      assert.equal((await pollMetaLeads({ days: 7 })).recovered, 1);
+      assert.equal((await db.metaLeadEvent.findUniqueOrThrow({ where: { leadgenId: old } })).status, 'LINKED');
+      assert.equal(await db.task.count({ where: { automationKey: `resubmit:${first.customerId}:${old}` } }), 0);
+    });
+
+    await t.test('Instagram leads keep their source and testing-tool leads are explained, not retried', async () => {
+      const ig = `rt-${tag}-ig`;
+      leads.set(ig, { ...leadRow(ig, formId, `${ig}@example.test`), platform: 'ig' });
+      leadIds.push(ig);
+      await webhook(signed(push(ig, formId)));
+      const event = await db.metaLeadEvent.findUniqueOrThrow({ where: { leadgenId: ig } });
+      assert.equal((await db.customer.findUniqueOrThrow({ where: { id: event.customerId! } })).source, 'INSTAGRAM');
+      const dummy = `rt-${tag}-dummy`;
+      leads.set(dummy, { ...leadRow(dummy, formId, 'unused'), field_data: ['full_name', 'email', 'phone_number'].map(name => ({ name, values: [`<test lead: dummy data for ${name}>`] })) });
+      leadIds.push(dummy);
+      await webhook(signed(push(dummy, formId)));
+      const tested = await db.metaLeadEvent.findUniqueOrThrow({ where: { leadgenId: dummy } });
+      assert.equal(tested.status, 'FAILED');
+      assert.ok(tested.error.includes(TEST_LEAD_NOTE));
+      assert.equal(tested.nextAttemptAt, null, 'placeholder data is not retried');
+      const notice = (await notificationFeed(admin)).items.find(item => item.id === `lead-human:${dummy}`);
+      assert.equal(notice?.title, '收到 Meta 测试线索');
     });
 
     await t.test('a disabled owner sends a repeat submission back to the pool', async () => {

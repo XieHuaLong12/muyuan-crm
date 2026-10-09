@@ -5,3 +5,5 @@ export const followTypes = {WHATSAPP:'WhatsApp',PHONE:'电话',EMAIL:'邮件',FA
 export const invalidReasons = ['零售客户','无采购需求','联系方式无效','垃圾询盘','重复客户','非目标市场','其他'];
 export type Stage = keyof typeof stages;
 export const pipeline = Object.keys(stages).slice(0,7) as Stage[];
+/** An ad lead submitted within this many hours is "fresh": short first-contact deadline, repeat-submission alerts. */
+export const AD_LEAD_FRESH_HOURS = 24;

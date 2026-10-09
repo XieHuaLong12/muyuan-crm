@@ -3,6 +3,7 @@ import { Actor } from '@/lib/auth';
 import { sources } from '@/lib/constants';
 import { getReminders } from './workflow-service';
 import { firstContactFocus } from './sales-team-service';
+import { TEST_LEAD_NOTE } from './meta-lead-service';
 
 export type NotificationItem = {
   id: string;
@@ -66,8 +67,9 @@ export async function notificationFeed(user: Actor) {
       href: r.task.customer ? `/customers/${r.task.customer.id}` : '/tasks', body: r.task.title });
   }
   for (const e of humanEvents) {
-    items.push({ id: `lead-human:${e.leadgenId}`, kind: 'LEAD_NEEDS_HUMAN', title: '广告线索需要人工处理', urgent: false, at: e.createdAt.toISOString(),
-      href: '/settings#meta-leads', body: e.error.includes('AMBIGUOUS') ? '联系方式对应多个客户，请认领到正确的客户' : '线索缺少可确认的手机号或邮箱，请人工认领' });
+    const testLead = e.error.includes(TEST_LEAD_NOTE);
+    items.push({ id: `lead-human:${e.leadgenId}`, kind: 'LEAD_NEEDS_HUMAN', title: testLead ? '收到 Meta 测试线索' : '广告线索需要人工处理', urgent: false, at: e.createdAt.toISOString(),
+      href: '/settings#meta-leads', body: testLead ? '接入已打通；测试工具的占位数据没有联系方式，不会建客户' : e.error.includes('AMBIGUOUS') ? '联系方式对应多个客户，请认领到正确的客户' : '线索缺少可确认的手机号或邮箱，请人工认领' });
   }
   items.sort((a, b) => b.at.localeCompare(a.at));
   return {
