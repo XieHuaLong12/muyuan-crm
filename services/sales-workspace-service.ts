@@ -6,7 +6,7 @@ import { listTasks, taskScope } from './task-service';
 import { getReminders } from './workflow-service';
 
 export const workspaceBootstrap = cache(async (user: Actor) => ({ user,
-  users: await db.user.findMany({ where: user.role === 'ADMIN' ? {} : { id: user.id }, select: { id: true, name: true, email: true, role: true } }),
+  users: await db.user.findMany({ where: user.role === 'ADMIN' ? {} : { id: user.id }, select: { id: true, name: true, email: true, role: true,isActive:true } }),
   settings: await db.setting.findUniqueOrThrow({ where: { id: 'system' } }).then(s=>({...s,usdCnyRate:s.usdCnyRate.toString()})),
   webhookConfigured: !!process.env.WEBHOOK_SECRET, deepseekConfigured: !!process.env.DEEPSEEK_API_KEY,
 }));
@@ -17,7 +17,7 @@ export async function priorityCustomers(user: Actor) {
     estimatedOrderValue:true, currency:true, lastInboundAt:true, lastOutboundAt:true, nextFollowUpAt:true,
     _count: { select: { quotations: { where: { status: 'DRAFT' } } } },
     readStates: { where: { userId: user.id }, select: { readAt:true } },
-    whatsappMessages: { orderBy: [{ sentAt:'desc' }, { id:'desc' }], take:1, select: { content:true } },
+    whatsappMessages: { where: user.role==='ADMIN'?{}:{id:{in:[]}}, orderBy: [{ sentAt:'desc' }, { id:'desc' }], take:1, select: { content:true } },
   } });
   return rows.map(c => {
     const terminal = ['WON','LOST','INVALID','PAUSED'].includes(c.stage);
@@ -29,7 +29,7 @@ export async function priorityCustomers(user: Actor) {
     const priorityScore = (terminal ? -1000 : 0) + c.aiScore + (c.aiIntent==='HIGH'?25:0) + (needsReply?30:0) + (overdue?40:0) + (unread?15:0) + amount;
     const { readStates, whatsappMessages, _count, ...customer } = c; void readStates;
     return { ...customer, estimatedOrderValue: String(c.estimatedOrderValue), draftQuotes: _count.quotations, unread, needsReply, overdue, priorityScore,
-      latestMessage: whatsappMessages[0]?.content || '', lastInboundAt:c.lastInboundAt?.toISOString()||null,
+      latestMessage: user.role==='ADMIN'?(whatsappMessages[0]?.content || ''):'', lastInboundAt:c.lastInboundAt?.toISOString()||null,
       lastOutboundAt:c.lastOutboundAt?.toISOString()||null, nextFollowUpAt:c.nextFollowUpAt?.toISOString()||null };
   }).sort((a,b)=>b.priorityScore-a.priorityScore || a.name.localeCompare(b.name));
 }

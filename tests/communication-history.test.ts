@@ -35,6 +35,9 @@ test('沟通档案只显示有消息的客户，按真实消息时间排序并�
     assert.deepEqual(archive.conversations.map(item => item.id), [beta.id, alpha.id]);
     assert.equal(archive.conversations[0].lastMessage?.content, 'Latest record');
     assert.equal(archive.selected?.id, beta.id);
+    assert.equal((await communicationHistory(actor,{q:marker,ownerId:admin.id})).total,2);
+    const outsideOwner=await communicationHistory(actor,{q:marker,ownerId:'different-sales-id',customer:alpha.id});
+    assert.equal(outsideOwner.total,0);assert.equal(outsideOwner.selected,null);assert.deepEqual(outsideOwner.messages,[]);
 
     const first = await communicationHistory(actor, { q: marker, customer: alpha.id });
     assert.equal(first.messages.length, 50);
@@ -46,7 +49,7 @@ test('沟通档案只显示有消息的客户，按真实消息时间排序并�
     assert.equal(older.viewingOlder, true);
 
     const otherSales = { ...actor, id: 'another-sales-user', role: 'SALES' as const };
-    assert.equal((await communicationHistory(otherSales, { q: marker })).total, 0);
+    await assert.rejects(communicationHistory(otherSales, { q: marker }),{status:403});
     assert.equal((await db.customer.findUniqueOrThrow({ where: { id: beta.id } })).lastWhatsAppAt, null);
   } finally {
     await db.whatsAppMessage.deleteMany({ where: { customerId: { in: customers.map(customer => customer.id) } } });

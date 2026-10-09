@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { smartPriority, priorityReason, TASK_SOURCES, TASK_PRIORITIES, TASK_STATUS } from '@/lib/task-meta';
+import { taskScope,updateTask } from './task-service';
 
 /**
  * AI 经营行动中心（AI Action Center）
@@ -18,20 +19,13 @@ const DAY = 86_400_000;
 
 export const actionQuery = z.object({
   view: z.enum(['ALL', 'TODAY', 'HIGH', 'OVERDUE', 'DONE']).default('TODAY'),
-  source: z.enum(['ALL', 'CRM', 'ORDER', 'FINANCE', 'ADS', 'AI', 'MANUAL']).default('ALL'),
+  source: z.enum(['ALL', 'CRM', 'ORDER', 'FINANCE', 'ADS', 'AI', 'MANUAL','WORKFLOW']).default('ALL'),
   q: z.string().trim().max(100).default(''),
 });
 
 function startOfToday() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
-function taskScope(user: Actor): Prisma.TaskWhereInput {
-  // 管理员看全部；销售看自己名下客户的、以及自己创建的
-  return user.role === 'ADMIN'
-    ? { deletedAt: null }
-    : { deletedAt: null, OR: [{ createdBy: user.id }, { customer: scope(user) }] };
 }
 
 function viewWhere(view: string): Prisma.TaskWhereInput {
@@ -107,10 +101,10 @@ export async function actionCenter(user: Actor, input: unknown = {}) {
     db.task.count({ where: { ...base, status: 'DONE', completedAt: { gte: today } } }),
     db.task.findMany({
       where: {
-        ...base,
-        ...viewWhere(query.view),
-        ...(query.source === 'ALL' ? {} : { source: query.source }),
-        ...(query.q ? { OR: [{ title: { contains: query.q } }, { customer: { name: { contains: query.q } } }] } : {}),
+        AND: [base, viewWhere(query.view),
+          ...(query.source === 'ALL' ? [] : [{ source: query.source }]),
+          ...(query.q ? [{ OR: [{ title: { contains: query.q } }, { customer: { name: { contains: query.q } } }] }] : []),
+        ],
       },
       include,
       orderBy: [{ priority: 'asc' }, { dueDate: 'asc' }],
@@ -266,7 +260,7 @@ export async function taskInsight(user: Actor, taskId: string) {
           id: true, name: true, companyName: true, country: true, stage: true, whatsapp: true, email: true, phone: true, language: true,
           productInterest: true, estimatedOrderValue: true, currency: true, aiScore: true, aiIntent: true, aiNextAction: true, nextFollowUpAt: true,
           followUps: { orderBy: { followUpAt: 'desc' }, take: 5, select: { id: true, type: true, content: true, followUpAt: true } },
-          whatsappMessages: { orderBy: { sentAt: 'desc' }, take: 5, select: { id: true, direction: true, content: true, sentAt: true } },
+          whatsappMessages: { orderBy: { sentAt: 'desc' }, take: 5, where: user.role==='ADMIN'?{}:{id:{in:[]}}, select: { id: true, direction: true, content: true, sentAt: true } },
           quotations: { orderBy: { createdAt: 'desc' }, take: 3, select: { id: true, quoteNumber: true, product: true, quantity: true, unitPrice: true, currency: true, status: true, sentAt: true } },
         },
       })
@@ -314,15 +308,11 @@ function suggestNext(title: string, language: string | null | undefined, aiNextA
 /** 完成反馈：记录完成时间、执行人与结果，而不是让任务直接消失。 */
 export async function completeTask(user: Actor, taskId: string, input: unknown) {
   const v = z.object({ outcome: z.string().trim().max(500).default('') }).parse(input);
-  const task = await db.task.findFirst({ where: { AND: [taskScope(user), { id: taskId }] }, select: { id: true, description: true } });
+  const task = await db.task.findFirst({ where: { AND: [taskScope(user), { id: taskId }] }, select: { id: true, description: true,updatedAt:true } });
   if (!task) throw new HttpError(404, '任务不存在或无权查看');
 
   const note = v.outcome ? `\n\n完成结果：${v.outcome}` : '';
-  const saved = await db.task.update({
-    where: { id: task.id },
-    data: { status: 'DONE', completedAt: new Date(), ...(v.outcome ? { description: `${task.description}${note}` } : {}) },
-    select: { id: true, completedAt: true, title: true },
-  });
+  const saved = await updateTask(task.id,{status:'DONE',updatedAt:task.updatedAt.toISOString(),...(v.outcome?{description:`${task.description}${note}`}:{})},user);
   return { id: saved.id, title: saved.title, completedAt: saved.completedAt?.toISOString() ?? null, outcome: v.outcome };
 }
 

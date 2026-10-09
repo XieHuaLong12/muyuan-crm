@@ -11,8 +11,11 @@ model User {
  email String @unique
  passwordHash String
  role String @default("SALES")
+ isActive Boolean @default(true)
+ sessionVersion Int @default(0)
  createdAt DateTime @default(now())
  customers Customer[]
+ salesTargets UserSalesTarget[]
 }
 model Customer {
  id String @id @default(cuid())
@@ -48,6 +51,10 @@ model Customer {
  invalidReason String @default("")
  ownerId String
  owner User @relation(fields: [ownerId], references: [id])
+ assignedAt DateTime?
+ firstContactDueAt DateTime?
+ firstContactAt DateTime?
+ firstContactBy String?
  contactedAt DateTime?
  firstReplyAt DateTime?
  needsConfirmedAt DateTime?
@@ -96,10 +103,12 @@ model Customer {
  leadAttributions CustomerLeadAttribution[]
  whatsappContacts WhatsAppContact[]
  advertisingFeedback AdvertisingFeedback[]
+ assignments CustomerAssignment[]
  @@index([stage])
  @@index([source])
  @@index([country])
  @@index([ownerId])
+ @@index([firstContactDueAt])
  @@index([createdAt])
  @@index([inquiryAt])
  @@index([nextFollowUpAt])
@@ -144,6 +153,7 @@ model Deal {
  order Order?
  customerId String
  customer Customer @relation(fields: [customerId], references: [id])
+ salespersonId String?
  orderNumber String @default("")
  dealAmount Decimal
  productCost Decimal
@@ -159,6 +169,39 @@ model Deal {
  updatedAt DateTime @updatedAt
  @@index([dealDate])
  @@index([customerId])
+ @@index([salespersonId, dealDate])
+}
+model UserSalesTarget {
+ id String @id @default(cuid())
+ userId String
+ user User @relation(fields: [userId], references: [id])
+ month String @db.VarChar(7)
+ currency String @db.VarChar(3)
+ targetRevenue Decimal @db.Decimal(14, 2)
+ updatedAt DateTime @updatedAt
+ createdAt DateTime @default(now())
+ @@unique([userId, month, currency])
+ @@index([month])
+}
+model CustomerAssignment {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ fromOwnerId String?
+ toOwnerId String
+ actorId String
+ reason String @db.VarChar(500)
+ assignedAt DateTime @default(now())
+ @@index([customerId, assignedAt])
+ @@index([toOwnerId, assignedAt])
+}
+model AccountAudit {
+ id String @id @default(cuid())
+ subjectId String
+ actorId String
+ action String @db.VarChar(32)
+ createdAt DateTime @default(now())
+ @@index([subjectId, createdAt])
 }
 model SalesTarget {
  id String @id @default(cuid())
@@ -178,6 +221,7 @@ model Setting {
  companyName String @default("木远家具贸易")
  currency String @default("CNY")
  timezone String @default("Asia/Shanghai")
+ firstContactHours Int @default(24)
  // 美元/人民币汇率。默认 6.70 取自 2026 中英文两份报价表之间的隐含汇率（54 组中 44 组精确为 6.70）。
  usdCnyRate Decimal @default(6.70) @db.Decimal(10, 4)
 }

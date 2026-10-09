@@ -46,8 +46,8 @@ export async function identityChain(input: unknown, user: Actor) {
   const [contacts, leads, conversations, messages, quotations, orders, events,firstQuote,intelligence,followUps] = await Promise.all([
     db.contactIdentity.findMany({ where: { customerId }, orderBy: { createdAt: 'asc' }, take: 100 }),
     db.customerLeadAttribution.findMany({ where: { customerId }, orderBy: [{ occurredAt: 'desc' }, { leadKey: 'desc' }], take: 100 }),
-    db.whatsAppConversation.findMany({ where: { contact: { customerId } }, include: { contact: true }, orderBy: { lastMessageAt: 'desc' }, take: 50 }),
-    db.whatsAppMessage.findMany({ where: { customerId, ...(cursor?{OR:[{sentAt:{lt:cursor.sentAt}},{sentAt:cursor.sentAt,id:{lt:cursor.id}}]}:before ? { sentAt: before } : {}) }, select: { id: true, conversationId: true, source: true, direction: true, messageType: true, content: true, sentAt: true, status: true }, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 51 }),
+    db.whatsAppConversation.findMany({ where: { contact: { customerId }, ...(user.role==='ADMIN'?{}:{id:{in:[]}}) }, include: { contact: true }, orderBy: { lastMessageAt: 'desc' }, take: 50 }),
+    db.whatsAppMessage.findMany({ where: { customerId, ...(user.role==='ADMIN'?{}:{id:{in:[]}}), ...(cursor?{OR:[{sentAt:{lt:cursor.sentAt}},{sentAt:cursor.sentAt,id:{lt:cursor.id}}]}:before ? { sentAt: before } : {}) }, select: { id: true, conversationId: true, source: true, direction: true, messageType: true, content: true, sentAt: true, status: true }, orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 51 }),
     db.quotation.findMany({ where: { customerId }, orderBy: { createdAt: 'desc' }, take: 50 }),
     db.order.findMany({ where: { customerId }, include: { attribution: true, deal: true }, orderBy: { orderDate: 'desc' }, take: 50 }),
     db.workflowEvent.findMany({ where: { customerId }, orderBy: { happenedAt: 'desc' }, take: 50 }),

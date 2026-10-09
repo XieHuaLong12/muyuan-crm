@@ -1,5 +1,7 @@
 > 当前 LVANJU BOS 使用 Next.js 15.5 / React 19 / Prisma 6.19 / MySQL。下面的 V1 SQLite 说明保留作历史参考，当前部署请以 [身份链实现与部署报告](docs/IDENTITY_CHAIN.md) 和 `.env.example` 为准。
 
+管理员与销售现使用两套工作空间：管理员管理团队业绩、个人月目标、首联时效和销售账号；销售处理自己的客户、任务和业绩。新分配客户有首联任务，停用/密码重置撤销旧登录。入口、增量迁移和统计口径见 [角色工作空间](docs/ROLE_WORKSPACES.md)。
+
 当前已实现 Meta CSV / webhook → 统一 Lead 账本 → E.164 与历史号码别名 → CRM Customer → 分账号 WhatsApp Conversation → 真实 Quote / Deal / Order → 固定广告归因 → 可重试反馈台账。AI 是增量建议，人工修正独立保存，原始消息和订单来源保留。
 
 新增入口：客户 / 销售 / 订单详情中的身份时间线，以及 `/analytics/ads`、`/analytics/conversations`、`/analytics/loss-reasons`、`/analytics/data-quality`。广告详情可双向追溯客户、会话与固定归因订单；缺少来源、成本或 API 配置时显示未知 / 未连接。
@@ -252,3 +254,5 @@ Gupshup V2 与 Meta 格式 V3 通过带 `x-webhook-secret` 的回调进入已有
 接入检查：`/settings/integrations/whatsapp`；管理员按号码/客户/消息查看 `/admin/integration-debug`；`/whatsapp/inbox` 复用销售工作台。Token 与原始 webhook 不在默认前端投影中。`GUPSHUP_SOURCE_NUMBER` 兼容现有 `GUPSHUP_SOURCE`；可选 `GUPSHUP_APP_ID` 核验 V3 应用。Webhook 必须有服务器 `GUPSHUP_WEBHOOK_SECRET`。第一阶段 CAPI 默认关闭。
 
 模板中心、营销同意管理、召回队列和召回订单归因按 [实施计划](docs/GUPSHUP_CTWA_IMPLEMENTATION.md) 接续开发：先验收一条真实 CTWA 入站，不能用本地 fixture 宣称已接通生产。升级仅追加 `20261004023000_gupshup_live_identity`；回滚应用时保留新增列和回执表。
+
+销售使用待跟进客户清单，在档案登记跟进、报价与成交；聊天记录仅管理员在“销售沟通监督”按负责人查阅。见 [角色工作空间](docs/ROLE_WORKSPACES.md)。

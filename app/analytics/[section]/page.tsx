@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { IdentityRepairPanel } from '@/components/bos/IdentityRepairPanel';
 import { BOSShell } from '@/components/bos/BOSShell';
 import { Header, Card, Table, Badge, Button, Input, EmptyState } from '@/components/ui/bos';
-import { workspacePage } from '@/services/workspace-page';
+import { adminWorkspacePage } from '@/services/workspace-page';
 import { adsAnalytics, conversationAnalytics, lossReasonAnalytics, identityDataQuality, analyticsQuery,analyticsWindow } from '@/services/identity-analytics-service';
 export const dynamic = 'force-dynamic';
 const names = { ads:'广告到成交',conversations:'会话质量','loss-reasons':'异议与丢失原因','data-quality':'身份链数据质量' };
@@ -11,7 +11,7 @@ const value = (v:unknown) => v===null||v===undefined?'—':String(v);
 
 export default async function Page({params,searchParams}:{params:Promise<{section:string}>;searchParams:Promise<Record<string,string|undefined>>}) {
   const {section}=await params;if(!Object.hasOwn(names,section))notFound();
-  const {user,boot}=await workspacePage();const parsed=analyticsQuery.safeParse(await searchParams);let q=parsed.success?parsed.data:analyticsQuery.parse({});let rangeError='';try{analyticsWindow(q,boot.settings.timezone);}catch(e){rangeError=e instanceof Error?e.message:'日期范围不合法';q={...q,preset:'7d',from:undefined,to:undefined};}
+  const {user,boot}=await adminWorkspacePage();const parsed=analyticsQuery.safeParse(await searchParams);let q=parsed.success?parsed.data:analyticsQuery.parse({});let rangeError='';try{analyticsWindow(q,boot.settings.timezone);}catch(e){rangeError=e instanceof Error?e.message:'日期范围不合法';q={...q,preset:'7d',from:undefined,to:undefined};}
   return <BOSShell boot={boot}><div className="identity-analytics"><Header eyebrow="IDENTITY & ATTRIBUTION" title={names[section as keyof typeof names]} description="留资、客户、会话及订单均按真实记录追溯；AI 输出保留建议属性。"/>
     <nav aria-label="身份链分析" className="bos-actions">{Object.entries(names).map(([key,name])=><Link key={key} href={`/analytics/${key}`} aria-current={section===key?'page':undefined} className="bos-button bos-button-secondary">{name}</Link>)}</nav>
     {!parsed.success&&<p role="alert">筛选参数不合法，已显示默认最近 7 天。</p>}{rangeError&&<p role="alert">{rangeError}，已显示默认最近 7 天。</p>}
@@ -25,7 +25,7 @@ export default async function Page({params,searchParams}:{params:Promise<{sectio
     {section==='ads'?<Ads input={q} user={user}/>:section==='conversations'?<Conversations input={q} user={user}/>:section==='loss-reasons'?<Loss input={q} user={user}/>:<Quality input={q} user={user}/>}
   </div></BOSShell>;
 }
-type Props={input:unknown;user:Awaited<ReturnType<typeof workspacePage>>['user']};
+type Props={input:unknown;user:Awaited<ReturnType<typeof adminWorkspacePage>>['user']};
 async function Ads({input,user}:Props){const r=await adsAnalytics(input,user);return <>
   <Card><Badge tone={r.current.spendStatus==='AVAILABLE'?'green':'warning'}>{r.current.spendStatus}</Badge><p>{r.window.from} 至 {r.window.to}；上一期 {r.window.previousFrom} 至 {r.window.previousTo}。本期 {r.current.cohortCustomers} 位留资客户，上一期 {r.previous.cohortCustomers} 位。</p><p>CRM 客户群体使用 {r.window.timezone}；花费使用 Meta 账号自然日。订单按成交日期和固定广告来源。不同币种分行。</p></Card>
   {r.current.summaries.map(row=><Card key={row.currency||'UNKNOWN'}><h2>{row.currency||'币种待确认'} · 本期经营结果</h2><Table caption="实际广告与销售汇总" headings={['花费','留资','有效客户','报价客户','订单','销售额','毛利','有效客户成本','报价成本','每单成本','ROAS / 毛利 ROAS']}><tr><td>{value(row.spend)}</td><td>{row.leads}</td><td>{row.qualified}</td><td>{row.quoted}</td><td>{row.orders}</td><td>{value(row.revenue)}</td><td>{value(row.profit)}</td><td>{value(row.cpql?.toFixed(2))}</td><td>{value(row.costPerQuote?.toFixed(2))}</td><td>{value(row.costPerOrder?.toFixed(2))}</td><td>{value(row.roas?.toFixed(2))} / {value(row.profitRoas?.toFixed(2))}</td></tr></Table><p>客户 {row.customers} → 已联系 {row.contacted} → 已回复 {row.replied} → 已确认有效 {row.qualified} → 批发身份 {row.wholesale} → 高意向 {row.highIntent} → 正式报价 {row.quoted} → 订单 {row.orders}</p><p>以上为各项真实事实，不要求严格递减；订单按成交日期，客户按留资日期。</p></Card>)}

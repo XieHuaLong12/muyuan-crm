@@ -185,6 +185,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastWhatsAppAt: null }, { lastWhatsAppAt: { lt: sentAt } }] }, data: { lastWhatsAppAt: sentAt } });
     await tx.customer.updateMany({ where: { id: customerId, OR: [{ lastOutboundAt: null }, { lastOutboundAt: { lt: sentAt } }] }, data: { lastOutboundAt: sentAt } });
     await messageFacts(tx,customerId,sentAt,'OUTBOUND');
+    await (await import('./workflow-service')).recordFirstContact(tx,customerId,sentAt,user.id);
     return saved;
   }));
   await replayWhatsAppReceipts(provider,providerAccountId,providerMessageId);

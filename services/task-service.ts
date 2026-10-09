@@ -46,6 +46,7 @@ export async function updateTask(id: string, input: unknown, user: Actor) {
     if (v.dueDate || v.reminderMinutes !== undefined || status !== old.status) {
       await taskReminders(tx, id, v.dueDate ? new Date(v.dueDate) : old.dueDate, v.reminderMinutes ?? old.reminderMinutes, status === 'DONE');
     }
+    if(status==='DONE'&&old.status!=='DONE'&&old.customerId&&old.automationKey?.startsWith('first-contact:'))await (await import('./workflow-service')).recordFirstContact(tx,old.customerId,new Date(),user.id);
     return tx.task.findUniqueOrThrow({ where: { id }, include: taskInclude });
   }));
 }

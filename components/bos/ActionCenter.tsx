@@ -301,7 +301,7 @@ export function ActionCenter({ data, name }: { data: ActionCenterData; name: str
                 </div>
                 <div className="bos-reco-actions">
                   {rec.customerId && <Link className="bos-button" href={`/customers/${rec.customerId}`}>查看客户</Link>}
-                  {rec.customerId && <Link className="bos-button" href={`/sales?customer=${rec.customerId}`}>发送消息</Link>}
+                  {rec.customerId && <Link className="bos-button" href={`/sales?customer=${rec.customerId}`}>记录客户跟进</Link>}
                   <button className="bos-button bos-button-primary" type="button" disabled={busy === rec.id} onClick={() => adopt(rec)}>
                     {busy === rec.id ? '处理中…' : '加入任务'}
                   </button>
@@ -426,7 +426,7 @@ export function ActionCenter({ data, name }: { data: ActionCenterData; name: str
               )}
 
               <section>
-                <h3>历史沟通记录</h3>
+                <h3>跟进记录</h3>
                 {insight.timeline.length ? (
                   <ul className="bos-timeline-list">
                     {insight.timeline.map((item, index) => (
@@ -440,7 +440,7 @@ export function ActionCenter({ data, name }: { data: ActionCenterData; name: str
                     ))}
                   </ul>
                 ) : (
-                  <p className="bos-footnote">该客户暂无沟通记录。</p>
+                  <p className="bos-footnote">该客户暂无跟进记录。</p>
                 )}
               </section>
 
@@ -469,7 +469,7 @@ export function ActionCenter({ data, name }: { data: ActionCenterData; name: str
                   <Clock size={14} />延期 3 天
                 </button>
                 {insight.customer && <Link className="bos-button" href={`/customers/${insight.customer ? insight.task.customer?.id : ''}`}><Wallet size={14} />打开客户</Link>}
-                {insight.customer && <Link className="bos-button" href={`/sales?customer=${insight.task.customer?.id}`}>转人工沟通</Link>}
+                {insight.customer && <Link className="bos-button" href={`/sales?customer=${insight.task.customer?.id}`}>查看客户档案</Link>}
               </div>
             </footer>
           </aside>

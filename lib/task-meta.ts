@@ -5,6 +5,7 @@
 
 export const TASK_SOURCES = {
   CRM: { label: 'CRM', tone: 'crm' },
+  WORKFLOW: { label: '自动跟进', tone: 'crm' },
   ORDER: { label: '订单', tone: 'order' },
   FINANCE: { label: '财务', tone: 'finance' },
   ADS: { label: '广告', tone: 'ads' },
