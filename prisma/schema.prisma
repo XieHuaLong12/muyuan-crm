@@ -230,6 +230,8 @@ model Setting {
  firstContactHours Int @default(24)
  // POOL：自动线索进入待分配池；ROUND_ROBIN：按轮流顺序分给启用的销售。
  leadAssignMode String @default("POOL") @db.VarChar(16)
+ // 24 小时内的广告留资分配后须在此分钟数内首次联系；其他客户仍按 firstContactHours。
+ adLeadFirstContactMinutes Int @default(5)
  // 美元/人民币汇率。默认 6.70 取自 2026 中英文两份报价表之间的隐含汇率（54 组中 44 组精确为 6.70）。
  usdCnyRate Decimal @default(6.70) @db.Decimal(10, 4)
 }
@@ -859,8 +861,17 @@ model MetaLeadEvent {
  status String @default("RECEIVED") @db.VarChar(16)
  error String @db.Text
  processingStartedAt DateTime?
+ // 首次收到的渠道：WEBHOOK 实时推送 | POLL 定时补拉（说明当时 Webhook 没有送达）
+ receivedVia String @default("WEBHOOK") @db.VarChar(16)
+ // 客户在 Meta 提交表单的时间（Graph created_time），用于计算入库时延
+ metaCreatedAt DateTime?
+ // 自动重试：失败次数与下次重试时间（指数退避）
+ attempts Int @default(0)
+ nextAttemptAt DateTime?
  createdAt DateTime @default(now())
  @@index([formId, createdAt])
+ @@index([status, nextAttemptAt])
+ @@index([receivedVia, createdAt])
  @@index([customerId])
  @@index([status, createdAt])
  @@index([campaignId])
@@ -898,6 +909,9 @@ model MetaLeadForm {
  // 广告平台统计的线索总数（leads_count）
  leadsCount Int @default(0)
  syncedAt DateTime?
+ // 定时补拉：已拉到的最新线索提交时间与最近一次补拉时间
+ pollWatermark DateTime?
+ polledAt DateTime?
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
  @@index([pageId])

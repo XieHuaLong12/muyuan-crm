@@ -306,3 +306,18 @@
 .bos .bos-history-supervision-filter .bos-history-search{margin:12px 0}
 @media(max-width:1100px){.bos .bos-sales-list-row{grid-template-columns:minmax(0,1fr) auto}.bos .bos-sales-list-status{grid-column:1}.bos .bos-sales-list-actions{grid-column:2;grid-row:1 / span 2}}
 @media(max-width:600px){.bos .bos-sales-list-row{grid-template-columns:minmax(0,1fr);gap:16px}.bos .bos-sales-list-status,.bos .bos-sales-list-actions{grid-column:1;grid-row:auto}.bos .bos-sales-list-toolbar form{width:100%}.bos .bos-sales-list-toolbar .bos-search{flex:1;max-width:none}.bos .bos-sales-list-toolbar .bos-tabs a{font-size:13px;padding:10px}}
+/* 实时提醒：新线索、新分配、首联超时 */
+.bos .bos-lead-notice.is-urgent{color:#a44b36;font-weight:600}
+.bos .bos-notify-enable{border:1px solid var(--bos-border);border-radius:999px;padding:4px 10px;background:var(--bos-card,#fff);color:var(--bos-green);cursor:pointer}
+.bos .bos-notify-denied{font-size:12px;color:#86868b;white-space:nowrap}
+.bos-live-toasts{position:fixed;top:76px;right:20px;z-index:80;display:grid;gap:10px;width:min(360px,calc(100vw - 32px))}
+.bos-live-toast{display:flex;align-items:flex-start;gap:10px;padding:12px 12px 12px 14px;border:1px solid #e5e5ea;border-left:4px solid #164b3a;border-radius:12px;background:#fff;box-shadow:0 12px 32px rgba(15,23,42,.14);animation:bos-live-in .2s ease-out}
+.bos-live-toast.is-urgent{border-left-color:#a44b36}
+.bos-live-toast a{flex:1;min-width:0;display:grid;gap:3px;color:#1d1d1f;text-decoration:none}
+.bos-live-toast strong{font-size:14px}
+.bos-live-toast span{font-size:13px;color:#6e6e73;overflow-wrap:anywhere}
+.bos-live-toast button{flex:none;border:0;background:transparent;color:#86868b;cursor:pointer;padding:2px}
+@keyframes bos-live-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.bos-live-toast{animation:none}}
+@media(max-width:600px){.bos-live-toasts{top:auto;bottom:16px;right:16px}.bos-live-toast:nth-child(n+3){display:none}.bos .bos-notify-denied{display:none}}
+.meta-lead-actions select{width:auto;flex:none;height:43px}

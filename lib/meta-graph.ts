@@ -28,3 +28,14 @@ export async function pagedGraphGet<T>(path:string,token:string,params:Record<st
   }
   return {rows,error:'GRAPH_PAGE_LIMIT_REACHED'};
 }
+/** Form-encoded POST with the credential in the header (used to manage the Page's app subscription). */
+export async function graphPost<T>(path: string, token: string, params: Record<string,string>): Promise<GraphOk<T>|GraphError> {
+  const unversioned = path.replace(/^\/?v\d+\.\d+\//,'').replace(/^\//,'');
+  try {
+    const response = await fetch(`https://graph.facebook.com/${graphVersion()}/${unversioned}`,{method:'POST',cache:'no-store',
+      headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(params),signal:AbortSignal.timeout(20000)});
+    const parsed = await response.json() as T & {error?:{code?:number;error_subcode?:number}};
+    if(!response.ok){const e=parsed.error;return {ok:false,error:`${e?.code===190?'TOKEN_EXPIRED':'GRAPH_ERROR'} HTTP ${response.status} code ${e?.code??'unknown'} subcode ${e?.error_subcode??'unknown'}`};}
+    return {ok:true,data:parsed};
+  } catch { return {ok:false,error:'GRAPH_NETWORK_OR_RESPONSE_ERROR'}; }
+}

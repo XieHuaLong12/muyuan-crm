@@ -126,6 +126,23 @@ const graphLead = z.object({
   ).default([]),
 });
 
+export type GraphLead = z.infer<typeof graphLead>;
+/** Validates one lead row returned by GET /{form_id}/leads (same shape as the single-lead read). */
+export function parseGraphLead(row: unknown) {
+  const parsed = graphLead.safeParse(row);
+  return parsed.success ? parsed.data : null;
+}
+export const GRAPH_LEAD_FIELDS = 'id,created_time,field_data,form_id,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,platform';
+
+/** Failures caused by the lead's own data need a person; everything else is retried automatically. */
+export function needsHuman(error: string) {
+  return /AMBIGUOUS|缺少可确认|回收站/.test(error);
+}
+/** 1, 2, 4 … minutes between automatic retries, capped at one hour. */
+export function retryDelayMs(attempts: number) {
+  return Math.min(60, 2 ** Math.max(0, attempts - 1)) * 60_000;
+}
+
 /**
  * 调用 Graph API 取线索详情。
  * 失败时返回错误原因而不是抛异常 —— 调用方要把失败落库，便于排查。
@@ -135,7 +152,7 @@ export async function fetchLead(leadgenId: string) {
   if (!token) return { ok: false as const, error: 'META_PAGE_ACCESS_TOKEN 未配置' };
 
   const url = new URL(`https://graph.facebook.com/${graphVersion()}/${encodeURIComponent(leadgenId)}`);
-  url.searchParams.set('fields', 'id,created_time,field_data,form_id,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,platform');
+  url.searchParams.set('fields', GRAPH_LEAD_FIELDS);
 
   try {
     const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10_000), headers: { Authorization: `Bearer ${token}` } });
@@ -167,9 +184,13 @@ async function defaultActor(): Promise<Actor> {
 }
 
 async function mark(id: string, claimedAt: Date, status: 'FAILED' | 'LINKED', customerId: string | null, error = '', attribution?: { adId: string | null; campaignId: string | null; rawPayload: Prisma.InputJsonValue }) {
+  const reason = safeReason(error);
+  const current = await db.metaLeadEvent.findUnique({ where: { leadgenId: id }, select: { attempts: true } });
+  const attempts = (current?.attempts ?? 0) + (status === 'FAILED' ? 1 : 0);
   const result = await db.metaLeadEvent.updateMany({
     where: { leadgenId: id, status: 'PROCESSING', processingStartedAt: claimedAt },
-    data: { ...attribution, status, customerId, error: safeReason(error), processingStartedAt: null },
+    data: { ...attribution, status, customerId, error: reason, processingStartedAt: null, attempts,
+      nextAttemptAt: status === 'FAILED' && !needsHuman(reason) ? new Date(Date.now() + retryDelayMs(attempts)) : null },
   });
   if (result.count !== 1) throw new Error('Meta lead processing claim expired');
 }
@@ -179,7 +200,7 @@ async function mark(id: string, claimedAt: Date, status: 'FAILED' | 'LINKED', cu
  *
  * 返回结构用于日志与测试；任何一步失败都会把原因写进 MetaLeadEvent.error。
  */
-export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, requestId?: string) {
+export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, requestId?: string, options: { prefetched?: { lead: GraphLead; raw: string } } = {}) {
   // 幂等：同一个 leadgenId 已经处理过就直接返回，避免 Meta 重推造成重复客户
   const existing = await db.metaLeadEvent.findUniqueOrThrow({ where: { leadgenId: event.leadgenId }, select: { status: true, customerId: true } });
   if (existing && shouldSkipProcessedLead(existing.status)) {
@@ -204,7 +225,8 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
   }
 
   try {
-    const lead = await fetchLead(event.leadgenId);
+    // The form poll already holds the full lead; the webhook and retries read it from Graph.
+    const lead = options.prefetched ? { ok: true as const, ...options.prefetched } : await fetchLead(event.leadgenId);
     if (!lead.ok) {
       console.error('[meta-lead] graph api failed', { requestId, leadgenId: event.leadgenId, httpStatus: lead.httpStatus, graphCode: lead.graphCode });
       await mark(event.leadgenId, claimedAt, 'FAILED', null, lead.error);
@@ -233,16 +255,16 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
         const active=await tx.customer.findUniqueOrThrow({where:{id:customerId},select:{deletedAt:true}});
         if(active.deletedAt)throw new Error('该留资关联回收站客户，请人工恢复后重试');
       }
+      const assignment=await import('./lead-assignment-service');
+      let intake:Awaited<ReturnType<typeof assignment.resolveIntakeOwner>>|null=null;
       if(resolved.status==='UNMATCHED'&&(phoneE164||emailNormalized)){
         const settings=await tx.setting.findUniqueOrThrow({where:{id:'system'}});
-        const assignment=await import('./lead-assignment-service');
-        const intake=await assignment.resolveIntakeOwner(tx);
+        intake=await assignment.resolveIntakeOwner(tx);
         const customer=await tx.customer.create({data:{name:mapped.name,companyName:mapped.companyName,country:mapped.country,
           phone:mapped.phone,whatsapp:mapped.whatsapp,whatsappNormalized:phoneE164?.slice(1)||'',email:emailNormalized||'',
           source:lead.lead.platform==='instagram'?'INSTAGRAM':'FACEBOOK',sourceDetail:lead.lead.ad_name||'Facebook Ads',purchaseType:mapped.purchaseType,productInterest:mapped.productInterest,
           quantity:mapped.quantity,notes:mapped.notes,stage:'NEW',stageSource:'SYSTEM',ownerId:intake.ownerId,currency:settings.currency,inquiryAt:occurredAt}});
         customerId=customer.id;status='CREATED';
-        await assignment.enterIntake(tx,customer.id,actor.id,intake,'Meta 线索表单');
         await tx.stageHistory.create({data:{customerId,toStage:'NEW',changedBy:actor.id,note:'Meta Lead webhook'}});
       }
       await recordLeadAttribution(tx,{leadKey:metaLeadKey(event.leadgenId),leadId:event.leadgenId,customerId,status:customerId?'MATCHED':resolved.status,
@@ -251,16 +273,21 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
         accountId:adSnapshot?.account_id||null,campaignId:lead.lead.campaign_id||adSnapshot?.campaign_id||null,campaignName:lead.lead.campaign_name||adSnapshot?.campaign?.name||null,adsetId:lead.lead.adset_id||adSnapshot?.adset_id||null,adsetName:lead.lead.adset_name||adSnapshot?.adset?.name||null,
         adId:lead.lead.ad_id||null,adName:lead.lead.ad_name||adSnapshot?.name||null,creativeId:adSnapshot?.creative?.id||null,creativeName:adSnapshot?.creative?.name||null,formId:lead.lead.form_id||event.formId||null,formName:formSnapshot?.name||null,source:'WEBHOOK',answers:JSON.parse(lead.raw)},
         [mapped.phone,mapped.whatsapp].flatMap(raw=>{const normalized=canonicalPhone(raw,undefined,true);return normalized?[{raw,normalized}]:[];}));
+      let repeatSubmission=false;
       if(customerId){
         await rememberCustomerContacts(tx,customerId,'META_WEBHOOK');
         const submission=await tx.leadSubmission.findUnique({where:{eventKey:metaLeadKey(event.leadgenId)}});
         if(!submission){const previous=await tx.leadSubmission.aggregate({where:{customerId},_max:{ordinal:true}});
           await tx.leadSubmission.create({data:{customerId,eventKey:metaLeadKey(event.leadgenId),leadId:event.leadgenId,ordinal:(previous._max.ordinal||0)+1,
-            occurredAt:occurredAt||new Date(),values:JSON.stringify(mapped),raw:lead.raw,filename:'Meta webhook',fileHash:'',translationPending:'[]'}});}
+            occurredAt:occurredAt||new Date(),values:JSON.stringify(mapped),raw:lead.raw,filename:options.prefetched?'Meta 定时补拉':'Meta webhook',fileHash:'',translationPending:'[]'}});
+          repeatSubmission=status==='LINKED';}
       }
+      // Assignment runs after the lead ledger exists, so a fresh ad lead gets the short first-contact deadline.
+      if(status==='CREATED'&&customerId&&intake)await assignment.enterIntake(tx,customerId,actor.id,intake,'Meta 线索表单');
+      if(repeatSubmission&&customerId)await assignment.flagRepeatSubmission(tx,customerId,{leadKey:event.leadgenId,formName:formSnapshot?.name||null,adName:lead.lead.ad_name||adSnapshot?.name||null},actor.id);
       const reason=customerId?'':resolved.status==='AMBIGUOUS'?'AMBIGUOUS：联系方式对应多个客户，等待人工认领':'缺少可确认的手机号或邮箱，等待人工认领';
       const updated=await tx.metaLeadEvent.updateMany({where:{leadgenId:event.leadgenId,status:'PROCESSING',processingStartedAt:claimedAt},
-        data:{...attribution,status,customerId,error:reason,processingStartedAt:null}});
+        data:{...attribution,status,customerId,error:reason,processingStartedAt:null,metaCreatedAt:occurredAt,nextAttemptAt:null}});
       if(updated.count!==1)throw new Error('Meta lead processing claim expired');
       return {leadgenId:event.leadgenId,status,customerId,reason};
     }));
@@ -320,7 +347,7 @@ export async function recentMetaLeadEvents(limit = 20) {
 /** Recover persisted failures even after a provider's retry window has ended. */
 export async function retryPendingMetaLeads(input:unknown,user:Actor){
   if(user.role!=='ADMIN')throw new HttpError(403,'留资重试需要管理员权限');
-  const {limit}=z.object({limit:z.coerce.number().int().min(1).max(5).default(3)}).parse(input);
+  const {limit}=z.object({limit:z.coerce.number().int().min(1).max(50).default(3)}).parse(input);
   if(!process.env.META_PAGE_ACCESS_TOKEN)return {status:'NOT_CONNECTED',succeeded:0,failed:0};
   const rows=await db.metaLeadEvent.findMany({where:{OR:[{status:'RECEIVED'},{status:'FAILED',NOT:[{error:{contains:'AMBIGUOUS'}},{error:{contains:'缺少可确认'}},{error:{contains:'回收站'}}]},{status:'PROCESSING',processingStartedAt:{lt:new Date(Date.now()-CLAIM_TIMEOUT_MS)}}]},orderBy:{createdAt:'asc'},take:limit});
   const job=await db.syncJob.create({data:{provider:'META',jobType:'LEAD_RETRY',status:'RUNNING',actorId:user.id}});
@@ -328,6 +355,26 @@ export async function retryPendingMetaLeads(input:unknown,user:Actor){
   for(const row of rows)try{const result=await handleLeadgenEvent({leadgenId:row.leadgenId,pageId:row.pageId,formId:row.formId},row.rawPayload);if(result.status==='FAILED')failed++;else succeeded++;}catch{failed++;}
   await db.syncJob.update({where:{id:job.id},data:{status:failed?'PARTIAL':'OK',completedAt:new Date(),processed:rows.length,succeeded,failed,error:failed?'LEAD_RETRY_FAILED':null}});
   return {status:'CONNECTED',succeeded,failed};
+}
+
+/**
+ * Scheduled retry honouring each event's back-off. Also picks up webhook registrations that never
+ * finished (the request died after RECEIVED) and stale processing claims.
+ */
+export async function retryDueMetaLeads(limit=20){
+  if(!process.env.META_PAGE_ACCESS_TOKEN)return {status:'NOT_CONNECTED' as const,succeeded:0,failed:0};
+  const now=new Date();
+  const rows=await db.metaLeadEvent.findMany({where:{OR:[
+    {status:'RECEIVED',createdAt:{lt:new Date(now.getTime()-2*60_000)}},
+    {status:'FAILED',OR:[{nextAttemptAt:{lte:now}},{nextAttemptAt:null,attempts:0}],NOT:[{error:{contains:'AMBIGUOUS'}},{error:{contains:'缺少可确认'}},{error:{contains:'回收站'}}]},
+    {status:'PROCESSING',processingStartedAt:{lt:new Date(now.getTime()-CLAIM_TIMEOUT_MS)}},
+  ]},orderBy:{createdAt:'asc'},take:limit});
+  let succeeded=0,failed=0;
+  for(const row of rows){
+    try{const result=await handleLeadgenEvent({leadgenId:row.leadgenId,pageId:row.pageId,formId:row.formId},row.rawPayload);if(result.status==='FAILED')failed++;else succeeded++;}
+    catch{failed++;}
+  }
+  return {status:'CONNECTED' as const,succeeded,failed};
 }
 
 export { DAY };

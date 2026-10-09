@@ -153,6 +153,7 @@ export function SalesTeam({ data, accounts = [], admin = false }: { data: SalesP
                   "月度目标",
                   "完成率",
                   "首联平均时长",
+                  "首联按时率",
                   "首联逾期",
                   "新询盘成交率",
                   "标记无效 / 暂停 / 流失",
@@ -186,6 +187,7 @@ export function SalesTeam({ data, accounts = [], admin = false }: { data: SalesP
                           ? `${row.averageFirstContactMinutes} 分钟`
                           : `${(row.averageFirstContactMinutes / 60).toFixed(1)} 小时`}
                     </td>
+                    <td>{row.firstContactOnTime === null ? "—" : `${row.firstContactOnTime}%`}</td>
                     <td>{row.overdueFirstContact > 0 ? <Badge tone="warning">{row.overdueFirstContact} 位</Badge> : 0}</td>
                     <td>{row.conversion === null ? "—" : `${row.conversion}%`}</td>
                     <td>{row.closedByOwner}</td>
@@ -209,7 +211,7 @@ export function SalesTeam({ data, accounts = [], admin = false }: { data: SalesP
               <EmptyState title="还没有销售账号" description="添加销售账号后，这里会显示每个人的客户进展和目标。" />
             )}
             <p className="bos-footnote">
-              首联时长仅统计有分配时间和联系记录的新流程客户。历史成交未保存销售快照时，按客户当前负责人展示并标记“历史归属”；转交客户不会改变新成交的销售快照。
+              首联按时率：本月开始计时的首联中，在期限内联系的比例（广告线索期限为 {data.adLeadFirstContactMinutes} 分钟）。首联时长仅统计有分配时间和联系记录的新流程客户。历史成交未保存销售快照时，按客户当前负责人展示并标记“历史归属”；转交客户不会改变新成交的销售快照。
             </p>
           </Card>
           <div className="bos-team-bottom">
@@ -272,9 +274,41 @@ export function SalesTeam({ data, accounts = [], admin = false }: { data: SalesP
                     保存
                   </Button>
                 </form>
+                <form
+                  className="bos-team-policy"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const f = new FormData(e.currentTarget);
+                    void save("sales-team/policy", "PUT", { adLeadMinutes: Number(f.get("adLeadMinutes")) }, "广告线索首联期限已更新，之后的新分配将使用新期限。");
+                  }}
+                >
+                  <label>
+                    广告线索首次联系期限（24 小时内的 Meta 表单 / WhatsApp 广告留资）
+                    <Input
+                      key={data.adLeadFirstContactMinutes}
+                      name="adLeadMinutes"
+                      aria-label="广告线索首次联系期限（分钟）"
+                      type="number"
+                      min="1"
+                      max="1440"
+                      defaultValue={data.adLeadFirstContactMinutes}
+                      required
+                    />
+                  </label>
+                  <span>分钟</span>
+                  <Button type="submit" disabled={busy}>
+                    保存
+                  </Button>
+                </form>
                 <div className="bos-team-owner-note">
                   <strong>{data.unassigned ?? 0}</strong>
                   <span>位线索在待分配池</span>
+                  {data.poolWait && (
+                    <span>
+                      本月已分配 {data.poolWait.assigned} 位，平均等待{" "}
+                      {data.poolWait.averageMinutes === null ? "—" : `${data.poolWait.averageMinutes} 分钟`}
+                    </span>
+                  )}
                   <Link href="/customers?assign=pending" className="bos-text-link">
                     前往分配
                   </Link>

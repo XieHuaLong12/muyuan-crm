@@ -13,17 +13,32 @@ export async function automatedTask(tx: Prisma.TransactionClient, data: { custom
   if (task.status !== 'DONE' && !await tx.reminder.findFirst({ where: { taskId: task.id } })) await taskReminders(tx, task.id, task.dueDate, 30);
   return task;
 }
+/** An ad lead is fresh when the customer submitted a Meta form or clicked a WhatsApp ad within this window. */
+export const AD_LEAD_FRESH_HOURS=24;
+export async function freshAdLead(tx:Prisma.TransactionClient,customerId:string,at=new Date()){
+  const since=new Date(at.getTime()-AD_LEAD_FRESH_HOURS*3600000);
+  return !!await tx.customerLeadAttribution.findFirst({where:{customerId,status:'MATCHED',OR:[{occurredAt:{gte:since}},{occurredAt:null,createdAt:{gte:since}}]},select:{id:true}});
+}
 /** New assignments receive a durable deadline; legacy contact times are not guessed. */
 export async function initializeFirstContact(tx:Prisma.TransactionClient,customerId:string,actorId:string,fromOwnerId:string|null=null,reason?:string){
   const c=await tx.customer.findUniqueOrThrow({where:{id:customerId}});
   const settings=await tx.setting.findUniqueOrThrow({where:{id:'system'}}),at=new Date();
   const hasContact=!!(c.firstContactAt||c.contactedAt||c.lastOutboundAt||c.lastFollowUpAt);
-  const due=!hasContact&&!['WON','LOST','INVALID','PAUSED'].includes(c.stage)?new Date(at.getTime()+settings.firstContactHours*3600000):null;
+  const open=!hasContact&&!['WON','LOST','INVALID','PAUSED'].includes(c.stage);
+  // Fresh ad leads are contacted within minutes of assignment; everything else keeps the hour-based policy.
+  const adLead=open&&await freshAdLead(tx,c.id,at);
+  const due=open?new Date(at.getTime()+(adLead?settings.adLeadFirstContactMinutes*60000:settings.firstContactHours*3600000)):null;
   // Assigning to an owner always leaves the intake pool.
   await tx.customer.update({where:{id:customerId},data:{assignedAt:at,firstContactDueAt:due,pendingAssignment:false}});
   await tx.customerAssignment.create({data:{customerId,fromOwnerId,toOwnerId:c.ownerId,actorId,assignedAt:at,reason:(reason||(fromOwnerId?'管理员转交客户':'新客户进入工作空间')).slice(0,500)}});
   await resolveRule(tx,c.id,`first-contact:${c.id}:`);
-  if(due)await automatedTask(tx,{customerId:c.id,createdBy:c.ownerId,title:`首次联系 ${c.name}`,description:`新分配客户，请在 ${settings.firstContactHours} 小时内联系并记录跟进。`,type:'FOLLOW_UP',priority:'HIGH',dueDate:due,automationKey:`first-contact:${c.id}:${at.getTime()}`});
+  if(due)await automatedTask(tx,{customerId:c.id,createdBy:c.ownerId,title:adLead?`首次联系 ${c.name}（广告线索）`:`首次联系 ${c.name}`,
+    description:adLead?`广告新线索，请在 ${settings.adLeadFirstContactMinutes} 分钟内联系并记录跟进。`:`新分配客户，请在 ${settings.firstContactHours} 小时内联系并记录跟进。`,
+    type:'FOLLOW_UP',priority:'HIGH',dueDate:due,automationKey:`first-contact:${c.id}:${at.getTime()}`});
+}
+/** Open contact tasks raised by a repeat submission close as soon as the customer is contacted again. */
+export async function resolveContactRequests(tx:Prisma.TransactionClient,customerId:string){
+  await resolveRule(tx,customerId,`resubmit:${customerId}:`);
 }
 export async function recordFirstContact(tx:Prisma.TransactionClient,customerId:string,at:Date,actorId:string){
   // Preserve the earliest recorded fact. Replayed callbacks cannot move first contact later.

@@ -236,7 +236,9 @@ export async function addFollowUp(id: string, input: unknown, user: Actor) {
     await refreshFollowUpFacts(tx, id);
     // A recorded follow-up is a real contact, even when the conversation happened outside the system.
     await tx.customer.updateMany({ where: { id, OR: [{ lastContactAt: null }, { lastContactAt: { lt: followUpAt } }] }, data: { lastContactAt: followUpAt } });
-    await (await workflow()).recordFirstContact(tx, id, followUpAt, user.id);
+    const flow = await workflow();
+    await flow.recordFirstContact(tx, id, followUpAt, user.id);
+    await flow.resolveContactRequests(tx, id);
     return f;
   }));
   await (await workflow()).syncCustomerWorkflow(id);
