@@ -4,8 +4,9 @@ import { timingSafeEqual } from 'node:crypto';
 /**
  * /api/cron/meta-sync —— Meta 广告数据与表单目录的定时同步入口
  *
- * 由 Hostinger 面板的 Cron Jobs 每 6 小时请求一次：
- *   GET https://你的域名/api/cron/meta-sync?secret=<META_SYNC_SECRET>
+ * 由 Hostinger 面板的 Cron Jobs 每 6 小时请求一次（推荐把密钥放在请求头，避免写进访问日志）：
+ *   curl -H "x-cron-secret: <META_SYNC_SECRET>" https://你的域名/api/cron/meta-sync
+ * 兼容旧配置：GET https://你的域名/api/cron/meta-sync?secret=<META_SYNC_SECRET>
  *
  * 可选 kind 参数：all（默认，广告+表单）| ads | forms
  *
@@ -22,7 +23,8 @@ function safeEqual(a: string, b: string) {
 }
 
 export async function GET(req: NextRequest) {
-  const secret = req.nextUrl.searchParams.get('secret') ?? '';
+  // 推荐用请求头 x-cron-secret，避免密钥进入访问日志；?secret= 仅为兼容已配置的定时任务保留。
+  const secret = req.headers.get('x-cron-secret') || req.nextUrl.searchParams.get('secret') || '';
   const expected = process.env.META_SYNC_SECRET?.trim() ?? '';
   if (!expected || !secret || !safeEqual(secret, expected)) {
     console.warn('[meta-sync] cron 密钥校验失败', { hasSecret: Boolean(secret), configured: Boolean(expected) });

@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { inquiryDate } from '@/lib/customer-date';
 import { Actor, scope } from '@/lib/auth';
-import { Period, periodRange, previousDate, dayKey } from '@/lib/time';
+import { Period, periodRange, previousDate, dayKey, localDate } from '@/lib/time';
 import { pipeline } from '@/lib/constants';
 import { differenceInCalendarDays, isLeapYear } from 'date-fns';
 
@@ -273,14 +273,35 @@ export async function dashboard(
       tz
     );
 
+  // Only load what the report reads: inquiries and quotes inside the compared periods and the year,
+  // plus customers whose next follow-up is due by today — not the whole customer base.
+  const window = {
+    gte: new Date(Math.min(range.start.getTime(), previous.start.getTime(), yearRange.start.getTime())),
+    lt: new Date(Math.max(range.end.getTime(), previous.end.getTime(), yearRange.end.getTime())),
+  };
+  const tomorrow = new Date(`${dayKey(new Date(), tz)}T12:00:00Z`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const dueBy = localDate(`${tomorrow.toISOString().slice(0, 10)}T00:00`, tz);
+
   const [
     customers,
     orders,
     targets,
   ] = await Promise.all([
     db.customer.findMany({
-      where:
-        scope(user),
+      where: {
+        AND: [
+          scope(user),
+          {
+            OR: [
+              { inquiryAt: window },
+              { inquiryAt: null, createdAt: window },
+              { quotedAt: window },
+              { nextFollowUpAt: { lt: dueBy } },
+            ],
+          },
+        ],
+      },
 
       include: {
         deals: {
@@ -302,6 +323,8 @@ export async function dashboard(
     db.deal.findMany({
       where: {
         currency,
+
+        dealDate: window,
 
         customer:
           scope(user),

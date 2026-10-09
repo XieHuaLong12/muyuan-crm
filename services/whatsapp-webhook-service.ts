@@ -144,14 +144,18 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
     const conversationInput={provider:input.source||'cloud_api',accountId:input.accountId||'primary',peerId:validPhone||waId||identityKey(input.phone),
       phone:input.phone,name:input.name,externalId:waId||identityKey(input.phone),sentAt:input.sentAt,direction,sourceMessageId:input.id};
     let linked=await ensureConversation(tx,conversationInput);
-    const owner=await tx.user.findFirstOrThrow({where:{role:'ADMIN'},orderBy:{createdAt:'asc'},select:{id:true}});
+    const assignment=await import('./lead-assignment-service');
+    const owner=await assignment.intakeAdmin(tx);
     if(!linked.customerId&&linked.status==='UNMATCHED'&&validPhone&&input.source==='gupshup'&&direction==='INBOUND'){
-      const configuredOwner=process.env.WHATSAPP_DEFAULT_OWNER_EMAIL?await tx.user.findUnique({where:{email:process.env.WHATSAPP_DEFAULT_OWNER_EMAIL},select:{id:true}}):null;
-      const c=await tx.customer.create({data:{name:input.name.slice(0,191)||validPhone,ownerId:configuredOwner?.id||owner.id,
+      // WHATSAPP_DEFAULT_OWNER_EMAIL still wins when it names an active account; otherwise the lead assignment rules decide.
+      const intake=await assignment.resolveIntakeOwner(tx,process.env.WHATSAPP_DEFAULT_OWNER_EMAIL);
+      const c=await tx.customer.create({data:{name:input.name.slice(0,191)||validPhone,ownerId:intake.ownerId,
         phone:input.phone,whatsapp:input.phone,phoneE164:validPhone,waId,whatsappNormalized:waId,
         source:input.referral?'META_CLICK_TO_WHATSAPP':'WHATSAPP',sourceDetail:input.referral?'Gupshup referral':'Gupshup inbound',
         inquiryAt:input.providerOccurredAt||input.sentAt,stage:'NEW',stageSource:'SYSTEM'}});
       await rememberCustomerContacts(tx,c.id,'GUPSHUP_INBOUND');
+      await tx.stageHistory.create({data:{customerId:c.id,toStage:'NEW',changedBy:owner.id,note:input.referral?'WhatsApp 广告入站':'WhatsApp 入站'}});
+      await assignment.enterIntake(tx,c.id,owner.id,intake,input.referral?'WhatsApp 广告':'WhatsApp 入站');
       linked=await ensureConversation(tx,conversationInput);delta.createdCustomers++;
     }
     if(linked.customerId&&input.source==='gupshup'&&direction==='INBOUND'){

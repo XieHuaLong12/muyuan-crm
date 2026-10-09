@@ -14,7 +14,7 @@ export async function priorityCustomers(user: Actor) {
   const now = Date.now();
   const rows = await db.customer.findMany({ where: scope(user), select: {
     id:true, name:true, companyName:true, country:true, whatsapp:true, stage:true, aiScore:true, aiIntent:true, aiNextAction:true,
-    estimatedOrderValue:true, currency:true, lastInboundAt:true, lastOutboundAt:true, nextFollowUpAt:true,
+    estimatedOrderValue:true, currency:true, lastInboundAt:true, lastOutboundAt:true, lastFollowUpAt:true, nextFollowUpAt:true,
     _count: { select: { quotations: { where: { status: 'DRAFT' } } } },
     readStates: { where: { userId: user.id }, select: { readAt:true } },
     whatsappMessages: { where: user.role==='ADMIN'?{}:{id:{in:[]}}, orderBy: [{ sentAt:'desc' }, { id:'desc' }], take:1, select: { content:true } },
@@ -22,12 +22,13 @@ export async function priorityCustomers(user: Actor) {
   return rows.map(c => {
     const terminal = ['WON','LOST','INVALID','PAUSED'].includes(c.stage);
     const unread = !!c.lastInboundAt && (!c.readStates[0] || c.lastInboundAt > c.readStates[0].readAt);
-    const needsReply = !!c.lastInboundAt && (!c.lastOutboundAt || c.lastInboundAt > c.lastOutboundAt);
+    // A follow-up recorded after the inbound message counts as a reply made outside the system.
+    const needsReply = !!c.lastInboundAt && (!c.lastOutboundAt || c.lastInboundAt > c.lastOutboundAt) && (!c.lastFollowUpAt || c.lastInboundAt > c.lastFollowUpAt);
     const overdue = !!c.nextFollowUpAt && c.nextFollowUpAt.getTime()<now || needsReply && now-c.lastInboundAt!.getTime()>=86400000;
     // Only use a capped logarithmic amount signal; never aggregate mixed currencies.
     const amount = Math.min(12, Math.log10(1+Number(c.estimatedOrderValue))*2);
     const priorityScore = (terminal ? -1000 : 0) + c.aiScore + (c.aiIntent==='HIGH'?25:0) + (needsReply?30:0) + (overdue?40:0) + (unread?15:0) + amount;
-    const { readStates, whatsappMessages, _count, ...customer } = c; void readStates;
+    const { readStates, whatsappMessages, _count, lastFollowUpAt, ...customer } = c; void readStates; void lastFollowUpAt;
     return { ...customer, estimatedOrderValue: String(c.estimatedOrderValue), draftQuotes: _count.quotations, unread, needsReply, overdue, priorityScore,
       latestMessage: user.role==='ADMIN'?(whatsappMessages[0]?.content || ''):'', lastInboundAt:c.lastInboundAt?.toISOString()||null,
       lastOutboundAt:c.lastOutboundAt?.toISOString()||null, nextFollowUpAt:c.nextFollowUpAt?.toISOString()||null };

@@ -17,14 +17,19 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
   const end=localDate(`${next.toISOString().slice(0,10)}T00:00`,settings.timezone),period={gte:start,lt:end};
   const users=await db.user.findMany({where:user.role==='ADMIN'?{role:'SALES'}:{id:user.id},select:{id:true,name:true,email:true,isActive:true},orderBy:[{isActive:'desc'},{name:'asc'}]});
   const ids=users.map(row=>row.id);
-  const [customers,deals,quotes,targets,assignments,pending,unassigned]=await Promise.all([
+  const monthNumber=Number(selected.slice(5,7)),yearNumber=Number(selected.slice(0,4));
+  const [customers,deals,quotes,targets,assignments,pending,unassigned,closed,companyTarget,handover]=await Promise.all([
     db.customer.findMany({where:{deletedAt:null,ownerId:{in:ids},OR:[{inquiryAt:period},{inquiryAt:null,createdAt:period}]},select:{id:true,ownerId:true,isQualified:true,firstContactAt:true,contactedAt:true,assignedAt:true,firstContactDueAt:true,deals:{select:{dealDate:true}}}}),
     db.deal.findMany({where:{currency,dealDate:period,customer:{deletedAt:null},OR:[{salespersonId:{in:ids}},{salespersonId:null,customer:{ownerId:{in:ids},deletedAt:null}}]},select:{id:true,salespersonId:true,dealAmount:true,customer:{select:{ownerId:true}}}}),
     db.quotation.findMany({where:{status:'SENT',sentAt:period,createdBy:{in:ids},customer:{deletedAt:null}},select:{createdBy:true,customerId:true}}),
     db.userSalesTarget.findMany({where:{userId:{in:ids},month:selected,currency}}),
     db.customerAssignment.findMany({where:{toOwnerId:{in:ids},assignedAt:period,customer:{deletedAt:null}},select:{toOwnerId:true,customerId:true}}),
     db.customer.findMany({where:{...scope(user),ownerId:{in:ids},firstContactDueAt:{not:null},firstContactAt:null,contactedAt:null,lastOutboundAt:null,lastFollowUpAt:null,stage:{notIn:['WON','LOST','INVALID','PAUSED']}},select:{id:true,name:true,ownerId:true,firstContactDueAt:true},orderBy:{firstContactDueAt:'asc'}}),
-    user.role==='ADMIN'?db.customer.count({where:{deletedAt:null,stage:'NEW',owner:{role:'ADMIN'}}}):Promise.resolve(null),
+    user.role==='ADMIN'?db.customer.count({where:{deletedAt:null,pendingAssignment:true}}):Promise.resolve(null),
+    // Lead-quality judgements made by each salesperson this month, so administrators can review them.
+    db.stageHistory.findMany({where:{changedBy:{in:ids},toStage:{in:['INVALID','PAUSED','LOST']},changedAt:period,customer:{deletedAt:null}},select:{changedBy:true,customerId:true}}),
+    user.role==='ADMIN'?db.salesTarget.findUnique({where:{periodKey:`MONTH-${yearNumber}-${monthNumber}`},select:{targetRevenue:true,currency:true}}):Promise.resolve(null),
+    user.role==='ADMIN'?db.user.findMany({where:{isActive:false,customers:{some:{deletedAt:null}}},select:{id:true,name:true,_count:{select:{customers:{where:{deletedAt:null}}}}}}):Promise.resolve([]),
   ]);
   const rows=users.map(person=>{
     const cohort=customers.filter(c=>c.ownerId===person.id),sales=deals.filter(d=>(d.salespersonId||d.customer.ownerId)===person.id),ownPending=pending.filter(c=>c.ownerId===person.id),target=targets.find(t=>t.userId===person.id);
@@ -36,10 +41,14 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
       quoted:new Set(quotes.filter(c=>c.createdBy===person.id).map(c=>c.customerId)).size,deals:sales.length,revenue:revenue.toFixed(2),legacyDeals:sales.filter(d=>!d.salespersonId).length,
       conversion:cohort.length?Math.round(won/cohort.length*1000)/10:null,averageFirstContactMinutes:response.length?Math.round(response.reduce((a,b)=>a+b,0)/response.length):null,
       pendingFirstContact:ownPending.length,overdueFirstContact:ownPending.filter(c=>c.firstContactDueAt!<now).length,
+      closedByOwner:new Set(closed.filter(row=>row.changedBy===person.id).map(row=>row.customerId)).size,
       target:target?{amount:target.targetRevenue.toFixed(2),updatedAt:target.updatedAt.toISOString()}:null,
       completion:target&&target.targetRevenue.gt(0)?revenue.div(target.targetRevenue).mul(100).toDecimalPlaces(1).toNumber():null};
   });
-  return {month:selected,currency,timezone:settings.timezone,firstContactHours:settings.firstContactHours,rows,unassigned,
+  const personalTargets=targets.reduce((sum,t)=>sum.plus(t.targetRevenue),new Prisma.Decimal(0));
+  return {month:selected,currency,timezone:settings.timezone,firstContactHours:settings.firstContactHours,leadAssignMode:settings.leadAssignMode,rows,unassigned,
+    targetSummary:user.role==='ADMIN'?{personal:personalTargets.toFixed(2),company:companyTarget&&companyTarget.currency===currency?companyTarget.targetRevenue.toFixed(2):null}:null,
+    handover:handover.map(row=>({id:row.id,name:row.name,customers:row._count.customers})),
     pending:pending.slice(0,100).map(c=>({id:c.id,name:c.name,ownerId:c.ownerId,dueAt:c.firstContactDueAt!.toISOString(),overdue:c.firstContactDueAt!<now})),pendingTotal:pending.length};
 }
 export type SalesPerformance=Awaited<ReturnType<typeof salesPerformance>>;
@@ -65,6 +74,7 @@ export async function saveFirstContactPolicy(input:unknown,user:Actor){
 }
 export async function firstContactFocus(user:Actor){
   const where={...scope(user),stage:{notIn:['WON','LOST','INVALID','PAUSED']},firstContactDueAt:{not:null},firstContactAt:null,contactedAt:null,lastOutboundAt:null,lastFollowUpAt:null};
-  const [pending,overdue]=await Promise.all([db.customer.count({where}),db.customer.count({where:{...where,firstContactDueAt:{lt:new Date()}}})]);
-  return {pending,overdue};
+  const [pending,overdue,pool]=await Promise.all([db.customer.count({where}),db.customer.count({where:{...where,firstContactDueAt:{lt:new Date()}}}),
+    user.role==='ADMIN'?db.customer.count({where:{deletedAt:null,pendingAssignment:true}}):Promise.resolve(0)]);
+  return {pending,overdue,pool};
 }

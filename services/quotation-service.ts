@@ -1,4 +1,4 @@
-import { lockIdentity } from './contact-identity-service';
+import { lockCustomer } from './contact-identity-service';
 import { enqueueFeedback } from './advertising-feedback-service';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { randomUUID } from 'node:crypto';
@@ -19,7 +19,7 @@ export async function markQuoteSent(id: string, user: Actor) {
   if(quote.status==='SENT')return quote;
   const sentAt=quote.sentAt||new Date();
   const saved=await retryTransaction(()=>db.$transaction(async tx=>{
-    await lockIdentity(tx);
+    await lockCustomer(tx, quote.customerId);
     const current=await tx.quotation.findFirst({where:{id,customer:scope(user)}});if(!current)throw new HttpError(404,'报价不存在');if(current.status==='SENT')return current;
     const q=await tx.quotation.update({where:{id},data:{status:'SENT',sentAt}});
     const c=await tx.customer.findUniqueOrThrow({where:{id:quote.customerId}});

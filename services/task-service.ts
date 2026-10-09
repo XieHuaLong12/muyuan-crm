@@ -6,15 +6,19 @@ import { Actor, HttpError, scope } from '@/lib/auth';
 import { accessible } from './customer-service';
 import { dayKey, localDate } from '@/lib/time';
 
-const taskInput = z.object({ customerId: z.string().min(1).max(191).nullable().default(null), title: z.string().trim().min(1).max(180),
+const taskInput = z.object({ customerId: z.string().min(1).max(191).nullable().default(null), assigneeId: z.string().min(1).max(191).nullable().default(null), title: z.string().trim().min(1).max(180),
   description: z.string().trim().max(6000).default(''), type: z.enum(['FOLLOW_UP','QUOTATION','PAYMENT','SAMPLE','SHIPPING','PRODUCTION']).default('FOLLOW_UP'),
   priority: z.enum(['HIGH','MEDIUM','LOW']).default('MEDIUM'), status: z.enum(['TODO','DOING','DONE']).default('TODO'),
   dueDate: z.string().datetime({ offset: true }), reminderMinutes: z.number().int().min(0).max(10080).default(30) });
-const patchInput = taskInput.partial().omit({ customerId: true }).extend({ updatedAt: z.string().datetime({ offset: true }).optional() });
+const patchInput = taskInput.partial().omit({ customerId: true, assigneeId: true }).extend({ updatedAt: z.string().datetime({ offset: true }).optional() });
 export const taskInclude = { customer: { select: { id: true, name: true, country: true } }, reminders: true } as const;
+/**
+ * Customer tasks belong to the customer's current owner. Tasks without a customer belong to their
+ * assignee, or to their creator when nobody was assigned.
+ */
 export function taskScope(user: Actor): Prisma.TaskWhereInput {
   return user.role === 'ADMIN' ? { deletedAt: null, OR: [{ customerId: null }, { customer: { deletedAt: null } }] }
-    : { deletedAt: null, OR: [{ customerId: null, createdBy: user.id }, { customer: scope(user) }] };
+    : { deletedAt: null, OR: [{ customerId: null, assigneeId: user.id }, { customerId: null, assigneeId: null, createdBy: user.id }, { customer: scope(user) }] };
 }
 export async function taskReminders(tx: Prisma.TransactionClient, taskId: string, dueDate: Date, minutes: number, done = false) {
   for (const kind of ['EARLY', 'OVERDUE']) {
@@ -27,6 +31,12 @@ export async function taskReminders(tx: Prisma.TransactionClient, taskId: string
 export async function createTask(input: unknown, user: Actor) {
   const v = taskInput.parse(input);
   if (v.customerId) await accessible(v.customerId, user);
+  // Only administrators hand a standalone task to someone else; customer tasks follow the customer owner.
+  if (v.customerId) v.assigneeId = null;
+  else if (v.assigneeId && v.assigneeId !== user.id) {
+    if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以给其他人派任务');
+    if (!await db.user.findFirst({ where: { id: v.assigneeId, isActive: true } })) throw new HttpError(400, '执行人不存在或账号已停用');
+  }
   return retryTransaction(() => db.$transaction(async tx => {
     const task = await tx.task.create({ data: { ...v, dueDate: new Date(v.dueDate), createdBy: user.id, completedAt: v.status === 'DONE' ? new Date() : null } });
     await taskReminders(tx, task.id, task.dueDate, task.reminderMinutes, task.status === 'DONE');

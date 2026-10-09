@@ -1,4 +1,4 @@
-import { lockIdentity } from './contact-identity-service';
+import { lockCustomer } from './contact-identity-service';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
@@ -14,13 +14,14 @@ export async function automatedTask(tx: Prisma.TransactionClient, data: { custom
   return task;
 }
 /** New assignments receive a durable deadline; legacy contact times are not guessed. */
-export async function initializeFirstContact(tx:Prisma.TransactionClient,customerId:string,actorId:string,fromOwnerId:string|null=null){
+export async function initializeFirstContact(tx:Prisma.TransactionClient,customerId:string,actorId:string,fromOwnerId:string|null=null,reason?:string){
   const c=await tx.customer.findUniqueOrThrow({where:{id:customerId}});
   const settings=await tx.setting.findUniqueOrThrow({where:{id:'system'}}),at=new Date();
   const hasContact=!!(c.firstContactAt||c.contactedAt||c.lastOutboundAt||c.lastFollowUpAt);
   const due=!hasContact&&!['WON','LOST','INVALID','PAUSED'].includes(c.stage)?new Date(at.getTime()+settings.firstContactHours*3600000):null;
-  await tx.customer.update({where:{id:customerId},data:{assignedAt:at,firstContactDueAt:due}});
-  await tx.customerAssignment.create({data:{customerId,fromOwnerId,toOwnerId:c.ownerId,actorId,assignedAt:at,reason:fromOwnerId?'管理员转交客户':'新客户进入工作空间'}});
+  // Assigning to an owner always leaves the intake pool.
+  await tx.customer.update({where:{id:customerId},data:{assignedAt:at,firstContactDueAt:due,pendingAssignment:false}});
+  await tx.customerAssignment.create({data:{customerId,fromOwnerId,toOwnerId:c.ownerId,actorId,assignedAt:at,reason:(reason||(fromOwnerId?'管理员转交客户':'新客户进入工作空间')).slice(0,500)}});
   await resolveRule(tx,c.id,`first-contact:${c.id}:`);
   if(due)await automatedTask(tx,{customerId:c.id,createdBy:c.ownerId,title:`首次联系 ${c.name}`,description:`新分配客户，请在 ${settings.firstContactHours} 小时内联系并记录跟进。`,type:'FOLLOW_UP',priority:'HIGH',dueDate:due,automationKey:`first-contact:${c.id}:${at.getTime()}`});
 }
@@ -49,10 +50,11 @@ export async function syncCustomerWorkflow(customerId: string) {
       for (const rule of ['first-contact','reply','quote','follow']) await resolveRule(tx,c.id,`${rule}:${c.id}:`);
       return;
     }
-    const firstKey=c.firstContactDueAt&&!c.firstContactAt&&!c.contactedAt&&!c.lastOutboundAt&&!c.lastFollowUpAt&&!['WON','LOST','INVALID','PAUSED'].includes(c.stage)?`first-contact:${c.id}:${c.assignedAt?.getTime()||c.firstContactDueAt.getTime()}`:undefined;
+    const firstKey=c.firstContactDueAt&&!c.pendingAssignment&&!c.firstContactAt&&!c.contactedAt&&!c.lastOutboundAt&&!c.lastFollowUpAt&&!['WON','LOST','INVALID','PAUSED'].includes(c.stage)?`first-contact:${c.id}:${c.assignedAt?.getTime()||c.firstContactDueAt.getTime()}`:undefined;
     await resolveRule(tx,c.id,`first-contact:${c.id}:`,firstKey);
     if(firstKey)await automatedTask(tx,{customerId:c.id,createdBy:c.ownerId,title:`首次联系 ${c.name}`,description:'新分配客户，请联系并记录跟进。',type:'FOLLOW_UP',priority:'HIGH',dueDate:c.firstContactDueAt!,automationKey:firstKey});
-    const needsReply = c.lastInboundAt && (!c.lastOutboundAt || c.lastInboundAt > c.lastOutboundAt);
+    // A recorded follow-up after the latest inbound message counts as a reply made outside the system.
+    const needsReply = c.lastInboundAt && (!c.lastOutboundAt || c.lastInboundAt > c.lastOutboundAt) && (!c.lastFollowUpAt || c.lastInboundAt > c.lastFollowUpAt);
     const replyKey = needsReply ? `reply:${c.id}:${c.lastInboundAt!.getTime()}` : undefined;
     await resolveRule(tx, c.id, `reply:${c.id}:`, replyKey);
     if (replyKey) await automatedTask(tx, { customerId: c.id, createdBy: c.ownerId, title: `回复 ${c.name}`, type: 'FOLLOW_UP', priority: 'HIGH',
@@ -69,12 +71,14 @@ export async function syncCustomerWorkflow(customerId: string) {
       description: '来自客户的下次跟进安排。', dueDate: c.nextFollowUpAt!, automationKey: followKey });
   }));
 }
-// Rule schedules are durable. The dedicated sync POST also brings older V2 customers into the task center.
+// Rule schedules are durable and every business event syncs its own customer. This full pass is only a
+// safety net that also brings older V2 customers into the task center, so it runs at most every 15 minutes.
+export const FULL_SYNC_INTERVAL_MS = 15 * 60000;
 const syncing = new Map<string, { at: number; work: Promise<void>; running: boolean }>();
 export async function syncWorkflows(user: Actor) {
   const key = user.role === 'ADMIN' ? 'ADMIN' : user.id;
-  const previous = syncing.get(key);
-  if (previous && (previous.running || Date.now() - previous.at < 60000)) return previous.work;
+  const previous = syncing.get(key) || (user.role === 'ADMIN' ? undefined : syncing.get('ADMIN'));
+  if (previous && (previous.running || Date.now() - previous.at < FULL_SYNC_INTERVAL_MS)) return previous.work;
   const work = syncAll(user);
   const entry = { at: Date.now(), work, running: true };
   syncing.set(key, entry);
@@ -84,6 +88,14 @@ export async function syncWorkflows(user: Actor) {
 async function syncAll(user: Actor) {
   const customers = await db.customer.findMany({ where: { ...scope(user), OR: [{ firstContactDueAt: { not: null } },{ lastInboundAt: { not: null } }, { quotedAt: { not: null } }, { nextFollowUpAt: { not: null } }] }, select: { id: true } });
   for (const customer of customers.sort((a, b) => a.id.localeCompare(b.id))) await syncCustomerWorkflow(customer.id);
+}
+/** Server-side safety net for the scheduled job; marks the admin scope as freshly synced. */
+export async function syncAllWorkflows() {
+  const admin: Actor = { id: 'cron', name: 'cron', email: '', role: 'ADMIN' };
+  const started = Date.now();
+  await syncAll(admin);
+  syncing.set('ADMIN', { at: Date.now(), work: Promise.resolve(), running: false });
+  return { durationMs: Date.now() - started };
 }
 export async function getReminders(user: Actor) {
   const now = new Date();
@@ -106,7 +118,7 @@ export async function recordWorkflowEvent(input: unknown, user: Actor) {
   const now=new Date(),expectedAt=v.expectedAt?new Date(v.expectedAt):null;
   if(expectedAt&&expectedAt<now) throw new HttpError(400, '预计时间不能早于现在');
   return retryTransaction(() => db.$transaction(async tx => {
-    await lockIdentity(tx);
+    await lockCustomer(tx, c.id);
     const old = await tx.workflowEvent.findUnique({ where: { requestId: v.requestId } });
     if (old) { if (old.customerId !== c.id || old.kind !== v.kind || (old.expectedAt?.getTime()??null)!==(expectedAt?.getTime()??null) || old.description !== v.description) throw new HttpError(409, '请求编号已使用'); return old; }
     const event = await tx.workflowEvent.create({ data: { ...v, expectedAt, happenedAt: now, createdBy: user.id } });

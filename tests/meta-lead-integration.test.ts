@@ -103,8 +103,13 @@ test('Meta Lead Ads webhook persists and deduplicates real events', async t => {
         assert.equal(customer.companyName, 'Test Furniture Ltd');
         assert.equal(customer.country, 'Sweden');
         assert.equal(customer.quantity, null);
-        assert.ok(customer.assignedAt && customer.firstContactDueAt);
-        assert.equal(await db.task.count({where:{customerId:customer.id,automationKey:{startsWith:'first-contact:'},status:'TODO'}}),1);
+        // Default POOL mode: the lead waits for an administrator to assign it; the first-contact clock starts on assignment.
+        const intakeAdmin = await db.user.findFirstOrThrow({ where: { role: 'ADMIN', isActive: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] });
+        assert.equal(customer.ownerId, intakeAdmin.id);
+        assert.equal(customer.pendingAssignment, true);
+        assert.equal(customer.firstContactDueAt, null);
+        assert.equal(await db.task.count({where:{customerId:customer.id,automationKey:{startsWith:'first-contact:'},status:'TODO'}}),0);
+        assert.equal(await db.customerAssignment.count({where:{customerId:customer.id,reason:{contains:'待分配池'}}}),1);
       } finally {
         await cleanup(leadgenId, customerId);
       }

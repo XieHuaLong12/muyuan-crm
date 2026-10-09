@@ -1,3 +1,4 @@
+import { taskScope } from './task-service';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { Actor,scope } from '@/lib/auth';
@@ -31,7 +32,7 @@ export async function bosOverview(user:Actor,now=new Date()){
   db.quotation.count({where:{customer,sentAt:{gte:previousWindowStart,lt:windowStart}}}),
   db.deal.count({where:{customer,dealDate:{gte:previousWindowStart,lt:windowStart}}}),
   db.quotation.findFirst({where:{status:'SENT',sentAt:{lt:addDays(start,-3)},customer:{...customer,stage:{notIn:['WON','LOST','INVALID','PAUSED']}}},select:{customer:{select:{id:true,name:true}}},orderBy:{sentAt:'asc'}}),
-  db.task.count({where:{deletedAt:null,status:{not:'DONE'},dueDate:{lt:start},...(user.role==='ADMIN'?{}:{createdBy:user.id})}}),
+  db.task.count({where:{...taskScope(user),status:{not:'DONE'},dueDate:{lt:start}}}),
  ]);
  const todayMetrics=metrics.filter(m=>m.metricDate.toISOString().slice(0,10)===today);
  const adSpendToday=sumMoney(todayMetrics.map(m=>({currency:m.campaign.currency,amount:m.spend})));

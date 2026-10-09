@@ -188,7 +188,7 @@ export function commitMeta(input:unknown,user:Actor){
  commitQueue=next.catch(()=>undefined);return next;
 }
 async function executeCommitMeta(input:unknown,user:Actor){
- admin(user);const v=z.object({token:z.string().uuid(),rows:z.array(z.number().int()).min(1).max(500),confirmed:z.literal(true),allowPendingTranslation:z.boolean().default(false)}).parse(input);
+ admin(user);const v=z.object({token:z.string().uuid(),rows:z.array(z.number().int()).min(1).max(500),confirmed:z.literal(true),allowPendingTranslation:z.boolean().default(false),ownerId:z.string().max(191).default('')}).parse(input);
  const existing=await db.metaImportRun.findUnique({where:{id:v.token}});if(existing){if(existing.userId!==user.id)throw new HttpError(403,'无权使用此预览');return existing.resultPayload??JSON.parse(existing.result);}
  const draft=drafts.get(v.token);if(!draft||draft.expires<Date.now())throw new HttpError(409,'预览已过期或服务已重启，请重新上传预览');if(draft.userId!==user.id)throw new HttpError(403,'无权使用此预览');
  const selected=new Set(v.rows),rows=draft.preview.rows.filter(r=>selected.has(r.row));
@@ -196,6 +196,9 @@ async function executeCommitMeta(input:unknown,user:Actor){
  if(rows.some(r=>!['NEW','REPEAT'].includes(r.status)))throw new HttpError(400,'只能确认新客户或已核对的重复留资；请先处理疑似重复和错误');
  if(!v.allowPendingTranslation&&rows.some(r=>r.pending.length))throw new HttpError(400,'部分回答尚未翻译，请先处理或明确选择保留原文待处理');
  const settings=await db.setting.findUniqueOrThrow({where:{id:'system'}});
+ // 导入时可直接指定负责人；留空则按线索分配规则（待分配池或轮流分配）。
+ if(v.ownerId&&!await db.user.findFirst({where:{id:v.ownerId,isActive:true}}))throw new HttpError(400,'负责人不存在或账号已停用');
+ const assignment=await import('./lead-assignment-service');
  return retryTransaction(() => db.$transaction(async tx=>{
   await lockIdentity(tx);
   const done=await tx.metaImportRun.findUnique({where:{id:v.token}});if(done)return done.resultPayload??JSON.parse(done.result);
@@ -207,10 +210,11 @@ async function executeCommitMeta(input:unknown,user:Actor){
    const f=row.values;let customerId=row.targetId;
    if(customerId?.startsWith('row:'))customerId=newIds.get(customerId);
    if(row.status==='REPEAT'&&!customerId)throw new HttpError(400,'同文件中的首次留资未选中，请同时选择首次留资行');
-   if(row.status==='NEW'){const importedStage=stageCodes[f.stage]??'NEW';const importedPurchaseType=purchaseCodes[f.customerType]??'OTHER';
-    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,phone:f.phone,whatsapp:f.whatsapp,whatsappNormalized:normalizePhone(f.whatsapp),email:f.email,country:f.country,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:importedPurchaseType,quantity:/^\d+$/.test(f.quantity)?Number(f.quantity):null,inquiryAt:sourceInstant(Object.entries(row.original).find(([header])=>draft.preview.mapping[header]==='inquiryAt')?.[1])||parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:user.id,currency:settings.currency,stage:importedStage,stageSource:f.stage?'HUMAN':'SYSTEM',isQualified:importedStage==='INVALID'?false:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
+   if(row.status==='NEW'){const importedStage=stageCodes[f.stage]??'NEW';const importedPurchaseType=purchaseCodes[f.customerType]??'OTHER';const intake=v.ownerId?{ownerId:v.ownerId,pending:false,explicit:true}:await assignment.resolveIntakeOwner(tx);
+    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,phone:f.phone,whatsapp:f.whatsapp,whatsappNormalized:normalizePhone(f.whatsapp),email:f.email,country:f.country,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:importedPurchaseType,quantity:/^\d+$/.test(f.quantity)?Number(f.quantity):null,inquiryAt:sourceInstant(Object.entries(row.original).find(([header])=>draft.preview.mapping[header]==='inquiryAt')?.[1])||parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:intake.ownerId,currency:settings.currency,stage:importedStage,stageSource:f.stage?'HUMAN':'SYSTEM',isQualified:importedStage==='INVALID'?false:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
     customerId=c.id;newIds.set(`row:${row.row}`,c.id);result.created++;
     await tx.stageHistory.create({data:{customerId,changedBy:user.id,toStage:importedStage,note:'CSV 智能导入'}});
+    await assignment.enterIntake(tx,customerId,user.id,intake,'CSV 智能导入');
    }else{const old=await tx.customer.findUniqueOrThrow({where:{id:customerId!}});const importedStage=f.stage?stageCodes[f.stage]:undefined;const importedPurchaseType=f.customerType?purchaseCodes[f.customerType]:undefined;const stageChanged=!!importedStage&&old.stage!==importedStage;const purchaseTypeChanged=!!importedPurchaseType&&old.purchaseType!==importedPurchaseType;if(stageChanged||purchaseTypeChanged||importedStage&&old.stageSource!=='HUMAN')await tx.customer.update({where:{id:customerId!},data:{...(importedStage?{stageSource:'HUMAN'}:{}),...(stageChanged?{stage:importedStage,isQualified:importedStage==='INVALID'?false:old.stage==='INVALID'?null:old.isQualified}:{}),...(purchaseTypeChanged?{purchaseType:importedPurchaseType}:{})}});if(stageChanged)await tx.stageHistory.create({data:{customerId:customerId!,fromStage:old.stage,toStage:importedStage!,changedBy:user.id,note:'CSV 智能导入同步阶段'}});result.repeated++;}
    const previous=await tx.leadSubmission.aggregate({where:{customerId:customerId!},_max:{ordinal:true}});
    const ordinal=row.status==='NEW'?1:Math.max(1,previous._max.ordinal??1)+1;
