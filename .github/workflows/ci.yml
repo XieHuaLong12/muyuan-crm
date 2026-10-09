@@ -109,7 +109,7 @@ jobs:
           pnpm exec prisma migrate deploy
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "18"
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM User WHERE id='reuse-sentinel' AND passwordHash='preserve-me' AND isActive=1 AND sessionVersion=0")" = "1"
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('UserSalesTarget','CustomerAssignment','AccountAudit')\")" = "3"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('UserSalesTarget','CustomerAssignment','AccountAudit')")" = "3"
           echo "reused-deployment upgrade path OK"
 
       - name: Seed test database
