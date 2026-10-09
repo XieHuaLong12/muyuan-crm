@@ -7,6 +7,7 @@ import { canonicalEmail, canonicalPhone, metaLeadKey, sourceInstant } from '@/li
 import { lockIdentity, resolveContact, rememberCustomerContacts, recordLeadAttribution } from './contact-identity-service';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { mapLeadFields, type LeadField } from '@/lib/meta-lead-fields';
+import { AD_LEAD_FRESH_HOURS } from '@/lib/constants';
 import { fetchLeadAdSnapshot } from './meta-lead-ad-snapshot';
 
 /**
@@ -133,6 +134,12 @@ export function parseGraphLead(row: unknown) {
   return parsed.success ? parsed.data : null;
 }
 export const GRAPH_LEAD_FIELDS = 'id,created_time,field_data,form_id,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,platform';
+
+/** Leads made by Meta's Lead Ads Testing Tool carry placeholders such as "<test lead: dummy data for email>". */
+export const TEST_LEAD_NOTE = 'Meta 线索测试工具生成的占位数据，没有真实联系方式；能看到这条说明接入已打通';
+export function isTestLead(lead: { field_data: { values: string[] }[] }) {
+  return lead.field_data.some(field => field.values.some(value => /test lead|dummy data/i.test(value)));
+}
 
 /** Failures caused by the lead's own data need a person; everything else is retried automatically. */
 export function needsHuman(error: string) {
@@ -262,7 +269,7 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
         intake=await assignment.resolveIntakeOwner(tx);
         const customer=await tx.customer.create({data:{name:mapped.name,companyName:mapped.companyName,country:mapped.country,
           phone:mapped.phone,whatsapp:mapped.whatsapp,whatsappNormalized:phoneE164?.slice(1)||'',email:emailNormalized||'',
-          source:lead.lead.platform==='instagram'?'INSTAGRAM':'FACEBOOK',sourceDetail:lead.lead.ad_name||'Facebook Ads',purchaseType:mapped.purchaseType,productInterest:mapped.productInterest,
+          source:['ig','instagram'].includes(lead.lead.platform?.toLowerCase()??'')?'INSTAGRAM':'FACEBOOK',sourceDetail:lead.lead.ad_name||'Facebook Ads',purchaseType:mapped.purchaseType,productInterest:mapped.productInterest,
           quantity:mapped.quantity,notes:mapped.notes,stage:'NEW',stageSource:'SYSTEM',ownerId:intake.ownerId,currency:settings.currency,inquiryAt:occurredAt}});
         customerId=customer.id;status='CREATED';
         await tx.stageHistory.create({data:{customerId,toStage:'NEW',changedBy:actor.id,note:'Meta Lead webhook'}});
@@ -280,12 +287,14 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
         if(!submission){const previous=await tx.leadSubmission.aggregate({where:{customerId},_max:{ordinal:true}});
           await tx.leadSubmission.create({data:{customerId,eventKey:metaLeadKey(event.leadgenId),leadId:event.leadgenId,ordinal:(previous._max.ordinal||0)+1,
             occurredAt:occurredAt||new Date(),values:JSON.stringify(mapped),raw:lead.raw,filename:options.prefetched?'Meta 定时补拉':'Meta webhook',fileHash:'',translationPending:'[]'}});
-          repeatSubmission=status==='LINKED';}
+          // A backfilled old submission is recorded but does not ask the owner to call within minutes.
+          repeatSubmission=status==='LINKED'&&(!occurredAt||Date.now()-occurredAt.getTime()<AD_LEAD_FRESH_HOURS*3600_000);}
       }
       // Assignment runs after the lead ledger exists, so a fresh ad lead gets the short first-contact deadline.
       if(status==='CREATED'&&customerId&&intake)await assignment.enterIntake(tx,customerId,actor.id,intake,'Meta 线索表单');
       if(repeatSubmission&&customerId)await assignment.flagRepeatSubmission(tx,customerId,{leadKey:event.leadgenId,formName:formSnapshot?.name||null,adName:lead.lead.ad_name||adSnapshot?.name||null},actor.id);
-      const reason=customerId?'':resolved.status==='AMBIGUOUS'?'AMBIGUOUS：联系方式对应多个客户，等待人工认领':'缺少可确认的手机号或邮箱，等待人工认领';
+      const reason=customerId?'':resolved.status==='AMBIGUOUS'?'AMBIGUOUS：联系方式对应多个客户，等待人工认领'
+        :isTestLead(lead.lead)?`缺少可确认的手机号或邮箱：${TEST_LEAD_NOTE}`:'缺少可确认的手机号或邮箱，等待人工认领';
       const updated=await tx.metaLeadEvent.updateMany({where:{leadgenId:event.leadgenId,status:'PROCESSING',processingStartedAt:claimedAt},
         data:{...attribution,status,customerId,error:reason,processingStartedAt:null,metaCreatedAt:occurredAt,nextAttemptAt:null}});
       if(updated.count!==1)throw new Error('Meta lead processing claim expired');

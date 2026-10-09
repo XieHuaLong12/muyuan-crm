@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { Actor, HttpError } from '@/lib/auth';
 import { dayKey, localDate } from '@/lib/time';
-import { graphGet, graphPost, pagedGraphGet } from '@/lib/meta-graph';
+import { explainGraphError, graphGet, graphPost, pagedGraphGet, type GraphErrorHelp } from '@/lib/meta-graph';
 import { sourceInstant } from '@/lib/contact-identity';
 import { GRAPH_LEAD_FIELDS, handleLeadgenEvent, needsHuman, parseGraphLead, retryDueMetaLeads, shouldSkipProcessedLead } from './meta-lead-service';
 import { formsEnv, syncLeadForms } from './meta-form-service';
@@ -96,9 +96,16 @@ export async function pollMetaLeads(input: { days?: number } = {}): Promise<Poll
     status: result.errors.length || result.failed ? 'PARTIAL' : 'OK', completedAt: new Date(),
     processed: result.fetched, succeeded: result.recovered + result.retried, failed: result.failed,
     error: result.errors.length ? result.errors.map(e => `${e.formId}: ${e.error}`).join('; ').slice(0, 2000) : null,
-    detail: { forms: result.forms, recovered: result.recovered, retried: result.retried, alreadyImported: result.alreadyImported, days: input.days ?? null },
+    detail: { forms: result.forms, recovered: result.recovered, retried: result.retried, alreadyImported: result.alreadyImported, days: input.days ?? null, errors: groupErrors(result.errors) },
   } });
   return result;
+}
+
+/** Forms usually fail for the same reason (one token), so errors are kept once with the number of forms. */
+function groupErrors(errors: { formId: string; error: string }[]) {
+  const groups = new Map<string, number>();
+  for (const e of errors) groups.set(e.error, (groups.get(e.error) ?? 0) + 1);
+  return [...groups].slice(0, 5).map(([error, forms]) => ({ error: error.slice(0, 500), forms }));
 }
 
 /** Scheduled job: catch up on undelivered leads, then retry failures whose back-off has elapsed. */
@@ -132,6 +139,67 @@ export async function subscribePageToLeadgen(user: Actor) {
   return { subscribed: result.data.success !== false, fields: [...fields] };
 }
 
+const LEAD_SCOPES = ['leads_retrieval', 'pages_manage_ads', 'pages_read_engagement', 'pages_show_list'];
+const HUMAN_ERRORS = ['AMBIGUOUS', '缺少可确认', '回收站'].map(text => ({ error: { contains: text } }));
+type TokenInfo = { app_id?: string; type?: string; is_valid?: boolean; expires_at?: number; scopes?: string[]; granular_scopes?: { scope: string; target_ids?: string[] }[] };
+
+/** What the token is allowed to do, from Meta's token debugger (inspected with the app token when the secret is set). */
+async function tokenPermissions(token: string, pageId: string) {
+  const appId = process.env.META_APP_ID?.trim(), secret = process.env.META_APP_SECRET?.trim();
+  const result = await graphGet<{ data?: TokenInfo }>('debug_token', appId && secret ? `${appId}|${secret}` : token, { input_token: token });
+  if (!result.ok) return { ok: false as const, error: result.error };
+  const info = result.data.data ?? {};
+  const scopes = info.scopes ?? [];
+  const leadPages = info.granular_scopes?.find(g => g.scope === 'leads_retrieval')?.target_ids;
+  return {
+    ok: true as const, type: info.type ?? null, valid: info.is_valid !== false,
+    appMatches: !appId || !info.app_id || info.app_id === appId,
+    expiresAt: info.expires_at ? new Date(info.expires_at * 1000).toISOString() : null,
+    missing: LEAD_SCOPES.filter(scope => !scopes.includes(scope)),
+    // A granular grant lists the Pages it covers; without a list it covers every Page the token can see.
+    pageGranted: pageId && leadPages?.length ? leadPages.includes(pageId) : null,
+  };
+}
+
+/** Reads one real lead the way the webhook and the poll do, so a permission problem shows up with Meta's own reason. */
+async function leadReadChecks(token: string) {
+  const [failed, form] = await Promise.all([
+    db.metaLeadEvent.findFirst({ where: { status: 'FAILED', NOT: HUMAN_ERRORS }, orderBy: { createdAt: 'desc' }, select: { leadgenId: true } }),
+    db.metaLeadForm.findFirst({ where: { status: 'ACTIVE' }, orderBy: { leadsCount: 'desc' }, select: { formId: true, name: true } }),
+  ]);
+  const probes: { target: string; path: string; params: Record<string, string> }[] = [
+    ...(failed ? [{ target: `最近失败的线索 ${failed.leadgenId}`, path: failed.leadgenId, params: { fields: 'id' } }] : []),
+    ...(form ? [{ target: `表单「${form.name || form.formId}」的线索列表`, path: `${form.formId}/leads`, params: { fields: 'id', limit: '1' } }] : []),
+  ];
+  return Promise.all(probes.map(async probe => {
+    const result = await graphGet<unknown>(probe.path, token, probe.params);
+    return result.ok ? { target: probe.target, ok: true as const } : { target: probe.target, ok: false as const, error: result.error };
+  }));
+}
+
+/** Errors of the latest poll, one entry per distinct reason (older runs only kept the joined text). */
+function pollErrorsOf(job: { error: string | null; detail: unknown }) {
+  const stored = (job.detail as { errors?: unknown } | null)?.errors;
+  if (Array.isArray(stored)) return stored as { error: string; forms: number }[];
+  if (!job.error) return [];
+  return groupErrors(job.error.split('; ').map(part => ({ formId: '', error: part.replace(/^[^:]*: /, '') })));
+}
+
+type Problem = { cause: string; fix: string[]; sources: string[]; errors: string[] };
+/** Groups failures that share a cause, so one bad token is reported once with every place it shows up. */
+function groupProblems(rows: { source: string; error: string }[]) {
+  const groups = new Map<string, Problem>();
+  for (const row of rows) {
+    const help: GraphErrorHelp | null = explainGraphError(row.error);
+    const key = help?.cause ?? row.error;
+    const group = groups.get(key) ?? { cause: help?.cause ?? '线索处理失败', fix: help?.fix ?? ['点「立即重试失败线索」；仍然失败时，把下面的 Meta 返回内容发给开发排查。'], sources: [], errors: [] };
+    group.sources.push(row.source);
+    if (!group.errors.includes(row.error) && group.errors.length < 3) group.errors.push(row.error);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
 function percentile(values: number[], p: number) {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -158,11 +226,10 @@ export async function metaLeadHealth(user: Actor, options: { live?: boolean } = 
     db.syncJob.findFirst({ where: { provider: 'META', jobType: 'LEAD_POLL' }, orderBy: { startedAt: 'desc' } }),
     db.metaLeadEvent.groupBy({ by: ['status', 'receivedVia'], where: { createdAt: { gte: todayStart } }, _count: { _all: true } }),
     db.metaLeadEvent.count({ where: { receivedVia: 'POLL', createdAt: { gte: dayAgo } } }),
-    db.metaLeadEvent.findMany({ where: { status: 'FAILED', OR: [{ error: { contains: 'AMBIGUOUS' } }, { error: { contains: '缺少可确认' } }, { error: { contains: '回收站' } }] },
-      orderBy: { createdAt: 'desc' }, take: 20, select: { leadgenId: true, formId: true, error: true, createdAt: true } }),
-    db.metaLeadEvent.count({ where: { status: 'FAILED', OR: [{ error: { contains: 'AMBIGUOUS' } }, { error: { contains: '缺少可确认' } }, { error: { contains: '回收站' } }] } }),
-    db.metaLeadEvent.count({ where: { status: { in: ['FAILED', 'RECEIVED'] }, NOT: [{ error: { contains: 'AMBIGUOUS' } }, { error: { contains: '缺少可确认' } }, { error: { contains: '回收站' } }] } }),
-    db.metaLeadEvent.findFirst({ where: { status: 'FAILED' }, orderBy: { createdAt: 'desc' }, select: { error: true, createdAt: true } }),
+    db.metaLeadEvent.findMany({ where: { status: 'FAILED', OR: HUMAN_ERRORS }, orderBy: { createdAt: 'desc' }, take: 20, select: { leadgenId: true, formId: true, error: true, createdAt: true } }),
+    db.metaLeadEvent.count({ where: { status: 'FAILED', OR: HUMAN_ERRORS } }),
+    db.metaLeadEvent.count({ where: { status: { in: ['FAILED', 'RECEIVED'] }, NOT: HUMAN_ERRORS } }),
+    db.metaLeadEvent.findFirst({ where: { status: 'FAILED', NOT: HUMAN_ERRORS }, orderBy: { createdAt: 'desc' }, select: { error: true, createdAt: true } }),
     db.metaLeadEvent.findMany({ where: { status: { in: ['CREATED', 'LINKED'] }, metaCreatedAt: { not: null }, createdAt: { gte: weekAgo } }, select: { createdAt: true, metaCreatedAt: true } }),
     db.customer.count({ where: { deletedAt: null, pendingAssignment: true } }),
     db.customer.findFirst({ where: { deletedAt: null, pendingAssignment: true }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }),
@@ -171,28 +238,43 @@ export async function metaLeadHealth(user: Actor, options: { live?: boolean } = 
   ]);
   const count = (filter: (row: (typeof today)[number]) => boolean) => today.filter(filter).reduce((n, row) => n + row._count._all, 0);
   const latencies = latencyRows.map(r => Math.max(0, (r.createdAt.getTime() - r.metaCreatedAt!.getTime()) / 1000));
-  let live: null | { token: { ok: boolean; pageName?: string; pageMatches?: boolean; error?: string }; subscription: Awaited<ReturnType<typeof pageSubscription>> | null } = null;
+  let live: null | {
+    token: { ok: boolean; pageName?: string; pageMatches?: boolean; error?: string };
+    permissions: Awaited<ReturnType<typeof tokenPermissions>>;
+    leadRead: Awaited<ReturnType<typeof leadReadChecks>>;
+    subscription: Awaited<ReturnType<typeof pageSubscription>> | null;
+  } = null;
   const { token, pageId } = formsEnv();
   if (options.live && token) {
-    const me = await graphGet<{ id?: string; name?: string }>('me', token, { fields: 'id,name' });
-    live = {
-      token: me.ok ? { ok: true, pageName: me.data.name, pageMatches: !pageId || me.data.id === pageId } : { ok: false, error: me.error },
-      subscription: pageId ? await pageSubscription(token, pageId) : null,
-    };
+    const [me, permissions, leadRead, subscription] = await Promise.all([
+      graphGet<{ id?: string; name?: string }>('me', token, { fields: 'id,name' }),
+      tokenPermissions(token, pageId),
+      leadReadChecks(token),
+      pageId ? pageSubscription(token, pageId) : Promise.resolve(null),
+    ]);
+    live = { token: me.ok ? { ok: true, pageName: me.data.name, pageMatches: !pageId || me.data.id === pageId } : { ok: false, error: me.error }, permissions, leadRead, subscription };
   }
+  const problems = groupProblems([
+    ...(latestFailure ? [{ source: `线索入库（${retrying} 条等待自动重试）`, error: latestFailure.error }] : []),
+    ...(lastPoll?.status === 'PARTIAL' ? pollErrorsOf(lastPoll).map(e => ({ source: `定时补拉（${e.forms} 个表单）`, error: e.error })) : []),
+    ...(live?.leadRead ?? []).flatMap(check => check.ok ? [] : [{ source: `检测连接：读取${check.target}`, error: check.error }]),
+  ]);
   const alerts: string[] = [];
   const missing = Object.entries(env).filter(([key, ok]) => !ok && key !== 'META_APP_ID').map(([key]) => key);
   if (missing.length) alerts.push(`缺少环境变量：${missing.join('、')}`);
   if (!lastPoll || now.getTime() - lastPoll.startedAt.getTime() > POLL_STALE_MS) alerts.push('定时补拉没有在运行：请在 Hostinger 定时任务中每 5 分钟调用 /api/cron/meta-leads');
   if (recovered24h) alerts.push(`最近 24 小时有 ${recovered24h} 条线索是定时补拉补回的，Webhook 可能没有送达，请做一次连接检测`);
-  if (latestFailure && /TOKEN_EXPIRED|code 190/.test(latestFailure.error)) alerts.push('主页 Token 已失效，线索无法读取，请更换 META_PAGE_ACCESS_TOKEN');
   if (humanCount) alerts.push(`${humanCount} 条线索缺少联系方式或匹配到多个客户，需要人工认领`);
-  if (live?.token.ok === false) alerts.push('主页 Token 无法使用，请检查是否过期或被撤销');
+  if (live?.token.ok === false) alerts.push(`主页 Token 检测失败：${explainGraphError(live.token.error ?? '')?.cause ?? '请检查是否过期或被撤销'}`);
   if (live?.token.pageMatches === false) alerts.push('META_PAGE_ACCESS_TOKEN 不属于 META_PAGE_ID 对应的主页');
+  const permissions = live?.permissions.ok ? live.permissions : null;
+  if (permissions && !permissions.valid) alerts.push('Meta 显示这个 Token 已失效，请重新生成 META_PAGE_ACCESS_TOKEN');
+  if (permissions?.missing.includes('leads_retrieval')) alerts.push('Token 没有 leads_retrieval 权限，读不到线索内容：重新生成 Token 时勾选 leads_retrieval');
+  if (permissions?.pageGranted === false) alerts.push('Token 的 leads_retrieval 权限没有包含这个主页：重新生成 Token 时选中该主页');
   if (live?.subscription && live.subscription.ok && !live.subscription.leadgen) alerts.push('Facebook 主页没有为本应用订阅 leadgen，Webhook 不会推送；可点击「订阅 leadgen」');
   const byForm = new Map(formCounts.map(row => [row.formId, row._count._all]));
   return {
-    env, alerts, live,
+    env, alerts, problems, live,
     adLeadFirstContactMinutes: settings.adLeadFirstContactMinutes,
     lastWebhookAt: lastWebhook?.createdAt.toISOString() ?? null,
     lastPoll: lastPoll ? { at: lastPoll.startedAt.toISOString(), status: lastPoll.status, detail: lastPoll.detail, error: lastPoll.error } : null,
