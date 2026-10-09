@@ -1,5 +1,7 @@
 > 当前 LVANJU BOS 使用 Next.js 15.5 / React 19 / Prisma 6.19 / MySQL。下面的 V1 SQLite 说明保留作历史参考，当前部署请以 [身份链实现与部署报告](docs/IDENTITY_CHAIN.md) 和 `.env.example` 为准。
 
+自动进入的线索先进入待分配池（或按设置轮流分给销售），管理员在客户列表批量分配 / 转交；成交与跟进录错可由管理员更正或作废。详见 [角色工作空间](docs/ROLE_WORKSPACES.md) 的「客户分配、更正与性能修订」。
+
 管理员与销售现使用两套工作空间：管理员管理团队业绩、个人月目标、首联时效和销售账号；销售处理自己的客户、任务和业绩。新分配客户有首联任务，停用/密码重置撤销旧登录。入口、增量迁移和统计口径见 [角色工作空间](docs/ROLE_WORKSPACES.md)。
 
 当前已实现 Meta CSV / webhook → 统一 Lead 账本 → E.164 与历史号码别名 → CRM Customer → 分账号 WhatsApp Conversation → 真实 Quote / Deal / Order → 固定广告归因 → 可重试反馈台账。AI 是增量建议，人工修正独立保存，原始消息和订单来源保留。

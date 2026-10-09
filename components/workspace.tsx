@@ -1,33 +1,151 @@
 'use client';
-import { useCallback,useEffect,useMemo,useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Plus } from 'lucide-react';
 import { WorkspaceShell } from './workspace/WorkspaceShell';
-import { usePathname,useSearchParams,useRouter } from 'next/navigation';
-import { LayoutDashboard,Users,Filter,CalendarCheck,Target,ChartNoAxesCombined,Settings as SettingsIcon,Plus,Search,ChevronLeft,ChevronRight } from 'lucide-react';
 import { api } from '@/lib/client';
-import { inquiryDate } from '@/lib/customer-date';
-import { Bootstrap,Customer,Dashboard,Target as TargetType } from '@/lib/types';
-import { sources } from '@/lib/constants';
-import { dayKey,periodRange,Period } from '@/lib/time';
-import { CustomerForm,FollowForm,DealForm,Options } from './forms';
-import { CustomerTable } from './customer-table';
-import { BatchCustomerTable } from './customer-batch';
+import { Bootstrap, Customer, Dashboard, Deal, Target as TargetType } from '@/lib/types';
+import { CustomerForm, FollowForm, DealForm, AssignDialog, ReasonDialog } from './forms';
+import { CustomerList, rememberedListUrl } from './customer-list';
 import { CustomerDetail } from './customer-detail';
-import { Overview,Funnel,Analytics } from './dashboard';
-import { Targets,Settings } from './management';
+import { Targets, Settings } from './management';
 import { Dialog } from './ui/dialog';
 import { SmartImport } from './smart-import';
-const nav=[['/','总览',LayoutDashboard],['/customers','客户 CRM',Users],['/funnel','销售漏斗',Filter],['/tasks','跟进任务',CalendarCheck],['/targets','目标管理',Target],['/analytics','数据分析',ChartNoAxesCombined],['/settings','设置',SettingsIcon]] as const;
-export function Workspace({initialBoot,pageOverride,embedded}:{initialBoot?:Bootstrap;pageOverride?:string;embedded?:boolean}={}){const pathname=usePathname(),params=useSearchParams(),router=useRouter();const page=pageOverride||pathname.split('/')[1]||'overview',customerId=page==='customers'?pathname.split('/')[2]:undefined;const [boot,setBoot]=useState<Bootstrap|undefined>(initialBoot),[rows,setRows]=useState<Customer[]>([]),[detail,setDetail]=useState<Customer>(),[data,setData]=useState<Dashboard>(),[annual,setAnnual]=useState<Dashboard>(),[targets,setTargets]=useState<TargetType[]>([]),[period,setPeriod]=useState<Period>('MONTH'),[date,setDate]=useState(dayKey(new Date())),[currency,setCurrency]=useState('CNY'),[year,setYear]=useState(new Date().getFullYear()),[revision,setRevision]=useState(0),[error,setError]=useState(''),[loading,setLoading]=useState(true),[toast,setToast]=useState('');const [edit,setEdit]=useState<Customer|null|undefined>(),[follow,setFollow]=useState<Customer>(),[deal,setDeal]=useState<Customer>(),[remove,setRemove]=useState(false),[smartImport,setSmartImport]=useState(false),[analyzingAi,setAnalyzingAi]=useState(false);
-const [search,setSearch]=useState(''),[stage,setStage]=useState(params.get('stage')||''),[country,setCountry]=useState(''),[source,setSource]=useState(''),[owner,setOwner]=useState(''),[product,setProduct]=useState(''),[createdFrom,setCreatedFrom]=useState(''),[createdTo,setCreatedTo]=useState(''),[wonFrom,setWonFrom]=useState(''),[wonTo,setWonTo]=useState(''),[taskTab,setTaskTab]=useState('today'),[sort,setSort]=useState({key:'priority',asc:true}),[index,setIndex]=useState(1),[pageSize,setPageSize]=useState(10);
-useEffect(()=>{if(initialBoot)return;api<Bootstrap>('bootstrap').then(b=>{setBoot(b);setCurrency(b.settings.currency);}).catch(e=>setError(e.message));},[initialBoot]);
-useEffect(()=>{setStage(params.get('stage')||'');setIndex(1);},[params]);
-useEffect(()=>{if(!boot)return;let cancelled=false;setLoading(true);setError('');const run=async()=>{try{if(page==='customers'&&customerId){const d=await api<Customer>(`customers/${customerId}`);if(!cancelled)setDetail(d);}else if(page==='customers'||page==='tasks'){const list=await api<Customer[]>('customers');if(!cancelled)setRows(list);}else if(['overview','funnel','analytics'].includes(page)){const d=await api<Dashboard>(`dashboard?period=${period}&date=${date}&currency=${currency}`);if(!cancelled)setData(d);}else if(page==='targets'){const [t,a]=await Promise.all([api<TargetType[]>(`targets?year=${year}`),api<Dashboard>(`dashboard?period=YEAR&date=${year}-01-01&currency=${currency}`)]);if(!cancelled){setTargets(t);setAnnual(a);}}}catch(e){if(!cancelled)setError((e as Error).message);}finally{if(!cancelled)setLoading(false);}};void run();return ()=>{cancelled=true;};},[boot,page,customerId,period,date,currency,year,revision]);
-useEffect(()=>{if(toast){const timer=setTimeout(()=>setToast(''),3500);return ()=>clearTimeout(timer);}},[toast]);
-const saved=useCallback(()=>{setEdit(undefined);setFollow(undefined);setDeal(undefined);setRevision(v=>v+1);setToast('已保存，数据已更新');},[]);
-const tz=boot?.settings.timezone??'Asia/Shanghai',today=dayKey(new Date(),tz);
-const filtered=useMemo(()=>{const range=params.get('period')&&params.get('date')?periodRange(params.get('period') as Period,params.get('date')!,tz):null;const due=(c:Customer)=>c.nextFollowUpAt?dayKey(c.nextFollowUpAt,tz):'';let result=rows.filter(c=>{const key=due(c),created=dayKey(inquiryDate(c),tz);if(page==='tasks'){if(!key)return false;if(taskTab==='today'&&key!==today)return false;if(taskTab==='overdue'&&key>=today)return false;if(taskTab==='future'&&(key<=today||Date.parse(key)>Date.parse(today)+7*86400000))return false;}if(stage==='pending'&&(!key||key>today))return false;if(stage&&stage!=='pending'&&c.stage!==stage)return false;if(country&&c.country!==country||source&&c.source!==source||owner&&c.ownerId!==owner||product&&!`${c.productInterest} ${c.productModel}`.toLowerCase().includes(product.toLowerCase()))return false;if(search&&!`${c.name} ${c.companyName} ${c.whatsapp} ${c.email} ${c.phone}`.toLowerCase().includes(search.toLowerCase()))return false;if(createdFrom&&created<createdFrom||createdTo&&created>createdTo)return false;if((wonFrom||wonTo)&&!c.deals.some(d=>{const k=dayKey(d.dealDate,tz);return (!wonFrom||k>=wonFrom)&&(!wonTo||k<=wonTo);}))return false;if(range&&(new Date(inquiryDate(c))<range.start||new Date(inquiryDate(c))>=range.end))return false;if(params.get('qualified')==='true'&&c.isQualified!==true)return false;const b=params.get('behavior');if(b==='quoted'&&(!c.quotedAt&&c.stage!=='QUOTED'||c.isQualified!==true))return false;if(b==='replied'&&['NEW','CONTACTED','INVALID'].includes(c.stage))return false;;if(b==='won'&&(!c.deals.length||c.isQualified!==true))return false;return true;});const priority=(c:Customer)=>due(c)===today?0:due(c)&&due(c)<today?1:2;result=result.sort((a,b)=>{if(sort.key==='priority')return priority(a)-priority(b)||Date.parse(inquiryDate(b))-Date.parse(inquiryDate(a));const get=(c:Customer)=>sort.key==='inquiryAt'?Date.parse(inquiryDate(c)):sort.key==='owner'?c.owner.name:sort.key==='estimatedOrderValue'?Number(c.estimatedOrderValue):String(c[sort.key as keyof Customer]??'');const av=get(a),bv=get(b);return (typeof av==='number'&&typeof bv==='number'?av-bv:String(av).localeCompare(String(bv),'zh-CN'))*(sort.asc?1:-1);});return result;},[rows,params,tz,today,page,taskTab,stage,country,source,owner,product,search,createdFrom,createdTo,wonFrom,wonTo,sort]);
-if(!boot)return <div className="loading">{error||'正在打开工作台…'}</div>;
-const select=(label:string,value:string,set:(v:string)=>void,values:string[]|Record<string,string>)=><select aria-label={label} value={value} onChange={e=>{set(e.target.value);setIndex(1);}}><option value="">全部{label}</option>{Array.isArray(values)?values.map(v=><option key={v}>{v}</option>):<Options items={values}/>}</select>;
-const title=nav.find(n=>n[0]===`/${page}`)?.[1]??(page==='overview'?'总览':'客户详情');
-return <WorkspaceShell boot={boot} embedded={embedded}><div className="v3-legacy">{!customerId&&<div className="page-heading"><div><h1>{page==='overview'?`${boot.user.name}，今天好`:title}</h1><p className="muted">{page==='overview'?'每一位客户的进展，每一笔生意的增长。':page==='customers'?'集中管理询盘，把握每一次成交机会。':page==='tasks'?'及时联系，让每一次沟通都有下一步。':page==='funnel'?'从新询盘到成交，看清客户转化的每一步。':page==='targets'?'让年度计划，落到每个月和每一周。':page==='analytics'?'了解增长趋势，找到更有效的获客渠道。':'管理团队与公司的工作偏好。'}</p></div>{['overview','customers'].includes(page)&&<div className="actions"><button className="primary" onClick={()=>setEdit(null)}><Plus size={17}/>新建客户</button>{boot.user.role==='ADMIN'&&<button onClick={()=>setSmartImport(true)}>智能导入</button>}</div>}</div>}{['overview','funnel','analytics'].includes(page)&&<div className="period-toolbar"><div className="segmented">{(['WEEK','MONTH','YEAR'] as Period[]).map((p,i)=><button key={p} className={period===p?'active':''} onClick={()=>setPeriod(p)}>{['本周','本月','本年'][i]}</button>)}</div><div className="actions"><input aria-label="统计日期" type="date" value={date} onChange={e=>e.target.value&&setDate(e.target.value)}/><select aria-label="统计币种" value={currency} onChange={e=>setCurrency(e.target.value)}><Options items={{CNY:'人民币 CNY',USD:'美元 USD',EUR:'欧元 EUR'}}/></select></div></div>}{error&&<div role="alert" className="error-banner">{error}<button onClick={()=>setRevision(v=>v+1)}>重试</button></div>}{loading?<div className="loading">正在加载数据…</div>:<>{page==='overview'&&data&&<Overview data={data} tz={tz}/ >}{page==='funnel'&&data&&<section className="card funnel-page"><div className="card-title"><h3>销售转化漏斗</h3><span className="muted">点击阶段查看当前阶段客户</span></div><Funnel data={data}/><p className="footnote">按本期新增客户的真实历史行为统计。跳过阶段时不补造联系或回复记录，因此个别转化率可能超过 100%。</p></section>}{page==='analytics'&&data&&<Analytics data={data}/ >}{(page==='customers'&&!customerId||page==='tasks')&&<section className="card customer-card"><div className="tabs">{(page==='tasks'?[['today','今日跟进'],['overdue','超时未跟进'],['future','未来7天'],['all','全部']]:[['','全部客户'],['NEW','新客户'],['pending','待跟进'],['QUOTED','已报价'],['FOLLOW_UP','跟进中'],['WON','已成交'],['PAUSED','暂不需要'],['INVALID','无效客户']]).map(([k,l])=><button key={k} className={(page==='tasks'?taskTab===k:stage===k)?'active':''} onClick={()=>{if(page==='tasks'){setTaskTab(k);setStage('');}else setStage(k);setIndex(1);}}>{l}</button>)}</div><div className="filters"><div className="search"><Search size={17}/><input placeholder="搜索姓名、公司、联系方式…" value={search} onChange={e=>{setSearch(e.target.value);setIndex(1);}}/></div>{select('国家',country,setCountry,Array.from(new Set(rows.map(c=>c.country))).filter(Boolean))}{select('来源',source,setSource,sources)}{select('负责人',owner,setOwner,Object.fromEntries(boot.users.map(u=>[u.id,u.name])))}<input aria-label="产品筛选" placeholder="产品 / 型号" value={product} onChange={e=>{setProduct(e.target.value);setIndex(1);}}/><details><summary>日期筛选</summary><div className="date-filters"><label>询盘起始<input type="date" value={createdFrom} onChange={e=>{setCreatedFrom(e.target.value);setIndex(1);}}/></label><label>询盘截止<input type="date" value={createdTo} onChange={e=>{setCreatedTo(e.target.value);setIndex(1);}}/></label><label>成交起始<input type="date" value={wonFrom} onChange={e=>{setWonFrom(e.target.value);setIndex(1);}}/></label><label>成交截止<input type="date" value={wonTo} onChange={e=>{setWonTo(e.target.value);setIndex(1);}}/></label></div></details><button className="text-button" onClick={()=>{setSearch('');setStage('');setCountry('');setSource('');setOwner('');setProduct('');setCreatedFrom('');setCreatedTo('');setWonFrom('');setWonTo('');setIndex(1);router.push(page==='tasks'?'/tasks':'/customers');}}>重置</button></div>{params.get('period')&&<div className="filter-hint">已按 {params.get('date')} 所在周期新增客户筛选</div>}{page==='customers'?<BatchCustomerTable key={JSON.stringify([search,stage,country,source,owner,product,createdFrom,createdTo,wonFrom,wonTo,params.toString(),revision])} rows={filtered.slice((index-1)*pageSize,index*pageSize)} tz={tz} onFollow={setFollow} onSort={key=>setSort({key,asc:sort.key===key?!sort.asc:true})} admin={boot.user.role==='ADMIN'} onChanged={()=>{setIndex(1);saved();}}/>:<CustomerTable rows={filtered.slice((index-1)*pageSize,index*pageSize)} tz={tz} onFollow={setFollow} onSort={key=>setSort({key,asc:sort.key===key?!sort.asc:true})}/>}<div className="pagination"><span>共 {filtered.length} 位客户</span><div><label className="page-size">每页<select aria-label="每页显示客户数量" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setIndex(1);}}><option value={10}>10</option><option value={50}>50</option><option value={100}>100</option></select>位</label><button aria-label="上一页" disabled={index<=1} onClick={()=>setIndex(index-1)}><ChevronLeft size={16}/></button><span>{index} / {Math.max(1,Math.ceil(filtered.length/pageSize))}</span><button aria-label="下一页" disabled={index>=Math.ceil(filtered.length/pageSize)} onClick={()=>setIndex(index+1)}><ChevronRight size={16}/></button></div></div></section>}{customerId&&detail&&<CustomerDetail onStageChange={stage=>setDetail(current=>current&&current.stage!==stage?{...current,stage}:current)} customer={detail} boot={boot} onEdit={()=>setEdit(detail)} onFollow={()=>setFollow(detail)} onDeal={()=>setDeal(detail)} onDelete={()=>setRemove(true)} analyzingAi={analyzingAi} onAnalyze={async()=>{try{setAnalyzingAi(true);setError('');await api(`customers/${detail.id}/analyze`,'POST');setToast('DeepSeek 客户分析已更新');setRevision(v=>v+1);}catch(e){setError((e as Error).message);}finally{setAnalyzingAi(false);}}}/ >}{page==='targets'&&<Targets targets={targets} boot={boot} year={year} onYear={setYear} onSaved={saved} annual={annual}/ >}{page==='settings'&&<Settings boot={boot} onSaved={async()=>{setBoot(await api<Bootstrap>('bootstrap'));saved();}}/>}</>}</div>{smartImport&&<SmartImport onClose={()=>setSmartImport(false)} onSaved={saved}/ >}{edit!==undefined&&<CustomerForm customer={edit??undefined} boot={boot} onClose={()=>setEdit(undefined)} onSaved={id=>{saved();if(!edit)router.push(`/customers/${id}`);}}/>}{follow&&<FollowForm customer={follow} timezone={tz} onClose={()=>setFollow(undefined)} onSaved={saved}/ >}{deal&&<DealForm customer={deal} timezone={tz} onClose={()=>setDeal(undefined)} onSaved={saved}/ >}{remove&&detail&&<Dialog open onClose={()=>setRemove(false)} title="删除客户"><p>确定删除 {detail.name}？该客户和相关订单将退出日常列表与统计，数据库记录仍保留。</p><div className="form-actions"><button onClick={()=>setRemove(false)}>取消</button><button className="danger" onClick={async()=>{try{await api(`customers/${detail.id}`,'DELETE');setRemove(false);router.push('/customers');saved();}catch(e){setError((e as Error).message);setRemove(false);}}}>确认删除</button></div></Dialog>}{toast&&<div className="toast" role="status">✓ {toast}</div>}</WorkspaceShell>;}
 
+type Page = 'customers' | 'targets' | 'settings';
+
+/** Customer list and profile, company targets and settings inside the BOS shell. */
+export function Workspace({ initialBoot, pageOverride, embedded }: { initialBoot?: Bootstrap; pageOverride?: Page; embedded?: boolean } = {}) {
+  const pathname = usePathname(), router = useRouter();
+  const page: Page = pageOverride || (pathname.split('/')[1] as Page) || 'customers';
+  const customerId = page === 'customers' ? pathname.split('/')[2] : undefined;
+  const [boot, setBoot] = useState<Bootstrap | undefined>(initialBoot);
+  const [detail, setDetail] = useState<Customer>();
+  const [targets, setTargets] = useState<TargetType[]>([]), [annual, setAnnual] = useState<Dashboard>();
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [revision, setRevision] = useState(0), [error, setError] = useState(''), [loading, setLoading] = useState(true), [toast, setToast] = useState('');
+  const [edit, setEdit] = useState<Customer | null | undefined>(), [follow, setFollow] = useState<Customer>();
+  const [deal, setDeal] = useState<{ customer: Customer; deal?: Deal }>();
+  const [dialog, setDialog] = useState<'remove' | 'assign' | 'import' | null>(null);
+  const [voiding, setVoiding] = useState<Deal>();
+  const [analyzingAi, setAnalyzingAi] = useState(false);
+  const [backHref, setBackHref] = useState('/customers');
+
+  useEffect(() => {
+    if (initialBoot) return;
+    api<Bootstrap>('bootstrap').then(setBoot).catch(e => setError(e.message));
+  }, [initialBoot]);
+  useEffect(() => { setBackHref(rememberedListUrl()); }, [customerId]);
+  useEffect(() => {
+    if (!boot || (page === 'customers' && !customerId) || page === 'settings') { setLoading(false); return; }
+    let cancelled = false;
+    setLoading(true); setError('');
+    (async () => {
+      try {
+        if (page === 'customers' && customerId) {
+          const d = await api<Customer>(`customers/${customerId}`);
+          if (!cancelled) setDetail(d);
+        } else if (page === 'targets') {
+          const [t, a] = await Promise.all([
+            api<TargetType[]>(`targets?year=${year}`),
+            api<Dashboard>(`dashboard?period=YEAR&date=${year}-01-01&currency=${boot.settings.currency}`),
+          ]);
+          if (!cancelled) { setTargets(t); setAnnual(a); }
+        }
+      } catch (e) {
+        if (!cancelled) setError((e as Error).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [boot, page, customerId, year, revision]);
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(''), 3500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const saved = useCallback((message = '已保存，数据已更新') => {
+    setEdit(undefined); setFollow(undefined); setDeal(undefined); setDialog(null); setVoiding(undefined);
+    setRevision(v => v + 1);
+    setToast(message);
+  }, []);
+
+  if (!boot) return <div className="loading">{error || '正在打开工作台…'}</div>;
+  const admin = boot.user.role === 'ADMIN';
+  const tz = boot.settings.timezone;
+  const heading = page === 'customers'
+    ? { title: admin ? '客户管理' : '我的客户', description: admin ? '集中管理询盘，分配客户并把握每一次成交机会。' : '维护你负责的客户资料、报价与成交。' }
+    : page === 'targets' ? { title: '目标管理', description: '让年度计划，落到每个月和每一周。' }
+      : { title: '系统设置', description: '管理团队与公司的工作偏好。' };
+
+  return (
+    <WorkspaceShell boot={boot} embedded={embedded}>
+      <div className="v3-legacy">
+        {!customerId && (
+          <div className="page-heading">
+            <div><h1>{heading.title}</h1><p className="muted">{heading.description}</p></div>
+            {page === 'customers' && (
+              <div className="actions">
+                <button className="primary" onClick={() => setEdit(null)}><Plus size={17} />新建客户</button>
+                {admin && <button onClick={() => setDialog('import')}>智能导入</button>}
+              </div>
+            )}
+          </div>
+        )}
+        {error && <div role="alert" className="error-banner">{error}<button onClick={() => setRevision(v => v + 1)}>重试</button></div>}
+        {page === 'customers' && !customerId && <CustomerList boot={boot} revision={revision} onFollow={setFollow} onChanged={saved} />}
+        {loading && (customerId || page === 'targets') ? <div className="loading">正在加载数据…</div> : (
+          <>
+            {customerId && detail && (
+              <CustomerDetail customer={detail} boot={boot} backHref={backHref}
+                onEdit={() => setEdit(detail)} onFollow={() => setFollow(detail)} onDeal={() => setDeal({ customer: detail })}
+                onEditDeal={d => setDeal({ customer: detail, deal: d })} onVoidDeal={setVoiding}
+                onDelete={() => setDialog('remove')} onAssign={() => setDialog('assign')} onChanged={saved}
+                analyzingAi={analyzingAi}
+                onAnalyze={async () => {
+                  try {
+                    setAnalyzingAi(true); setError('');
+                    await api(`customers/${detail.id}/analyze`, 'POST');
+                    saved('DeepSeek 客户分析已更新');
+                  } catch (e) { setError((e as Error).message); } finally { setAnalyzingAi(false); }
+                }} />
+            )}
+            {page === 'targets' && <Targets targets={targets} boot={boot} year={year} onYear={setYear} onSaved={() => saved()} annual={annual} />}
+            {page === 'settings' && <Settings boot={boot} onSaved={async () => { setBoot(await api<Bootstrap>('bootstrap')); saved(); }} />}
+          </>
+        )}
+      </div>
+      {dialog === 'import' && <SmartImport boot={boot} onClose={() => setDialog(null)} onSaved={() => saved('导入完成')} />}
+      {edit !== undefined && (
+        <CustomerForm customer={edit ?? undefined} boot={boot} onClose={() => setEdit(undefined)}
+          onSaved={id => { saved(); if (!edit) router.push(`/customers/${id}`); }} />
+      )}
+      {follow && <FollowForm customer={follow} timezone={tz} onClose={() => setFollow(undefined)} onSaved={() => saved('跟进已记录')} />}
+      {deal && <DealForm customer={deal.customer} deal={deal.deal} timezone={tz} onClose={() => setDeal(undefined)} onSaved={() => saved(deal.deal ? '成交已更正' : '成交已登记')} />}
+      {dialog === 'assign' && detail && (
+        <AssignDialog boot={boot} customers={[detail]} onClose={() => setDialog(null)} onAssigned={message => saved(message)} />
+      )}
+      {voiding && detail && (
+        <ReasonDialog title={`作废成交 · ${voiding.orderNumber || '未填写订单号'}`} danger confirmText="确认作废" label="作废原因"
+          description={<p>成交将从业绩统计中移除，关联订单变为「已取消」，广告平台不会再回传这笔购买。{detail.deals.length === 1 ? '客户会回到成交前的阶段。' : ''}操作会留下记录。</p>}
+          onClose={() => setVoiding(undefined)}
+          onConfirm={async reason => { await api(`customers/${detail.id}/deals/${voiding.id}/void`, 'POST', { reason }); saved('成交已作废'); }} />
+      )}
+      {dialog === 'remove' && detail && (
+        <Dialog open onClose={() => setDialog(null)} title="删除客户">
+          <p>确定删除 {detail.name}？客户将移入回收站并退出日常列表、任务与统计，可以在回收站恢复。</p>
+          <div className="form-actions">
+            <button onClick={() => setDialog(null)}>取消</button>
+            <button className="danger" onClick={async () => {
+              try { await api(`customers/${detail.id}`, 'DELETE'); setDialog(null); router.push(backHref); saved('已移入回收站'); }
+              catch (e) { setError((e as Error).message); setDialog(null); }
+            }}>确认删除</button>
+          </div>
+        </Dialog>
+      )}
+      {toast && <div className="toast" role="status">✓ {toast}</div>}
+    </WorkspaceShell>
+  );
+}

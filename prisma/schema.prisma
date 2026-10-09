@@ -29,6 +29,8 @@ model Customer {
  whatsappNormalized String @default("")
  phoneE164 String? @db.VarChar(16)
  emailNormalized String? @db.VarChar(191)
+ // 联系方式规范键（phoneE164 / emailNormalized / ContactIdentity）首次计算时间；为空表示尚未计算的历史客户，查重时在内存中比对。
+ contactKeysAt DateTime?
  stageSource String @default("HUMAN") @db.VarChar(16)
  waId String?
  email String @default("")
@@ -51,6 +53,8 @@ model Customer {
  invalidReason String @default("")
  ownerId String
  owner User @relation(fields: [ownerId], references: [id])
+ // 自动进入的线索在被分配给具体负责人之前处于待分配池；ownerId 暂为收件管理员。
+ pendingAssignment Boolean @default(false)
  assignedAt DateTime?
  firstContactDueAt DateTime?
  firstContactAt DateTime?
@@ -109,6 +113,8 @@ model Customer {
  @@index([country])
  @@index([ownerId])
  @@index([firstContactDueAt])
+ @@index([pendingAssignment])
+ @@index([contactKeysAt])
  @@index([createdAt])
  @@index([inquiryAt])
  @@index([nextFollowUpAt])
@@ -222,6 +228,8 @@ model Setting {
  currency String @default("CNY")
  timezone String @default("Asia/Shanghai")
  firstContactHours Int @default(24)
+ // POOL：自动线索进入待分配池；ROUND_ROBIN：按轮流顺序分给启用的销售。
+ leadAssignMode String @default("POOL") @db.VarChar(16)
  // 美元/人民币汇率。默认 6.70 取自 2026 中英文两份报价表之间的隐含汇率（54 组中 44 组精确为 6.70）。
  usdCnyRate Decimal @default(6.70) @db.Decimal(10, 4)
 }
@@ -415,6 +423,8 @@ model Task {
  dueDate DateTime
  completedAt DateTime?
  createdBy String
+ // 不关联客户的任务可指定执行人；关联客户的任务由客户当前负责人执行。
+ assigneeId String?
  source String @default("MANUAL")
  automationKey String? @unique
  // 任务必须能追溯到业务对象：客户已有，这里补订单、金额与 AI 生成理由
@@ -428,6 +438,7 @@ model Task {
  updatedAt DateTime @updatedAt
  reminders Reminder[]
  @@index([createdBy, status, dueDate])
+ @@index([assigneeId, status, dueDate])
  @@index([customerId, status])
  @@index([status, dueDate])
 }

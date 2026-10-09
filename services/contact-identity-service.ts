@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { canonicalEmail, canonicalPhone, metaLeadKey } from '@/lib/contact-identity';
 import { leadFeedback } from './advertising-feedback-service';
+import { retryTransaction } from '@/lib/transaction-retry';
 
 type Client = Prisma.TransactionClient;
 export type ContactResolution = { status: 'MATCHED'; customerId: string; method: 'LEAD_ID' | 'PHONE' | 'EMAIL' } |
@@ -10,6 +11,14 @@ export type ContactResolution = { status: 'MATCHED'; customerId: string; method:
 /** Shared lock across CSV, webhook, customer edits and manual claims; no network under this lock. */
 export async function lockIdentity(tx: Client) {
   await tx.$queryRaw(Prisma.sql`SELECT id FROM Setting WHERE id = 'system' FOR UPDATE`);
+}
+
+/**
+ * Row lock for facts that belong to one customer (follow-ups, quotes, workflow events, non-contact edits).
+ * These never create or move contact identities, so they do not need the global identity lock.
+ */
+export async function lockCustomer(tx: Client, customerId: string) {
+  await tx.$queryRaw(Prisma.sql`SELECT id FROM Customer WHERE id = ${customerId} FOR UPDATE`);
 }
 
 export async function rememberCustomerContacts(tx: Client, customerId: string, source: string) {
@@ -29,7 +38,8 @@ export async function rememberCustomerContacts(tx: Client, customerId: string, s
     create: { customerId, kind: 'EMAIL', normalized: email, rawValue: c.email, source }, update: {},
   });
   const phoneE164=phone||whatsapp||waId;
-  if(c.phoneE164!==phoneE164||c.emailNormalized!==email)await tx.customer.update({where:{id:customerId},data:{phoneE164,emailNormalized:email}});
+  // contactKeysAt marks that canonical keys and aliases exist, so lookups no longer scan this row in memory.
+  if(c.phoneE164!==phoneE164||c.emailNormalized!==email||!c.contactKeysAt)await tx.customer.update({where:{id:customerId},data:{phoneE164,emailNormalized:email,contactKeysAt:c.contactKeysAt??new Date()}});
 }
 
 function resolution(ids: string[], method: 'LEAD_ID' | 'PHONE' | 'EMAIL'): ContactResolution {
@@ -61,10 +71,10 @@ export async function resolveContact(input: { leadId?: string; phones?: string[]
       select: { id: true },
     });
     const ids = [...aliases.map(a => a.customerId), ...indexed.map(c => c.id)];
-    // Transitional, bounded pages for older records; no query changes history on read.
+    // Transitional, bounded pages for records whose keys were never computed; no query changes history on read.
     let cursor: string | undefined;
     while (true) {
-      const legacy = await tx.customer.findMany({ where: kind === 'PHONE' ? { phoneE164: null } : { emailNormalized: null },
+      const legacy = await tx.customer.findMany({ where: { contactKeysAt: null, ...(kind === 'PHONE' ? { phoneE164: null } : { emailNormalized: null }) },
         select: { id: true, phone: true, whatsapp: true, waId: true, countryCode: true, email: true }, orderBy: { id: 'asc' }, take: 200,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
       for (const c of legacy) {
@@ -106,4 +116,19 @@ export async function recordLeadAttribution(tx: Client, input: LeadInput, additi
   const lead=await tx.customerLeadAttribution.update({ where: { id: existing.id }, data: enrich });
   await leadFeedback(tx,lead);
   return lead;
+}
+
+/**
+ * Computes canonical keys for customers created before they existed (scheduled job). Same work as
+ * saving the customer: no contact value changes, only phoneE164 / emailNormalized and alias rows.
+ */
+export async function backfillContactKeys(limit = 500) {
+  const rows = await db.customer.findMany({ where: { contactKeysAt: null }, select: { id: true }, orderBy: { id: 'asc' }, take: limit });
+  for (const row of rows) {
+    await retryTransaction(() => db.$transaction(async tx => {
+      await lockIdentity(tx);
+      await rememberCustomerContacts(tx, row.id, 'BACKFILL');
+    }));
+  }
+  return { processed: rows.length, remaining: await db.customer.count({ where: { contactKeysAt: null } }) };
 }

@@ -161,10 +161,9 @@ export async function fetchLead(leadgenId: string) {
   }
 }
 
-/** 取第一个管理员作为线索负责人（与其他自动建客户的地方保持一致）。 */
+/** 收件管理员：自动线索的操作人；负责人由分配规则在事务内决定（待分配池或轮流分配）。 */
 async function defaultActor(): Promise<Actor> {
-  const owner = await db.user.findFirstOrThrow({ where: { role: 'ADMIN', isActive: true }, select: { id: true, name: true, email: true, role: true } });
-  return owner;
+  return (await import('./lead-assignment-service')).intakeAdmin();
 }
 
 async function mark(id: string, claimedAt: Date, status: 'FAILED' | 'LINKED', customerId: string | null, error = '', attribution?: { adId: string | null; campaignId: string | null; rawPayload: Prisma.InputJsonValue }) {
@@ -236,12 +235,14 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
       }
       if(resolved.status==='UNMATCHED'&&(phoneE164||emailNormalized)){
         const settings=await tx.setting.findUniqueOrThrow({where:{id:'system'}});
+        const assignment=await import('./lead-assignment-service');
+        const intake=await assignment.resolveIntakeOwner(tx);
         const customer=await tx.customer.create({data:{name:mapped.name,companyName:mapped.companyName,country:mapped.country,
           phone:mapped.phone,whatsapp:mapped.whatsapp,whatsappNormalized:phoneE164?.slice(1)||'',email:emailNormalized||'',
           source:lead.lead.platform==='instagram'?'INSTAGRAM':'FACEBOOK',sourceDetail:lead.lead.ad_name||'Facebook Ads',purchaseType:mapped.purchaseType,productInterest:mapped.productInterest,
-          quantity:mapped.quantity,notes:mapped.notes,stage:'NEW',stageSource:'SYSTEM',ownerId:actor.id,currency:settings.currency,inquiryAt:occurredAt}});
+          quantity:mapped.quantity,notes:mapped.notes,stage:'NEW',stageSource:'SYSTEM',ownerId:intake.ownerId,currency:settings.currency,inquiryAt:occurredAt}});
         customerId=customer.id;status='CREATED';
-        await (await import('./workflow-service')).initializeFirstContact(tx,customer.id,actor.id);
+        await assignment.enterIntake(tx,customer.id,actor.id,intake,'Meta 线索表单');
         await tx.stageHistory.create({data:{customerId,toStage:'NEW',changedBy:actor.id,note:'Meta Lead webhook'}});
       }
       await recordLeadAttribution(tx,{leadKey:metaLeadKey(event.leadgenId),leadId:event.leadgenId,customerId,status:customerId?'MATCHED':resolved.status,

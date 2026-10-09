@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { smartPriority, priorityReason, TASK_SOURCES, TASK_PRIORITIES, TASK_STATUS } from '@/lib/task-meta';
 import { taskScope,updateTask } from './task-service';
+import { dayKey, localDate } from '@/lib/time';
 
 /**
  * AI 经营行动中心（AI Action Center）
@@ -23,14 +24,14 @@ export const actionQuery = z.object({
   q: z.string().trim().max(100).default(''),
 });
 
-function startOfToday() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+/** Midnight of the current day in the company time zone. */
+function startOfToday(timezone: string) {
+  return localDate(`${dayKey(new Date(), timezone)}T00:00`, timezone);
 }
 
-function viewWhere(view: string): Prisma.TaskWhereInput {
+function viewWhere(view: string, timezone: string): Prisma.TaskWhereInput {
   const now = new Date();
-  const today = startOfToday();
+  const today = startOfToday(timezone);
   switch (view) {
     case 'TODAY':
       return { status: { not: 'DONE' }, dueDate: { lt: new Date(today.getTime() + DAY) } };
@@ -48,7 +49,7 @@ function viewWhere(view: string): Prisma.TaskWhereInput {
 /** 把一个任务补全为「带业务背景」的卡片数据。 */
 type TaskRow = Prisma.TaskGetPayload<{
   include: {
-    customer: { select: { id: true; name: true; companyName: true; country: true; stage: true; whatsapp: true } };
+    customer: { select: { id: true; name: true; companyName: true; country: true; stage: true; whatsapp: true; owner: { select: { name: true } } } };
     order: { select: { id: true; orderNo: true; amountRMB: true; status: true } };
   };
 }>;
@@ -75,6 +76,9 @@ function present(task: TaskRow) {
       ? { id: task.customer.id, name: task.customer.name, companyName: task.customer.companyName, country: task.customer.country, stage: task.customer.stage, whatsapp: task.customer.whatsapp }
       : null,
     order: task.order ? { id: task.order.id, orderNo: task.order.orderNo, amountRMB: task.order.amountRMB.toFixed(2), status: task.order.status } : null,
+    // 执行人：客户任务归客户当前负责人；个人任务归指定执行人，未指定时归创建人。
+    responsibleName: task.customer?.owner.name ?? null,
+    assigneeId: task.assigneeId ?? (task.customer ? null : task.createdBy),
     amount: task.amount ? task.amount.toFixed(2) : null,
     // 为什么出现这个任务
     aiReason: task.aiReason ?? '',
@@ -82,7 +86,7 @@ function present(task: TaskRow) {
 }
 
 const include = {
-  customer: { select: { id: true, name: true, companyName: true, country: true, stage: true, whatsapp: true } },
+  customer: { select: { id: true, name: true, companyName: true, country: true, stage: true, whatsapp: true, owner: { select: { name: true } } } },
   order: { select: { id: true, orderNo: true, amountRMB: true, status: true } },
 } as const;
 
@@ -91,7 +95,8 @@ export async function actionCenter(user: Actor, input: unknown = {}) {
   const query = actionQuery.parse(input);
   const base = taskScope(user);
   const now = new Date();
-  const today = startOfToday();
+  const { timezone } = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { timezone: true } });
+  const today = startOfToday(timezone);
   const weekAgo = new Date(now.getTime() - 7 * DAY);
 
   const [todayCount, highCount, overdueCount, doneCount, tasks, doneThisWeek, aiTotal, aiDone, recommendations] = await Promise.all([
@@ -101,7 +106,7 @@ export async function actionCenter(user: Actor, input: unknown = {}) {
     db.task.count({ where: { ...base, status: 'DONE', completedAt: { gte: today } } }),
     db.task.findMany({
       where: {
-        AND: [base, viewWhere(query.view),
+        AND: [base, viewWhere(query.view, timezone),
           ...(query.source === 'ALL' ? [] : [{ source: query.source }]),
           ...(query.q ? [{ OR: [{ title: { contains: query.q } }, { customer: { name: { contains: query.q } } }] }] : []),
         ],
@@ -179,7 +184,10 @@ async function recommend(user: Actor): Promise<Recommendation[]> {
     }),
     // ③ 客户来过消息但超过 24 小时未回
     db.customer.findMany({
-      where: { ...scope(user), lastInboundAt: { lt: dayAgo }, OR: [{ lastOutboundAt: null }, { lastInboundAt: { gt: db.customer.fields.lastOutboundAt } }] },
+      where: { ...scope(user), lastInboundAt: { lt: dayAgo }, AND: [
+        { OR: [{ lastOutboundAt: null }, { lastInboundAt: { gt: db.customer.fields.lastOutboundAt } }] },
+        { OR: [{ lastFollowUpAt: null }, { lastInboundAt: { gt: db.customer.fields.lastFollowUpAt } }] },
+      ] },
       select: { id: true, name: true, country: true },
       take: 1,
     }),

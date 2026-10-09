@@ -102,7 +102,7 @@ function Timeline({ progress }: { progress: OrderRow['progress'] }) {
   );
 }
 
-export function OrderManagement({ data, basePath = '/orders', title = '订单管理', description = '从下单到收货，全流程跟踪' }: { data: OrdersData; basePath?: '/orders' | '/orders/list'; title?: string; description?: string }) {
+export function OrderManagement({ data, basePath = '/orders', title = '订单管理', description = '从下单到收货，全流程跟踪', admin = false }: { data: OrdersData; basePath?: '/orders' | '/orders/list'; title?: string; description?: string; admin?: boolean }) {
   const router = useRouter();
   const [rows, setRows] = useState(data.orders);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -267,7 +267,8 @@ export function OrderManagement({ data, basePath = '/orders', title = '订单管
                               type="button"
                               className={`bos-order-milestone${isCurrent ? ' is-current' : ''}${isDone ? ' is-done' : ''}`}
                               aria-pressed={isCurrent}
-                              disabled={busyId === order.id || order.status === 'CANCELLED'}
+                              disabled={busyId === order.id || order.status === 'CANCELLED' || (!admin && (milestone === 'COMPLETED' || order.status === 'COMPLETED'))}
+                              title={!admin && milestone === 'COMPLETED' ? '订单完成需要管理员确认' : undefined}
                               onClick={() => void selectMilestone(order, milestone)}
                             >
                               <span className="bos-order-milestone-marker">{isDone ? <Check size={13} aria-hidden="true" /> : String(index + 1).padStart(2, '0')}</span>
@@ -277,7 +278,7 @@ export function OrderManagement({ data, basePath = '/orders', title = '订单管
                           );
                         })}
                       </div>
-                      <p className="bos-order-milestone-note">{order.status === 'CANCELLED' ? '已取消订单不能切换阶段。' : '点击阶段即可更新订单状态；付款记录单独管理，不会随阶段改变。'}</p>
+                      <p className="bos-order-milestone-note">{order.status === 'CANCELLED' ? '已取消订单不能切换阶段。' : admin ? '点击阶段即可更新订单状态；付款记录单独管理，不会随阶段改变。取消订单请打开订单详情。' : '点击阶段即可更新生产、发货与运输进度；「已完成」由管理员确认。'}</p>
                       {feedback?.orderId === order.id && <p className={`bos-order-milestone-feedback${feedback.error ? ' is-error' : ''}`} role={feedback.error ? 'alert' : 'status'}>{feedback.message}</p>}
                     </div>
                   </td>

@@ -29,6 +29,8 @@ export async function changeOrderMilestone(user: Actor, id: string, input: unkno
   const current = await db.order.findFirst({ where: orderWhere(user, { id }), select: { status: true, updatedAt: true } });
   if (!current) throw new HttpError(404, '订单不存在或无权修改');
   if (current.status === 'CANCELLED') throw new HttpError(409, '已取消订单不能切换阶段');
+  // 完成意味着客户已收货、款项结清，由管理员确认；销售可推进生产、发货与运输。
+  if (user.role !== 'ADMIN' && (status === 'COMPLETED' || current.status === 'COMPLETED')) throw new HttpError(403, '订单完成需要管理员确认');
   if (current.updatedAt.toISOString() !== expectedUpdatedAt) throw new HttpError(409, '订单已被其他人更新，请刷新后重试');
   if (current.status !== status) {
     const result = await retryTransaction(() => db.order.updateMany({
@@ -208,6 +210,7 @@ export async function orderDetail(user: Actor, id: string) {
     currency: order.currency,
     sourceAmount: order.sourceAmount ? order.sourceAmount.toFixed(2) : null,
     status: order.status,
+    updatedAt: order.updatedAt.toISOString(),
     statusLabel: ORDER_STATUS[order.status as OrderStatus] ?? order.status,
     paymentLabel: PAYMENT_STATUS[order.paymentStatus as keyof typeof PAYMENT_STATUS] ?? order.paymentStatus,
     productionLabel: PRODUCTION_STATUS[order.productionStatus as keyof typeof PRODUCTION_STATUS] ?? order.productionStatus,
@@ -271,15 +274,8 @@ export async function ensureOrderForDeal(
   const existing = await tx.order.findUnique({ where: { dealId: input.dealId }, select: { id: true } });
   if (existing) return existing;
 
-  const setting = await tx.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { usdCnyRate: true } });
   const source = new Prisma.Decimal(input.amount);
-  // 金额统一以人民币展示：人民币成交直接采用，其他币种按设置里的汇率换算。
-  const amountRMB =
-    input.currency === 'CNY'
-      ? source
-      : input.currency === 'USD'
-        ? source.mul(setting.usdCnyRate)
-        : source;
+  const amountRMB = await amountInRMB(tx, source, input.currency);
 
   const orderNo = await nextOrderNoInTx(tx, input.orderDate);
   const order = await tx.order.create({
@@ -319,4 +315,49 @@ async function nextOrderNoInTx(tx: Prisma.TransactionClient, date: Date): Promis
   });
   const seq = last ? Number(last.orderNo.slice(prefix.length)) + 1 : 1;
   return `${prefix}${String(seq).padStart(3, '0')}`;
+}
+
+/** 金额统一以人民币展示：人民币成交直接采用，美元按设置里的汇率换算，其他币种保留原值。 */
+async function amountInRMB(tx: Prisma.TransactionClient, source: Prisma.Decimal, currency: string) {
+  if (currency !== 'USD') return source;
+  const setting = await tx.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { usdCnyRate: true } });
+  return source.mul(setting.usdCnyRate);
+}
+
+/** 成交更正后同步订单金额、币种与下单日期；已取消订单保持原样。 */
+export async function syncOrderForDeal(tx: Prisma.TransactionClient, deal: { id: string; dealAmount: Prisma.Decimal; currency: string; dealDate: Date }) {
+  const order = await tx.order.findUnique({ where: { dealId: deal.id }, select: { id: true, status: true } });
+  if (!order || order.status === 'CANCELLED') return;
+  const amountRMB = await amountInRMB(tx, deal.dealAmount, deal.currency);
+  await tx.order.update({
+    where: { id: order.id },
+    data: { amountRMB: amountRMB.toDecimalPlaces(2), sourceAmount: deal.dealAmount.toDecimalPlaces(2), currency: deal.currency, orderDate: deal.dealDate },
+  });
+}
+
+/** 取消订单：广告回传队列会把该订单的 Purchase 标记为业务取消，不再外发。 */
+export async function cancelOrderInTx(tx: Prisma.TransactionClient, orderId: string) {
+  await tx.order.update({ where: { id: orderId }, data: { status: 'CANCELLED' } });
+}
+
+const cancelInput = z.object({ reason: z.string().trim().min(2, '请填写取消原因').max(500), expectedUpdatedAt: z.string().datetime({ offset: true }) });
+
+/** 管理员取消订单。有关联成交时等同于作废该成交，避免「订单已取消但成交仍计入业绩」。 */
+export async function cancelOrder(user: Actor, id: string, input: unknown) {
+  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以取消订单');
+  const v = cancelInput.parse(input);
+  const order = await db.order.findUnique({ where: { id }, select: { id: true, status: true, dealId: true, customerId: true, updatedAt: true } });
+  if (!order) throw new HttpError(404, '订单不存在');
+  if (order.status === 'CANCELLED') return { status: 'CANCELLED' };
+  if (order.updatedAt.toISOString() !== v.expectedUpdatedAt) throw new HttpError(409, '订单已被其他人更新，请刷新后重试');
+  if (order.dealId) {
+    await (await import('./customer-service')).voidDeal(order.customerId, order.dealId, { reason: v.reason }, user);
+    return { status: 'CANCELLED' };
+  }
+  await retryTransaction(() => db.$transaction(async tx => {
+    const changed = await tx.order.updateMany({ where: { id, updatedAt: order.updatedAt, status: { not: 'CANCELLED' } }, data: { status: 'CANCELLED' } });
+    if (changed.count !== 1) throw new HttpError(409, '订单已被其他人更新，请刷新后重试');
+    await tx.identityAudit.create({ data: { entityType: 'ORDER', entityId: id, actorId: user.id, reason: v.reason, detail: { action: 'CANCELLED', previousStatus: order.status } } });
+  }));
+  return { status: 'CANCELLED' };
 }
