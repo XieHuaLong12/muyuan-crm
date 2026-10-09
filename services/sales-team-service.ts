@@ -18,7 +18,7 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
   const users=await db.user.findMany({where:user.role==='ADMIN'?{role:'SALES'}:{id:user.id},select:{id:true,name:true,email:true,isActive:true},orderBy:[{isActive:'desc'},{name:'asc'}]});
   const ids=users.map(row=>row.id);
   const monthNumber=Number(selected.slice(5,7)),yearNumber=Number(selected.slice(0,4));
-  const [customers,deals,quotes,targets,assignments,pending,unassigned,closed,companyTarget,handover]=await Promise.all([
+  const [customers,deals,quotes,targets,assignments,pending,unassigned,closed,companyTarget,handover,deadlines,poolEntries]=await Promise.all([
     db.customer.findMany({where:{deletedAt:null,ownerId:{in:ids},OR:[{inquiryAt:period},{inquiryAt:null,createdAt:period}]},select:{id:true,ownerId:true,isQualified:true,firstContactAt:true,contactedAt:true,assignedAt:true,firstContactDueAt:true,deals:{select:{dealDate:true}}}}),
     db.deal.findMany({where:{currency,dealDate:period,customer:{deletedAt:null},OR:[{salespersonId:{in:ids}},{salespersonId:null,customer:{ownerId:{in:ids},deletedAt:null}}]},select:{id:true,salespersonId:true,dealAmount:true,customer:{select:{ownerId:true}}}}),
     db.quotation.findMany({where:{status:'SENT',sentAt:period,createdBy:{in:ids},customer:{deletedAt:null}},select:{createdBy:true,customerId:true}}),
@@ -30,7 +30,13 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
     db.stageHistory.findMany({where:{changedBy:{in:ids},toStage:{in:['INVALID','PAUSED','LOST']},changedAt:period,customer:{deletedAt:null}},select:{changedBy:true,customerId:true}}),
     user.role==='ADMIN'?db.salesTarget.findUnique({where:{periodKey:`MONTH-${yearNumber}-${monthNumber}`},select:{targetRevenue:true,currency:true}}):Promise.resolve(null),
     user.role==='ADMIN'?db.user.findMany({where:{isActive:false,customers:{some:{deletedAt:null}}},select:{id:true,name:true,_count:{select:{customers:{where:{deletedAt:null}}}}}}):Promise.resolve([]),
+    // First-contact deadlines started this month (5 minutes for fresh ad leads, hours otherwise).
+    db.customer.findMany({where:{deletedAt:null,ownerId:{in:ids},assignedAt:period,firstContactDueAt:{not:null}},select:{ownerId:true,firstContactAt:true,firstContactDueAt:true}}),
+    user.role==='ADMIN'?db.customerAssignment.findMany({where:{reason:{contains:'进入待分配池'},assignedAt:period},select:{customerId:true,assignedAt:true}}):Promise.resolve([]),
   ]);
+  // Time a pooled lead waited before an administrator assigned it.
+  const poolAssignments=poolEntries.length?await db.customerAssignment.findMany({where:{customerId:{in:[...new Set(poolEntries.map(e=>e.customerId))]},NOT:{reason:{contains:'进入待分配池'}},assignedAt:{gte:start}},select:{customerId:true,assignedAt:true},orderBy:{assignedAt:'asc'}}):[];
+  const waits=poolEntries.flatMap(entry=>{const next=poolAssignments.find(a=>a.customerId===entry.customerId&&a.assignedAt>entry.assignedAt);return next?[(next.assignedAt.getTime()-entry.assignedAt.getTime())/60000]:[];});
   const rows=users.map(person=>{
     const cohort=customers.filter(c=>c.ownerId===person.id),sales=deals.filter(d=>(d.salespersonId||d.customer.ownerId)===person.id),ownPending=pending.filter(c=>c.ownerId===person.id),target=targets.find(t=>t.userId===person.id);
     const revenue=sales.reduce((sum,d)=>sum.plus(d.dealAmount),new Prisma.Decimal(0));
@@ -42,13 +48,16 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
       conversion:cohort.length?Math.round(won/cohort.length*1000)/10:null,averageFirstContactMinutes:response.length?Math.round(response.reduce((a,b)=>a+b,0)/response.length):null,
       pendingFirstContact:ownPending.length,overdueFirstContact:ownPending.filter(c=>c.firstContactDueAt!<now).length,
       closedByOwner:new Set(closed.filter(row=>row.changedBy===person.id).map(row=>row.customerId)).size,
+      firstContactOnTime:(()=>{const own=deadlines.filter(d=>d.ownerId===person.id);const decided=own.filter(d=>d.firstContactAt||d.firstContactDueAt!<now);
+        return decided.length?Math.round(decided.filter(d=>d.firstContactAt&&d.firstContactAt<=d.firstContactDueAt!).length/decided.length*1000)/10:null;})(),
       target:target?{amount:target.targetRevenue.toFixed(2),updatedAt:target.updatedAt.toISOString()}:null,
       completion:target&&target.targetRevenue.gt(0)?revenue.div(target.targetRevenue).mul(100).toDecimalPlaces(1).toNumber():null};
   });
   const personalTargets=targets.reduce((sum,t)=>sum.plus(t.targetRevenue),new Prisma.Decimal(0));
-  return {month:selected,currency,timezone:settings.timezone,firstContactHours:settings.firstContactHours,leadAssignMode:settings.leadAssignMode,rows,unassigned,
+  return {month:selected,currency,timezone:settings.timezone,firstContactHours:settings.firstContactHours,adLeadFirstContactMinutes:settings.adLeadFirstContactMinutes,leadAssignMode:settings.leadAssignMode,rows,unassigned,
     targetSummary:user.role==='ADMIN'?{personal:personalTargets.toFixed(2),company:companyTarget&&companyTarget.currency===currency?companyTarget.targetRevenue.toFixed(2):null}:null,
     handover:handover.map(row=>({id:row.id,name:row.name,customers:row._count.customers})),
+    poolWait:user.role==='ADMIN'?{assigned:waits.length,averageMinutes:waits.length?Math.round(waits.reduce((a,b)=>a+b,0)/waits.length*10)/10:null}:null,
     pending:pending.slice(0,100).map(c=>({id:c.id,name:c.name,ownerId:c.ownerId,dueAt:c.firstContactDueAt!.toISOString(),overdue:c.firstContactDueAt!<now})),pendingTotal:pending.length};
 }
 export type SalesPerformance=Awaited<ReturnType<typeof salesPerformance>>;
@@ -69,8 +78,10 @@ export async function saveSalesTarget(input:unknown,user:Actor){
   }));
 }
 export async function saveFirstContactPolicy(input:unknown,user:Actor){
-  requireManager(user);const v=z.object({hours:z.coerce.number().int().min(1,'至少 1 小时').max(168,'最多 168 小时')}).parse(input);
-  return db.$transaction(tx=>tx.setting.update({where:{id:'system'},data:{firstContactHours:v.hours}}));
+  requireManager(user);
+  const v=z.object({hours:z.coerce.number().int().min(1,'至少 1 小时').max(168,'最多 168 小时').optional(),
+    adLeadMinutes:z.coerce.number().int().min(1,'广告线索至少 1 分钟').max(1440,'广告线索最多 1440 分钟').optional()}).parse(input);
+  return db.$transaction(tx=>tx.setting.update({where:{id:'system'},data:{...(v.hours?{firstContactHours:v.hours}:{}),...(v.adLeadMinutes?{adLeadFirstContactMinutes:v.adLeadMinutes}:{})}}));
 }
 export async function firstContactFocus(user:Actor){
   const where={...scope(user),stage:{notIn:['WON','LOST','INVALID','PAUSED']},firstContactDueAt:{not:null},firstContactAt:null,contactedAt:null,lastOutboundAt:null,lastFollowUpAt:null};

@@ -107,7 +107,7 @@ export function CustomerList({ boot, revision, onFollow, onChanged }: {
         {filtersActive && <button className="text-button" onClick={() => { setSearch(''); window.history.replaceState(null, '', pathname); }}>清除筛选</button>}
       </div>
       {get('period') && <div className="filter-hint">已按 {get('date')} 所在周期的新增客户筛选</div>}
-      {activeTab === 'assign' && <div className="filter-hint">自动进入的线索在这里等待分配。勾选客户后点击「分配 / 转交」，分配后才开始计算首联期限。</div>}
+      {activeTab === 'assign' && <div className="filter-hint">自动进入的线索在这里等待分配，请尽快处理：勾选客户后点击「分配 / 转交」。分配后开始计算首联期限，24 小时内的广告留资须在 {boot.settings.adLeadFirstContactMinutes ?? 5} 分钟内联系。</div>}
       {error && <div role="alert" className="error-banner">{error}<button onClick={() => setRetry(v => v + 1)}>重试</button></div>}
       {loading && !data ? <div className="loading">正在加载客户…</div> : (
         <div aria-busy={loading}>

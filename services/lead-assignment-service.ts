@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError } from '@/lib/auth';
 import { retryTransaction } from '@/lib/transaction-retry';
-import { initializeFirstContact, syncCustomerWorkflow } from './workflow-service';
+import { automatedTask, initializeFirstContact, syncCustomerWorkflow } from './workflow-service';
 
 type Tx = Prisma.TransactionClient;
 
@@ -117,4 +117,27 @@ export async function saveLeadAssignMode(input: unknown, user: Actor) {
   const { mode } = z.object({ mode: z.enum(Object.keys(LEAD_ASSIGN_MODES) as [LeadAssignMode, ...LeadAssignMode[]]) }).parse(input);
   const saved = await db.setting.update({ where: { id: 'system' }, data: { leadAssignMode: mode }, select: { leadAssignMode: true } });
   return { mode: saved.leadAssignMode };
+}
+
+/**
+ * An existing customer submitted another ad form: the current owner gets a high-priority contact task with
+ * the ad-lead deadline. A disabled owner cannot act on it, so the customer returns to the pool instead.
+ */
+export async function flagRepeatSubmission(tx: Tx, customerId: string, info: { leadKey: string; formName: string | null; adName: string | null }, actorId: string) {
+  const c = await tx.customer.findUniqueOrThrow({ where: { id: customerId }, include: { owner: { select: { isActive: true } } } });
+  if (c.deletedAt || c.pendingAssignment) return;
+  if (!c.owner.isActive) {
+    const admin = await intakeAdmin(tx);
+    await tx.customer.update({ where: { id: customerId }, data: { ownerId: admin.id, pendingAssignment: true, assignedAt: null, firstContactDueAt: null } });
+    await tx.customerAssignment.create({ data: { customerId, fromOwnerId: c.ownerId, toOwnerId: admin.id, actorId, reason: '负责人已停用，客户再次留资后进入待分配池' } });
+    return;
+  }
+  const { adLeadFirstContactMinutes: minutes } = await tx.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { adLeadFirstContactMinutes: true } });
+  await automatedTask(tx, {
+    customerId, createdBy: c.ownerId, type: 'FOLLOW_UP', priority: 'HIGH',
+    title: `${c.name} 再次留资`,
+    description: `表单：${info.formName || '未知'}；广告：${info.adName || '未知'}。客户再次提交了广告表单，请在 ${minutes} 分钟内联系并记录跟进。`,
+    dueDate: new Date(Date.now() + minutes * 60_000),
+    automationKey: `resubmit:${customerId}:${info.leadKey}`,
+  });
 }

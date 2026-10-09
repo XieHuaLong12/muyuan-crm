@@ -3,14 +3,40 @@
 ## 流程
 
 ```
-Facebook 广告表单
-   ↓  Meta Lead Ads Webhook（POST）
-/api/leads/webhook   ← 先验 X-Hub-Signature-256
-   ↓  Graph API 拉取线索详情
-   ↓  映射 CRM 字段
-   ↓  按 leadgen_id 去重
-写入 Customer（source=FACEBOOK / sourceDetail=Facebook Ads / stage=NEW）
+客户提交 Facebook / Instagram 广告表单
+ ├─ ① Webhook（实时，通常几秒）→ /api/leads/webhook（先验 X-Hub-Signature-256）
+ └─ ② 定时补拉（每 5 分钟）→ GET /{form_id}/leads?filtering=time_created>水位
+        ↓ 两条通道走同一个入库函数，按 leadgen_id 幂等，不会重复建档
+   Graph API 线索详情 → 映射 CRM 字段 → 按电话 / 邮箱关联老客户或新建客户（带广告归因）
+        ↓
+   新客户进入待分配池 → 管理员实时收到「新线索待分配」→ 分配给销售
+        ↓
+   销售实时收到「新分配客户 · 请在 5 分钟内联系」→ 首联任务 5 分钟到期，超时再次提醒
+   老客户再次留资 → 给当前负责人建高优先级任务（同样 5 分钟），记录跟进后自动完成
 ```
+
+## 实时入库、补拉与提醒（2026-10-09）
+
+| 环节 | 行为 |
+|---|---|
+| Webhook | 主通道。处理完成才返回 200；失败返回 503 让 Meta 重试。`MetaLeadEvent.receivedVia=WEBHOOK` |
+| 定时补拉 | `POST /api/cron/meta-leads`（请求头 `x-cron-secret: META_SYNC_SECRET`），**建议每 5 分钟**。按 ACTIVE 表单读取「上次水位 − 10 分钟」之后提交的线索，补回 Webhook 漏掉的（`receivedVia=POLL`）。首次运行回看 48 小时；设置页可手动补拉最近 1 / 7 / 30 / 90 天（Meta 只保留 90 天） |
+| 自动重试 | 网络、限流、Token 等失败按 1、2、4 … 分钟退避，最长 1 小时一次，由同一个定时任务执行；缺联系方式、对应多个客户、关联到回收站客户的线索需要人工认领，不自动重试 |
+| 首联时限 | 24 小时内有 Meta 表单或 WhatsApp 广告留资的客户，分配后须在 **5 分钟**内首次联系（销售团队页可改，1–1440 分钟）；其他客户仍按小时计 |
+| 实时提醒 | 页面每 20 秒（后台标签页每 60 秒）读取 `/api/notifications`：页内弹窗 + 提示音 + 浏览器桌面通知（需在顶栏点「开启桌面通知」）。管理员：新线索待分配、线索需人工处理、自己名下的任务；销售：新分配客户、首联超时、老客户再次留资、任务到期 |
+| 接入体检 | 系统设置 →「Meta 广告线索接入」：今日收到 / 建档 / 失败、提交到入库的时延、待分配数量、最近一次 Webhook 与补拉、表单入库对照。「检测连接」会用主页 Token 读取 `/me` 与 `/{page_id}/subscribed_apps`，确认 Token 属于该主页、主页已为本应用订阅 `leadgen`；未订阅时可一键订阅（需要 `pages_manage_metadata` 权限，保留已订阅的其他字段） |
+
+### 部署后配置
+
+1. 在 Hostinger 面板的 Cron Jobs 中新增每 5 分钟一次：
+   ```bash
+   curl -fsS -X POST -H "x-cron-secret: <META_SYNC_SECRET>" https://你的域名/api/cron/meta-leads
+   ```
+2. 确认 `META_PAGE_ID` 已配置（表单目录每小时自动刷新一次，新建的表单会自动纳入补拉）。
+3. 打开「系统设置 → Meta 广告线索接入」，点「检测连接」，提示全部正常后，用 Meta 线索测试工具提交一条测试线索：几秒内应在「待分配」看到它，管理员浏览器弹出提醒。
+4. 销售与管理员各自在顶栏点「开启桌面通知」并允许浏览器通知（需要 HTTPS）。浏览器关闭时无法收到提醒；手机端请保持页面打开或改用桌面浏览器。
+
+> 体检提示「最近 24 小时有 N 条线索是定时补拉补回的」说明 Webhook 没有送达：按下方「生产定位顺序」检查主页订阅、应用上线状态和 `META_APP_SECRET`。
 
 ## 环境变量
 
@@ -64,12 +90,12 @@ FROM MetaLeadEvent ORDER BY createdAt DESC LIMIT 10;
 
 | status | 含义 |
 |---|---|
-| `RECEIVED` | 已登记，正在处理 |
+| `RECEIVED` | 已登记，正在处理（超过 2 分钟仍未完成会由定时任务接手） |
 | `PROCESSING` | 处理器已认领；若进程中断，5 分钟后重试可重新认领 |
 | `CREATED` | 已创建新客户 |
 | `LINKED` | **已有相同邮箱/电话的客户，已关联而不重复创建** |
 | `SKIPPED` | 该 `leadgen_id` 已处理过（Meta 重推） |
-| `FAILED` | 失败，`error` 列有原因（多为 token 缺失或权限不足） |
+| `FAILED` | 失败，`error` 列有原因（多为 token 缺失或权限不足）；`attempts` / `nextAttemptAt` 为自动重试次数与下次时间 |
 
 签名正确但 `entry: []` 的测试包只证明入口和验签可用，不会产生 `MetaLeadEvent` 或客户。要验证入库，必须用真实表单产生带 `leadgen_id` 的事件。
 
