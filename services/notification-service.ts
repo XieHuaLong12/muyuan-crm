@@ -4,6 +4,7 @@ import { sources } from '@/lib/constants';
 import { getReminders } from './workflow-service';
 import { firstContactFocus } from './sales-team-service';
 import { TEST_LEAD_NOTE } from './meta-lead-service';
+import { todayWorkCounts } from './bos-sales-service';
 
 export type NotificationItem = {
   id: string;
@@ -28,7 +29,7 @@ export async function notificationFeed(user: Actor) {
   // Administrators see every reminder in the bell count, but are only interrupted for their own work:
   // other people's tasks are announced to the people who own them.
   const personal: Actor = { ...user, role: 'SALES' };
-  const [settings, reminders, ownReminders, focus, assignments, poolRows, oldestPool, humanEvents] = await Promise.all([
+  const [settings, reminders, ownReminders, focus, assignments, poolRows, oldestPool, humanEvents, todayWork] = await Promise.all([
     db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { adLeadFirstContactMinutes: true } }),
     getReminders(user),
     admin ? getReminders(personal) : Promise.resolve(null),
@@ -43,6 +44,8 @@ export async function notificationFeed(user: Actor) {
     admin ? db.customer.findFirst({ where: { deletedAt: null, pendingAssignment: true }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }) : Promise.resolve(null),
     admin ? db.metaLeadEvent.findMany({ where: { status: 'FAILED', createdAt: { gte: since }, OR: [{ error: { contains: 'AMBIGUOUS' } }, { error: { contains: '缺少可确认' } }] },
       orderBy: { createdAt: 'desc' }, take: 10, select: { leadgenId: true, error: true, createdAt: true } }) : Promise.resolve([]),
+    // Salespeople see one number for today's work: the same count as the first tab of /sales.
+    admin ? Promise.resolve({ today: 0, todayOverdue: 0 }) : todayWorkCounts(user, now),
   ]);
   const items: NotificationItem[] = [];
   for (const c of poolRows) {
@@ -69,13 +72,13 @@ export async function notificationFeed(user: Actor) {
   for (const e of humanEvents) {
     const testLead = e.error.includes(TEST_LEAD_NOTE);
     items.push({ id: `lead-human:${e.leadgenId}`, kind: 'LEAD_NEEDS_HUMAN', title: testLead ? '收到 Meta 测试线索' : '广告线索需要人工处理', urgent: false, at: e.createdAt.toISOString(),
-      href: '/settings#meta-leads', body: testLead ? '接入已打通；测试工具的占位数据没有联系方式，不会建客户' : e.error.includes('AMBIGUOUS') ? '联系方式对应多个客户，请认领到正确的客户' : '线索缺少可确认的手机号或邮箱，请人工认领' });
+      href: '/growth/intake', body: testLead ? '接入已打通；测试工具的占位数据没有联系方式，不会建客户' : e.error.includes('AMBIGUOUS') ? '联系方式对应多个客户，请认领到正确的客户' : '线索缺少可确认的手机号或邮箱，请人工认领' });
   }
   items.sort((a, b) => b.at.localeCompare(a.at));
   return {
     at: now.toISOString(),
     adLeadMinutes: settings.adLeadFirstContactMinutes,
-    counts: { reminders: reminders.length, pendingFirstContact: focus.pending, overdueFirstContact: focus.overdue, pool: focus.pool, poolOldestAt: oldestPool?.createdAt.toISOString() ?? null },
+    counts: { reminders: reminders.length, pendingFirstContact: focus.pending, overdueFirstContact: focus.overdue, pool: focus.pool, poolOldestAt: oldestPool?.createdAt.toISOString() ?? null, ...todayWork },
     items,
   };
 }

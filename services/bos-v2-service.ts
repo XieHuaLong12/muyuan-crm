@@ -1,7 +1,7 @@
 import { taskScope } from './task-service';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
-import { Actor,scope } from '@/lib/auth';
+import { Actor,HttpError,scope } from '@/lib/auth';
 import { bosDateRange } from '@/lib/bos';
 
 const addDays=(date:Date,days:number)=>new Date(date.getTime()+days*86400000);
@@ -53,7 +53,7 @@ export async function bosOverview(user:Actor,now=new Date()){
  const currentClicks=last30.reduce((n,m)=>n+m.clicks,0);
  const suggestions=[
   ...(overdueTasks?[{title:`${overdueTasks} 项任务已逾期`,detail:'先处理承诺过时间的客户动作。',href:'/tasks?view=OVERDUE',kind:'urgent'}]:[]),
-  ...(lateQuote?[{title:`${lateQuote.customer.name} 的报价需要回访`,detail:'报价发出超过 3 天，客户尚未进入成交阶段。',href:`/sales?customer=${lateQuote.customer.id}`,kind:'followup'}]:[]),
+  ...(lateQuote?[{title:`${lateQuote.customer.name} 的报价需要回访`,detail:'报价发出超过 3 天，客户尚未进入成交阶段。',href:`/customers/${lateQuote.customer.id}`,kind:'followup'}]:[]),
   ...(followUps?[{title:`今天有 ${followUps} 位客户待跟进`,detail:'打开销售工作台，按优先级逐一处理。',href:'/sales?queue=today',kind:'action'}]:[]),
   ...(previousClicks>0&&currentClicks<previousClicks*.8?[{title:'广告点击量较上一周期下降',detail:'先检查广告活动状态与素材表现。',href:'/growth',kind:'growth'}]:[]),
  ];
@@ -64,14 +64,16 @@ export type BosOverview=Awaited<ReturnType<typeof bosOverview>>;
 
 /** Finance is intentionally admin-only; net profit is unavailable without complete expense data. */
 export async function financeOverview(user:Actor,now=new Date()){
- if(user.role!=='ADMIN')throw new Error('需要管理员权限');
+ if(user.role!=='ADMIN')throw new HttpError(403,'需要管理员权限');
  const settings=await db.setting.findUniqueOrThrow({where:{id:'system'}});
  const {today,end,monthStart}=bosDateRange(now,settings.timezone);
+ // Deals and orders of customers in the recycle bin are not revenue, the same rule as the cockpit.
+ const live={deletedAt:null};
  const [totals,deals,metrics,orders]=await Promise.all([
-  db.deal.groupBy({by:['currency'],where:{dealDate:{gte:monthStart,lt:end}},_sum:{dealAmount:true,productCost:true,grossProfit:true}}),
-  db.deal.findMany({where:{dealDate:{gte:monthStart,lt:end}},select:{currency:true,dealAmount:true,productCost:true,grossProfit:true,customer:{select:{id:true,name:true}},orderNumber:true,dealDate:true},orderBy:{dealDate:'desc'},take:12}),
+  db.deal.groupBy({by:['currency'],where:{customer:live,dealDate:{gte:monthStart,lt:end}},_sum:{dealAmount:true,productCost:true,grossProfit:true}}),
+  db.deal.findMany({where:{customer:live,dealDate:{gte:monthStart,lt:end}},select:{currency:true,dealAmount:true,productCost:true,grossProfit:true,customer:{select:{id:true,name:true}},orderNumber:true,dealDate:true},orderBy:{dealDate:'desc'},take:12}),
   db.marketingMetric.findMany({where:{metricDate:{gte:monthStart,lt:end}},select:{spend:true,campaign:{select:{currency:true,channel:true}}}}),
-  db.order.count({where:{orderDate:{gte:monthStart,lt:end},status:{not:'CANCELLED'}}}),
+  db.order.count({where:{customer:live,orderDate:{gte:monthStart,lt:end},status:{not:'CANCELLED'}}}),
  ]);
  return {today,timezone:settings.timezone,orders,revenue:sumMoney(totals.map(d=>({currency:d.currency,amount:d._sum.dealAmount??new Prisma.Decimal(0)}))),productCost:sumMoney(totals.map(d=>({currency:d.currency,amount:d._sum.productCost??new Prisma.Decimal(0)}))),grossProfit:sumMoney(totals.map(d=>({currency:d.currency,amount:d._sum.grossProfit??new Prisma.Decimal(0)}))),adSpend:sumMoney(metrics.map(m=>({currency:m.campaign.currency,amount:m.spend}))),deals:deals.map(d=>({customerId:d.customer.id,customerName:d.customer.name,orderNumber:d.orderNumber,date:d.dealDate.toISOString(),currency:d.currency,revenue:d.dealAmount.toFixed(2),cost:d.productCost.toFixed(2),profit:d.grossProfit.toFixed(2),margin:d.dealAmount.gt(0)?d.grossProfit.div(d.dealAmount).mul(100).toFixed(1):null}))};
 }

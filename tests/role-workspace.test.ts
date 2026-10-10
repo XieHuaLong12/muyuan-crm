@@ -1,17 +1,77 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { workspaceHome,workspaceNavigation,activeWorkspaceLink } from '../lib/role-workspace';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import nextConfig from '../next.config';
+import { workspaceHome,workspaceNavigation,activeWorkspace,activeWorkspaceLink } from '../lib/role-workspace';
 import { createSession,parseSession } from '../lib/session';
 
-test('sales navigation and deep links consistently stay in the personal workspace',()=>{
+/** Every page route under app/, as a matcher (route groups removed, dynamic segments as wildcards). */
+function pageRoutes(dir=fileURLToPath(new URL('../app', import.meta.url)),prefix=''):RegExp[]{
+  const routes:RegExp[]=[];
+  for(const entry of readdirSync(dir,{withFileTypes:true})){
+    if(entry.isFile()&&entry.name==='page.tsx'){
+      const pattern=(prefix||'/').replace(/\/\[\[\.\.\.[^\]]+\]\]/g,'(?:/.*)?').replace(/\[\.\.\.[^\]]+\]/g,'.+').replace(/\[[^\]]+\]/g,'[^/]+');
+      routes.push(new RegExp(`^${pattern}$`));
+    }
+    if(entry.isDirectory()&&entry.name!=='api')routes.push(...pageRoutes(join(dir,entry.name),/^\(.+\)$/.test(entry.name)?prefix:`${prefix}/${entry.name}`));
+  }
+  return routes;
+}
+const isPage=(path:string)=>pageRoutes().some(route=>route.test(path));
+
+test('the sidebar is short: related pages are tabs of one section',()=>{
   assert.equal(workspaceHome('SALES'),'/sales');assert.equal(workspaceHome('ADMIN'),'/command-center');
-  const sales=workspaceNavigation('SALES').map(item=>item.href);
-  for(const path of ['/command-center','/growth','/analytics/ads','/finance','/settings','/team','/communication','/whatsapp','/today'])assert.equal(sales.includes(path as typeof sales[number]),false);
-  assert.ok(sales.includes('/sales/performance'));assert.ok(workspaceNavigation('ADMIN').some(item=>item.href==='/team'));
-  assert.equal(activeWorkspaceLink('/sales/performance','SALES'),'/sales/performance');
-  assert.equal(activeWorkspaceLink('/customers/customer-id','SALES'),'/customers');
-  assert.equal(activeWorkspaceLink('/whatsapp/inbox','SALES'),undefined);assert.equal(activeWorkspaceLink('/whatsapp/inbox','ADMIN'),'/communication');
+  assert.deepEqual(workspaceNavigation('SALES').map(item=>item.label),['今日工作','我的客户','产品与报价','我的订单','我的业绩']);
+  assert.deepEqual(workspaceNavigation('ADMIN').map(item=>item.label),['经营总览','客户','任务','订单','广告与线索','团队','设置']);
+  const salesPaths=workspaceNavigation('SALES').flatMap(item=>[item.href,...(item.tabs??[]).map(tab=>tab.href)]);
+  for(const path of ['/command-center','/growth','/analytics/ads','/finance','/settings','/team','/communication','/targets'])assert.equal(salesPaths.includes(path),false,path);
+  for(const role of ['SALES','ADMIN']){
+    const sections=workspaceNavigation(role);
+    assert.equal(new Set(sections.map(item=>item.icon)).size,sections.length,`${role} icons are distinct`);
+    for(const section of sections){
+      assert.ok(isPage(section.href),`${section.href} is a page`);
+      for(const tab of section.tabs??[]){
+        assert.ok(isPage(tab.href),`${tab.href} is a page`);
+        // Opening a tab highlights that tab and its section.
+        const active=activeWorkspace(tab.href,role);
+        assert.equal(active?.section.href,section.href,tab.href);assert.equal(active?.tab?.href,tab.href,tab.href);
+      }
+    }
+  }
+});
+
+test('detail pages and tools highlight the section they belong to',()=>{
+  const at=(path:string,role:string)=>{const active=activeWorkspace(path,role);return [active?.section.label,active?.tab?.label];};
+  assert.deepEqual(at('/tasks','SALES'),['今日工作','全部待办']);
+  assert.deepEqual(at('/customers/customer-id','SALES'),['我的客户','客户列表']);
+  assert.deepEqual(at('/crm','SALES'),['我的客户','销售看板']);
+  assert.deepEqual(at('/sales/performance','SALES'),['我的业绩',undefined]);
+  assert.deepEqual(at('/products/product-id','SALES'),['产品与报价',undefined]);
+  assert.deepEqual(at('/orders/detail/order-id','ADMIN'),['订单','订单']);
+  assert.deepEqual(at('/products/margin','ADMIN'),['订单','利润']);
+  assert.deepEqual(at('/products/product-id','ADMIN'),['订单','产品库']);
+  assert.deepEqual(at('/analytics/loss-reasons','ADMIN'),['广告与线索','广告分析']);
+  assert.deepEqual(at('/analytics/ads/ad-id','ADMIN'),['广告与线索','广告分析']);
+  assert.deepEqual(at('/communication/whatsapp-sync','ADMIN'),['团队','沟通监督']);
+  assert.deepEqual(at('/settings/integrations/whatsapp','ADMIN'),['设置','集成与接入']);
+  assert.deepEqual(at('/admin/integration-debug','ADMIN'),['设置','集成与接入']);
+  assert.deepEqual(at('/command-center/analysis','ADMIN'),['经营总览','销售分析']);
+  assert.equal(activeWorkspaceLink('/growth/intake','ADMIN'),'/growth');
+  assert.equal(activeWorkspace('/login','ADMIN'),null);
+});
+
+test('old addresses redirect to the merged pages instead of 404',async()=>{
+  const rules=await nextConfig('phase-production-build').redirects!();
+  const sources=rules.map(rule=>rule.source);
+  for(const old of ['/command-center/legacy','/analytics','/funnel','/orders/list','/customer-directory','/whatsapp','/whatsapp/inbox','/today'])assert.ok(sources.includes(old),old);
+  for(const rule of rules){
+    assert.equal(isPage(rule.source),false,`${rule.source} no longer has its own page`);
+    assert.ok(isPage(rule.destination),`${rule.destination} exists`);
+    assert.equal(rule.permanent,false);
+  }
 });
 
 test('versioned sessions reject tampering and invalid expiry; legacy version zero remains compatible',()=>{

@@ -4,4 +4,5 @@ import { handle,ok } from '@/lib/http';
 export const dynamic='force-dynamic';
 import { salesAccounts,createUserAccount } from '@/services/sales-account-service';
 export async function GET(){return handle(async()=>ok(await salesAccounts(await requireUser(true))));}
-export async function POST(req:NextRequest){return handle(async()=>ok(await createUserAccount({...await req.json(),role:'SALES'},await requireUser(true)),201));}
+// Administrators create both salespeople and administrators here (the old settings user list was merged into this page).
+export async function POST(req:NextRequest){return handle(async()=>ok(await createUserAccount(await req.json(),await requireUser(true)),201));}

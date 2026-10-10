@@ -139,8 +139,6 @@
 .bos-loading p { font-size: 12px; color: #86868b; letter-spacing: 0.04em; }
 
 /* ── 顶部系统状态 ───────────────────────────────────────── */
-.bos-system-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #6e6e73; white-space: nowrap; }
-.bos-system-status i { width: 7px; height: 7px; border-radius: 50%; background: #2f8f5b; animation: motionStatus var(--motion-status) ease-in-out infinite; }
 
 /* ── AI 智能状态 ────────────────────────────────────────── */
 .bos-ai-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #426252; }

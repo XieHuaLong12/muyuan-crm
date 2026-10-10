@@ -2,7 +2,7 @@
 import { Fragment,useEffect,useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle,ArrowLeft,ArrowUpRight,Check,ChevronDown,Download,Plus } from 'lucide-react';
+import { AlertTriangle,ArrowUpRight,Check,ChevronDown,Download,Plus } from 'lucide-react';
 import { Card,EmptyState,Header,Table } from '@/components/ui/bos';
 import { ORDER_MILESTONES,ORDER_STAGES,ORDER_STATUS,stageProgress,type OrderMilestone } from '@/lib/order-status';
 import { rmb } from '@/lib/order-format';
@@ -148,12 +148,10 @@ export function OrderManagement({ data, basePath = '/orders', title = '订单管
   return (
     <>
       <Header
-        eyebrow="ORDER MANAGEMENT"
         title={title}
         description={description}
         actions={
           <div className="bos-order-actions">
-            {basePath === '/orders/list' && <Link className="bos-button" href="/orders"><ArrowLeft size={15} />订单中心</Link>}
             <Link className="bos-button bos-button-primary" href="/customers" title="订单随客户成交自动创建：在客户页新增成交订单即可">
               <Plus size={15} />新建订单
             </Link>

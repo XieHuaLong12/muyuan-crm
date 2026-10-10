@@ -64,7 +64,7 @@ export function CustomerList({ boot, revision, onFollow, onChanged }: {
   const tabs = useMemo(() => [
     { key: 'all', label: admin ? '全部客户' : '我的全部客户' },
     ...(admin ? [{ key: 'assign', label: `待分配${data?.pool ? ` ${data.pool}` : ''}` }] : []),
-    { key: 'NEW', label: stages.NEW }, { key: 'pending', label: '待跟进' }, { key: 'QUOTED', label: stages.QUOTED },
+    { key: 'NEW', label: stages.NEW }, { key: 'QUOTED', label: stages.QUOTED },
     { key: 'FOLLOW_UP', label: stages.FOLLOW_UP }, { key: 'WON', label: stages.WON }, { key: 'PAUSED', label: stages.PAUSED }, { key: 'INVALID', label: stages.INVALID },
   ], [admin, data?.pool]);
   const activeTab = get('assign') === 'pending' ? 'assign' : get('stage') || 'all';

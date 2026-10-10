@@ -1,15 +1,21 @@
 import { BOSShell } from '@/components/bos/BOSShell';
 import { OrderManagement } from '@/components/bos/OrderManagement';
-import { workspacePage } from '@/services/workspace-page';
+import { ORDER_STATUS, type OrderStatus } from '@/lib/order-status';
 import { orderList } from '@/services/order-service';
-import { OrderJourney } from '@/components/bos-v2/OrderJourney';
-import { db } from '@/lib/db';
-import { scope } from '@/lib/auth';
-export const dynamic='force-dynamic';
-export default async function Page({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
- const {user,boot}=await workspacePage();
- const data=await orderList(user,await searchParams);
- const highlights=data.orders.length?await db.order.findMany({where:{id:{in:data.orders.slice(0,4).map(order=>order.id)},customer:scope(user)},select:{id:true,deal:{select:{product:true,grossProfit:true,currency:true}}}}):[];
- const details=Object.fromEntries(highlights.map(row=>[row.id,{product:row.deal?.product||'',grossProfit:user.role==='ADMIN'&&row.deal?row.deal.grossProfit.toFixed(2):null,profitCurrency:user.role==='ADMIN'&&row.deal?row.deal.currency:null}]));
- return <BOSShell boot={boot}><OrderJourney data={data} admin={user.role==='ADMIN'} details={details}/><div className="bos-v2-order-ledger"><OrderManagement data={data} admin={user.role==='ADMIN'}/></div></BOSShell>;
+import { workspacePage } from '@/services/workspace-page';
+
+export const dynamic = 'force-dynamic';
+
+/** One order page: status tabs, filters and the ledger. The old /orders/list redirects here with its filters. */
+export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+ const { user, boot } = await workspacePage();
+ const data = await orderList(user, await searchParams);
+ const stage = ORDER_STATUS[data.query.tab as OrderStatus];
+ const title = data.query.payment === 'UNPAID'
+  ? `${stage && data.query.tab !== 'PENDING_PAYMENT' ? `${stage} · ` : ''}待付款订单`
+  : stage ? `${stage}订单` : user.role === 'ADMIN' ? '订单' : '我的订单';
+ const description = data.query.payment === 'UNPAID'
+  ? `共 ${data.total} 张匹配订单 · 按定金未付筛选，包含不同生产和物流阶段。`
+  : `共 ${data.total} 张订单 · 订单随客户成交自动创建，在这里跟踪付款、生产和物流。`;
+ return <BOSShell boot={boot}><OrderManagement data={data} title={title} description={description} admin={user.role === 'ADMIN'}/></BOSShell>;
 }

@@ -64,10 +64,6 @@ export function CrmKanban({ data }: { data: CrmBoard }) {
           <h1>每一位客户，都有下一步。</h1>
           <p>拖拽卡片或用「移动至」推进阶段。报价、成交与跟进在客户档案中完成。</p>
         </div>
-        <div className="bos-v2-hero-actions">
-          <Link className="bos-v2-secondary" href="/customers">客户档案 <ArrowUpRight size={15} /></Link>
-          <Link className="bos-v2-primary" href="/sales">待跟进客户 <ArrowUpRight size={15} /></Link>
-        </div>
       </header>
       <div className="bos-v2-board-toolbar">
         <div><strong>{data.total}</strong> 位客户 <small>· 每列显示最近需要跟进的 {data.limit} 位</small></div>

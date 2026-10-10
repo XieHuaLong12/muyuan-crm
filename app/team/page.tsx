@@ -6,6 +6,7 @@ import { salesAccounts } from '@/services/sales-account-service';
 export const dynamic='force-dynamic';
 export default async function Page({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
   const {user,boot}=await adminWorkspacePage();
-  const [data,accounts]=await Promise.all([salesPerformance(user,await searchParams),salesAccounts(user)]);
-  return <BOSShell boot={boot}><SalesTeam data={data} accounts={accounts} admin/></BOSShell>;
+  const query=await searchParams;
+  const [data,accounts]=await Promise.all([salesPerformance(user,query),salesAccounts(user)]);
+  return <BOSShell boot={boot}><SalesTeam data={data} accounts={accounts} admin initialTab={query.tab==='accounts'?'accounts':'performance'}/></BOSShell>;
 }
