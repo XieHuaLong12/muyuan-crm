@@ -67,6 +67,8 @@ export const orderQuery = z.object({
 });
 
 const PAGE_SIZE = 20;
+// The CSV export takes every matching order; this only guards against an accidental runaway query.
+const EXPORT_LIMIT = 10_000;
 
 function dateRange(from: string, to: string) {
   const range: Prisma.DateTimeFilter = {};
@@ -80,7 +82,7 @@ function orderWhere(user: Actor, extra: Prisma.OrderWhereInput = {}): Prisma.Ord
   return { customer: scope(user), ...extra };
 }
 
-export async function orderList(user: Actor, input: unknown = {}) {
+export async function orderList(user: Actor, input: unknown = {}, options: { all?: boolean } = {}) {
   const query = orderQuery.parse(input);
   const range = dateRange(query.from, query.to);
   const paymentFilter: Prisma.OrderWhereInput = query.payment === 'UNPAID' ? { paymentStatus: 'UNPAID', status: { not: 'CANCELLED' } } : {};
@@ -112,8 +114,8 @@ export async function orderList(user: Actor, input: unknown = {}) {
       deal: { select: { id: true, orderNumber: true, dealDate: true, currency: true, dealAmount: true } },
       },
       orderBy: [{ orderDate: 'desc' }, { id: 'asc' }],
-      skip: (query.page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      skip: options.all ? 0 : (query.page - 1) * PAGE_SIZE,
+      take: options.all ? EXPORT_LIMIT : PAGE_SIZE,
     }),
     db.order.count({ where }),
     Promise.all(

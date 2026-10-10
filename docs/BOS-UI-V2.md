@@ -2,7 +2,7 @@
 
 ## Information architecture
 
-The daily entry point `/` redirects to `/command-center`. The eight primary destinations are Dashboard (`/command-center`), Growth Center (`/growth`), CRM Center (`/crm`), Communication Center (`/communication`), Order Center (`/orders`), Finance Center (`/finance`, administrators only), AI Action Center (`/tasks`), and Settings (`/settings`). The previous CRM directory (`/customers`), sales workspace (`/sales`), Today page (`/today`), historical analytics (`/command-center/legacy`), product catalog (`/products`), product margin (`/products/margin`), and goals (`/targets`) remain available from contextual links. No existing route, API, or Prisma model was removed.
+The daily entry point `/` redirects to the role home (`/command-center` for administrators, `/sales` for salespeople). Since 2026-10-10 the sidebar is organised into sections whose related pages are tabs (see `lib/role-workspace.ts` and docs/ROLE_WORKSPACES.md); old addresses such as `/command-center/legacy`, `/orders/list` and `/today` redirect from `next.config.ts`.
 
 ## Layout and component system
 

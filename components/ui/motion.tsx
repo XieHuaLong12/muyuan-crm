@@ -41,16 +41,6 @@ export function AiPulse({ label = 'AI 正在分析…' }: { label?: string }) {
   );
 }
 
-/** 顶部系统运行状态：绿色小点慢速呼吸，周期 4s。 */
-export function SystemStatus({ label = '系统运行正常' }: { label?: string }) {
-  return (
-    <span className="bos-system-status" role="status">
-      <i aria-hidden="true" />
-      {label}
-    </span>
-  );
-}
-
 /** 页面载入：LVANJU Logo 透明度 0.3→1 循环，不用转圈。 */
 export function LogoLoading({ label = '正在载入' }: { label?: string }) {
   return (

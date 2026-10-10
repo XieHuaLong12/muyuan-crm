@@ -10,9 +10,9 @@ import type { SalesPerformance } from "@/services/sales-team-service";
 import type { salesAccounts } from "@/services/sales-account-service";
 
 type Accounts = Awaited<ReturnType<typeof salesAccounts>>;
-export function SalesTeam({ data, accounts = [], admin = false }: { data: SalesPerformance; accounts?: Accounts; admin?: boolean }) {
+export function SalesTeam({ data, accounts = [], admin = false, initialTab = "performance" }: { data: SalesPerformance; accounts?: Accounts; admin?: boolean; initialTab?: "performance" | "accounts" }) {
   const router = useRouter();
-  const [tab, setTab] = useState("performance"),
+  const [tab, setTab] = useState<string>(initialTab),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -54,13 +54,9 @@ export function SalesTeam({ data, accounts = [], admin = false }: { data: SalesP
               }}
             >
               <Plus size={16} />
-              添加销售
+              添加账号
             </Button>
-          ) : (
-            <Link className="bos-button" href="/sales">
-              返回待跟进客户 <ArrowUpRight size={15} />
-            </Link>
-          )
+          ) : undefined
         }
       />
       {admin && (
@@ -480,7 +476,7 @@ export function SalesTeam({ data, accounts = [], admin = false }: { data: SalesP
           className="bos bos-team-dialog"
           title={
             editor.action === "create"
-              ? "添加销售账号"
+              ? "添加账号"
               : editor.action === "password"
                 ? `重置 ${account?.name} 的密码`
                 : editor.action === "name"
@@ -498,8 +494,8 @@ export function SalesTeam({ data, accounts = [], admin = false }: { data: SalesP
                 void save(
                   "sales-team/accounts",
                   "POST",
-                  { name: f.get("name"), email: f.get("email"), password: f.get("password") },
-                  "销售账号已创建。",
+                  { name: f.get("name"), email: f.get("email"), password: f.get("password"), role: f.get("role") },
+                  f.get("role") === "ADMIN" ? "管理员账号已创建。" : "销售账号已创建。",
                 );
               else if (account)
                 void save(
@@ -522,6 +518,15 @@ export function SalesTeam({ data, accounts = [], admin = false }: { data: SalesP
               <label>
                 姓名
                 <Input name="name" maxLength={100} defaultValue={account?.name || ""} required autoComplete="off" />
+              </label>
+            )}
+            {editor.action === "create" && (
+              <label>
+                角色
+                <select name="role" defaultValue="SALES" className="bos-input">
+                  <option value="SALES">销售（只看自己的客户）</option>
+                  <option value="ADMIN">管理员（管理全部客户与设置）</option>
+                </select>
               </label>
             )}
             {editor.action === "create" && (

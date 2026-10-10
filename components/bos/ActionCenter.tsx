@@ -64,7 +64,7 @@ type Insight = {
   suggested: string;
 };
 
-const VIEWS = [['TODAY', '今日待处理'], ['HIGH', '高优先级'], ['OVERDUE', '逾期'], ['ALL', '全部'], ['DONE', '已完成']] as const;
+const VIEWS = [['TODAY', '今天到期'], ['HIGH', '高优先级'], ['OVERDUE', '逾期'], ['ALL', '全部'], ['DONE', '已完成']] as const;
 const SOURCES = [['ALL', '全部来源'], ['CRM', 'CRM'], ['ORDER', '订单'], ['FINANCE', '财务'], ['ADS', '广告'], ['AI', 'AI'], ['MANUAL', '手动']] as const;
 
 function rmb(value: string | number | null) {
@@ -106,7 +106,7 @@ export function ActionCenter({ data, name, people = [] }: { data: ActionCenterDa
   const [showCreate, setShowCreate] = useState(false);
 
   const stats = [
-    ['今日待处理', data.stats.today, ''],
+    ['今天到期', data.stats.today, ''],
     ['高优先级', data.stats.high, 'is-high'],
     ['逾期任务', data.stats.overdue, 'is-overdue'],
     ['今日已完成', data.stats.done, 'is-done'],
@@ -240,9 +240,8 @@ export function ActionCenter({ data, name, people = [] }: { data: ActionCenterDa
   return (
     <>
       <Header
-        eyebrow="TASKS · AI 行动中心"
-        title={people.length ? '团队任务' : '我的任务'}
-        description={people.length ? '全团队今天应该优先完成什么？客户任务由客户当前负责人执行。' : '今天应该优先完成什么？'}
+        title={people.length ? '团队任务' : '全部待办'}
+        description={people.length ? '全团队今天应该优先完成什么？客户任务由客户当前负责人执行。' : '所有任务与提醒，包括订单、收款和自己创建的待办；联系客户请在「今日跟进」中记录。'}
         actions={
           <div className="bos-order-actions">
             <button type="button" className="bos-button" onClick={() => setShowCreate(v => !v)}><Plus size={15} />创建任务</button>
@@ -311,7 +310,7 @@ export function ActionCenter({ data, name, people = [] }: { data: ActionCenterDa
                 </div>
                 <div className="bos-reco-actions">
                   {rec.customerId && <Link className="bos-button" href={`/customers/${rec.customerId}`}>查看客户</Link>}
-                  {rec.customerId && <Link className="bos-button" href={`/sales?customer=${rec.customerId}`}>记录客户跟进</Link>}
+                  
                   <button className="bos-button bos-button-primary" type="button" disabled={busy === rec.id} onClick={() => adopt(rec)}>
                     {busy === rec.id ? '处理中…' : '加入任务'}
                   </button>
@@ -372,7 +371,7 @@ export function ActionCenter({ data, name, people = [] }: { data: ActionCenterDa
             <EmptyState
               title="这个视图下没有任务"
               description="换个视图或来源看看，或点右上角「AI 今日分析」让系统按客户与订单生成今天的任务。"
-              action={<Link className="bos-button" href="/tasks">回到今日待处理</Link>}
+              action={<Link className="bos-button" href="/tasks">回到今天到期</Link>}
             />
           </Card>
         )}
@@ -480,7 +479,7 @@ export function ActionCenter({ data, name, people = [] }: { data: ActionCenterDa
                   <Clock size={14} />延期 3 天
                 </button>
                 {insight.customer && <Link className="bos-button" href={`/customers/${insight.customer ? insight.task.customer?.id : ''}`}><Wallet size={14} />打开客户</Link>}
-                {insight.customer && <Link className="bos-button" href={`/sales?customer=${insight.task.customer?.id}`}>查看客户档案</Link>}
+                
               </div>
             </footer>
           </aside>

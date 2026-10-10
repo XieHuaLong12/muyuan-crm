@@ -8,13 +8,14 @@ import { Bootstrap, Customer, Dashboard, Deal, Target as TargetType } from '@/li
 import { CustomerForm, FollowForm, DealForm, AssignDialog, ReasonDialog } from './forms';
 import { CustomerList, rememberedListUrl } from './customer-list';
 import { CustomerDetail } from './customer-detail';
-import { Targets, Settings } from './management';
+import { Targets, Settings, Integrations } from './management';
+import { MetaLeadIntake } from './meta-lead-intake';
 import { Dialog } from './ui/dialog';
 import { SmartImport } from './smart-import';
 
-type Page = 'customers' | 'targets' | 'settings';
+type Page = 'customers' | 'targets' | 'settings' | 'integrations' | 'lead-intake';
 
-/** Customer list and profile, company targets and settings inside the BOS shell. */
+/** Older-generation pages inside the BOS shell: customers, company targets, settings, integrations and lead intake. */
 export function Workspace({ initialBoot, pageOverride, embedded }: { initialBoot?: Bootstrap; pageOverride?: Page; embedded?: boolean } = {}) {
   const pathname = usePathname(), router = useRouter();
   const page: Page = pageOverride || (pathname.split('/')[1] as Page) || 'customers';
@@ -37,7 +38,7 @@ export function Workspace({ initialBoot, pageOverride, embedded }: { initialBoot
   }, [initialBoot]);
   useEffect(() => { setBackHref(rememberedListUrl()); }, [customerId]);
   useEffect(() => {
-    if (!boot || (page === 'customers' && !customerId) || page === 'settings') { setLoading(false); return; }
+    if (!boot || (page === 'customers' && !customerId) || page === 'settings' || page === 'integrations' || page === 'lead-intake') { setLoading(false); return; }
     let cancelled = false;
     setLoading(true); setError('');
     (async () => {
@@ -78,7 +79,9 @@ export function Workspace({ initialBoot, pageOverride, embedded }: { initialBoot
   const heading = page === 'customers'
     ? { title: admin ? '客户管理' : '我的客户', description: admin ? '集中管理询盘，分配客户并把握每一次成交机会。' : '维护你负责的客户资料、报价与成交。' }
     : page === 'targets' ? { title: '目标管理', description: '让年度计划，落到每个月和每一周。' }
-      : { title: '系统设置', description: '管理团队与公司的工作偏好。' };
+      : page === 'lead-intake' ? { title: '线索接入', description: 'Meta 广告线索是否实时进入客户中心；读取失败时这里会列出原因和处理办法。' }
+      : page === 'integrations' ? { title: '集成与接入', description: '表单询盘、Meta 广告与 WhatsApp 的接入状态和同步。' }
+        : { title: '公司设置', description: '公司名称、默认货币与时区。' };
 
   return (
     <WorkspaceShell boot={boot} embedded={embedded}>
@@ -113,6 +116,8 @@ export function Workspace({ initialBoot, pageOverride, embedded }: { initialBoot
                 }} />
             )}
             {page === 'targets' && <Targets targets={targets} boot={boot} year={year} onYear={setYear} onSaved={() => saved()} annual={annual} />}
+            {page === 'integrations' && <Integrations boot={boot} />}
+            {page === 'lead-intake' && <div className="settings-grid"><MetaLeadIntake timezone={tz} /></div>}
             {page === 'settings' && <Settings boot={boot} onSaved={async () => { setBoot(await api<Bootstrap>('bootstrap')); saved(); }} />}
           </>
         )}

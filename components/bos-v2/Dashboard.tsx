@@ -43,7 +43,7 @@ export function Dashboard({ data, name }: { data: BusinessCockpit; name: string 
   { label: `${selected.label}毛利润`, value: kpis.grossProfit, unit: currency, detail: kpis.grossProfit === null ? '仅管理员可查看' : '成交毛利', trend: data.kpiTrends.grossProfit, compare, href: kpis.grossProfit === null ? '/sales' : '/finance', tone: '' },
   { label: `${selected.label}订单`, value: kpis.periodOrders, unit: '笔', detail: '非取消订单', trend: data.kpiTrends.periodOrders, compare, href: '/orders', tone: '' },
   { label: `${selected.label}新增客户`, value: kpis.newCustomers, unit: '位', detail: '按询盘日期统计 · 每位客户计一次', trend: data.kpiTrends.newCustomers, compare, href: '/crm', tone: '' },
-  goalAvailable ? { label: `${selected.label}目标完成率`, value: kpis.completion, unit: '%', detail: `目标 ${money(goal.periodGoal!, currency)}`, trend: null, compare: '', href: '/command-center/legacy', tone: 'goal' } : { label: `${selected.label}任务完成率`, value: data.execution.completion, unit: '%', detail: data.execution.dueTasks ? `${data.execution.doneTasks} / ${data.execution.dueTasks} 项到期任务` : '本期无到期任务', trend: null, compare: '', href: '/tasks', tone: 'goal' },
+  goalAvailable ? { label: `${selected.label}目标完成率`, value: kpis.completion, unit: '%', detail: `目标 ${money(goal.periodGoal!, currency)}`, trend: null, compare: '', href: '/command-center/analysis', tone: 'goal' } : { label: `${selected.label}任务完成率`, value: data.execution.completion, unit: '%', detail: data.execution.dueTasks ? `${data.execution.doneTasks} / ${data.execution.dueTasks} 项到期任务` : '本期无到期任务', trend: null, compare: '', href: '/tasks', tone: 'goal' },
  ];
  const totalChannels = data.channels.reduce((sum, channel) => sum + channel.customers, 0);
  const hues = ['#1c654b', '#5d9874', '#93bba2', '#c1d6c4', '#e2eae1'];

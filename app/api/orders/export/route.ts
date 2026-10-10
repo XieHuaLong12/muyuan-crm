@@ -11,8 +11,7 @@ function cell(value: unknown) {
 export async function GET(req:NextRequest){
  return handle(async()=>{
   const user=await requireUser();
-  // 一次取足够多的行用于导出；订单量级远小于此
-  const data=await orderList(user,{...Object.fromEntries(req.nextUrl.searchParams),page:1});
+  const data=await orderList(user,Object.fromEntries(req.nextUrl.searchParams),{all:true});
   const header=['订单号','客户名称','公司','国家','订单金额(人民币)','下单日期','预计到货','当前状态','付款','生产','物流','已完成阶段'];
   const lines=[header.map(cell).join(',')];
   for(const o of data.orders){

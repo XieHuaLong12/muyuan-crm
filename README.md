@@ -80,7 +80,7 @@ app/
   login/page.tsx         登录
   globals.css           响应式界面样式
 components/
-  workspace.tsx         七个页面的导航与状态协调
+  workspace.tsx         旧版界面：客户、目标、公司设置、集成与线索接入页面
   customer-table.tsx    列表、阶段标签、跟进提醒
   customer-detail.tsx   详情、跟进时间线、订单、阶段历史
   forms.tsx             客户、跟进、成交表单
@@ -101,17 +101,22 @@ tests/                  核心指标与边界单元测试
 
 ## 页面与已完成功能
 
-| 页面 | 路径 | 功能 |
+侧边栏按「分区」组织：相关页面是同一分区里的标签，侧边栏只保留常用入口。
+
+| 角色 | 分区 | 分区内的页面 |
 | --- | --- | --- |
-| 总览 | `/` | 周/月/年与日期切换、六项 KPI、周期目标、超额提醒、销售趋势、漏斗、今日跟进、最近成交、年度预测 |
-| 客户 CRM | `/customers` | 新增、编辑、软删除；搜索姓名/公司/邮箱/电话/WhatsApp；国家/来源/负责人/产品/创建与成交时间筛选；排序、分页、快捷跟进 |
-| 客户详情 | `/customers/:id` | 基础与采购资料、备注、有效性、阶段时间、跟进时间线、历史阶段、多笔成交订单 |
-| 销售漏斗 | `/funnel` | 本期新增客户的阶段历史计数、相邻阶段转化、点击当前阶段筛选 |
-| 跟进任务 | `/tasks` | 今日、超时、未来七天、全部；填写跟进即完成当前待办，可安排下一次 |
-| 目标管理 | `/targets` | 年度平均分配、独立月/周目标编辑、月度目标与实际图表、保留手工目标 |
-| 数据分析 | `/analytics` | 询盘、有效、报价、成交、销售与毛利趋势；来源和国家分布 |
-| 设置 | `/settings` | 公司、默认货币、时区、Webhook 配置状态、添加员工与角色 |
-| 登录 | `/login` | 哈希密码、签名 HttpOnly 会话、登录失败限速 |
+| 管理员 | 经营总览 | 经营驾驶舱 `/command-center` · 销售分析 `/command-center/analysis` · 财务 `/finance` |
+| 管理员 | 客户 | 客户列表与档案 `/customers`（含待分配、回收站、智能导入）· 跟进队列 `/sales` · 销售看板 `/crm` |
+| 管理员 | 任务 | 团队任务 `/tasks` |
+| 管理员 | 订单 | 订单 `/orders` · 产品库 `/products` · 利润 `/products/margin` |
+| 管理员 | 广告与线索 | 增长中心 `/growth` · 广告分析 `/analytics/ads`（含会话质量、异议与丢失原因、身份链数据质量）· 线索接入 `/growth/intake` |
+| 管理员 | 团队 | 销售业绩与账号 `/team` · 目标 `/targets` · 沟通监督 `/communication` |
+| 管理员 | 设置 | 公司设置 `/settings` · 集成与接入 `/settings/integrations`（表单询盘、Meta、WhatsApp 与排查工具） |
+| 销售 | 今日工作 | 今日跟进 `/sales`（待首联、到期跟进与到期待办，按截止时间排序）· 全部待办 `/tasks` |
+| 销售 | 我的客户 | 客户列表与档案 `/customers` · 销售看板 `/crm` |
+| 销售 | 产品与报价 / 我的订单 / 我的业绩 | `/products` · `/orders` · `/sales/performance` |
+
+旧地址会自动跳转到合并后的页面（保留查询参数）：`/command-center/legacy`、`/analytics`、`/funnel` → 销售分析；`/orders/list` → 订单；`/customer-directory` → 客户；`/whatsapp`、`/whatsapp/inbox` → 沟通监督；`/today` → 角色首页。跳转统一配置在 `next.config.ts`。
 
 国家、产品、型号允许自由输入，支持可选 countryCode。今日跟进排最前，然后超时，最后最近新增客户。跟进提醒按配置时区的日历日期计算。
 
@@ -255,7 +260,7 @@ Gupshup V2 与 Meta 格式 V3 通过带 `x-webhook-secret` 的回调进入已有
 
 普通发送按当前 provider/business account 的已验证客户入站时间计算 24 小时窗口；历史同步与另一业务号码的聊天不能开放该窗口。缺少时间为 UNKNOWN，过期为 CLOSED。发送 API 接受只记录 ENQUEUED；sent/delivered/read 依真实回执推进。回执可先于发送落库，持久化后补齐，状态不倒退。客户 STOP/UNSUBSCRIBE/不要联系会退订，主动 CTWA 咨询不自动授予营销同意。
 
-接入检查：`/settings/integrations/whatsapp`；管理员按号码/客户/消息查看 `/admin/integration-debug`；`/whatsapp/inbox` 复用销售工作台。Token 与原始 webhook 不在默认前端投影中。`GUPSHUP_SOURCE_NUMBER` 兼容现有 `GUPSHUP_SOURCE`；可选 `GUPSHUP_APP_ID` 核验 V3 应用。Webhook 必须有服务器 `GUPSHUP_WEBHOOK_SECRET`。第一阶段 CAPI 默认关闭。
+接入检查：`/settings/integrations/whatsapp`；管理员按号码/客户/消息查看 `/admin/integration-debug`；`/whatsapp/inbox` 跳转到销售沟通监督。Token 与原始 webhook 不在默认前端投影中。`GUPSHUP_SOURCE_NUMBER` 兼容现有 `GUPSHUP_SOURCE`；可选 `GUPSHUP_APP_ID` 核验 V3 应用。Webhook 必须有服务器 `GUPSHUP_WEBHOOK_SECRET`。第一阶段 CAPI 默认关闭。
 
 模板中心、营销同意管理、召回队列和召回订单归因按 [实施计划](docs/GUPSHUP_CTWA_IMPLEMENTATION.md) 接续开发：先验收一条真实 CTWA 入站，不能用本地 fixture 宣称已接通生产。升级仅追加 `20261004023000_gupshup_live_identity`；回滚应用时保留新增列和回执表。
 

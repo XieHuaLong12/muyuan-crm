@@ -328,3 +328,27 @@
 .meta-lead-checks{display:grid;gap:2px}
 /* A wide table inside a settings card scrolls on its own instead of widening the page on phones. */
 .settings-grid>*{min-width:0}
+/* Section tabs: pages that share one sidebar entry (e.g. customer list and kanban). */
+.bos-section-tabs{display:flex;gap:4px;flex-wrap:wrap;margin:-8px 0 28px;padding:4px;width:fit-content;max-width:100%;background:#eef1ed;border-radius:14px}
+.bos-section-tabs a{padding:8px 16px;border-radius:10px;font-size:13px;color:#5d6b64;white-space:nowrap;transition:background .16s,color .16s}
+.bos-section-tabs a:hover{color:#17382f;background:#ffffff99}
+.bos-section-tabs a[aria-current=page]{background:#fff;color:#17382f;font-weight:600;box-shadow:0 1px 3px #17382f14}
+/* Live count next to a sidebar entry. */
+.bos-nav-badge{margin-left:auto;min-width:22px;padding:1px 7px;border-radius:999px;background:#ffffff26;color:inherit;font-size:11px;font-weight:600;text-align:center;line-height:18px}
+.bos-nav-badge.is-urgent{background:#c2593f;color:#fff}
+.bos-v2-sidebar .bos-nav-group nav a[aria-current=page] .bos-nav-badge:not(.is-urgent){background:#17382f14}
+.bos-sidebar.is-collapsed .bos-nav-group nav a{position:relative}
+.bos-sidebar.is-collapsed .bos-nav-badge{position:absolute;top:4px;right:4px;min-width:16px;padding:0 4px;font-size:10px;line-height:16px}
+.bos-sales-list-task{color:#8a5a2b!important;font-size:12px!important}
+/* Settings: plain links to related pages, and technical details folded away from everyday use. */
+.settings-links{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:4px}
+.settings-links li{display:flex;flex-direction:column;gap:2px;padding:10px 0;border-bottom:1px solid #eef1ed}
+.settings-links li:last-child{border-bottom:0}
+.settings-links a{color:var(--green,#17816a);font-weight:600}
+.settings-links .muted{font-size:12px}
+.settings-tech{margin-top:14px;font-size:12px}
+.settings-tech summary{cursor:pointer;color:#81908e}
+.settings-tech code{margin-top:8px}
+@media(max-width:600px){.bos-section-tabs{width:100%;margin:0 0 20px}.bos-section-tabs a{flex:1;text-align:center;padding:8px 10px}}
+@media(max-width:600px){.bos-lead-filter{flex-wrap:wrap}.bos-lead-filter .bos-search,.bos-lead-filter select{width:100%}.bos-analytics .two-columns{grid-template-columns:minmax(0,1fr)}.bos-analytics .card{min-width:0;overflow-x:auto}}
+@media(max-width:760px){.bos-products-main{width:100%;max-width:100%}.bos-products-main .bos-card{overflow-x:auto}}
