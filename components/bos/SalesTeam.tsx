@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { api, money, dateTimeText } from "@/lib/client";
 import type { SalesPerformance } from "@/services/sales-team-service";
 import type { salesAccounts } from "@/services/sales-account-service";
+import { METRIC_NOTES } from "@/lib/metric-notes";
 
 type Accounts = Awaited<ReturnType<typeof salesAccounts>>;
 export function SalesTeam({ data, accounts = [], admin = false, initialTab = "performance" }: { data: SalesPerformance; accounts?: Accounts; admin?: boolean; initialTab?: "performance" | "accounts" }) {
@@ -101,18 +102,21 @@ export function SalesTeam({ data, accounts = [], admin = false, initialTab = "pe
           </form>
           <div className="bos-team-metrics">
             {[
-              { label: "本月新增询盘", value: sum("newCustomers"), icon: Users },
-              { label: "待首次联系", value: sum("pendingFirstContact"), icon: Clock3 },
-              { label: "首联已逾期", value: sum("overdueFirstContact"), icon: Clock3 },
-              { label: "本月成交笔数", value: sum("deals"), icon: Target },
-            ].map(({ label, value, icon: Icon }) => (
+              // Administrators see company totals (the same numbers as the cockpit), split into salespeople and the rest.
+              { label: "本月新增询盘", value: data.company?.newCustomers ?? sum("newCustomers"), icon: Users,
+                detail: data.company && data.others ? `销售名下 ${sum("newCustomers")} · 待分配或管理员名下 ${data.others.newCustomers}` : "所选月份真实记录" },
+              { label: "待首次联系", value: sum("pendingFirstContact"), icon: Clock3, detail: "当前待处理客户" },
+              { label: "首联已逾期", value: sum("overdueFirstContact"), icon: Clock3, detail: "当前待处理客户" },
+              { label: "本月成交笔数", value: data.company?.deals ?? sum("deals"), icon: Target,
+                detail: data.company ? `销售名下 ${sum("deals")} 笔 · ${data.currency}` : "所选月份真实记录" },
+            ].map(({ label, value, icon: Icon, detail }) => (
               <Card key={label}>
                 <span>
                   <Icon size={17} />
                   {label}
                 </span>
                 <strong>{value}</strong>
-                <small>{label.includes("首") || label.includes("首次") ? "当前待处理客户" : "所选月份真实记录"}</small>
+                <small>{detail}</small>
               </Card>
             ))}
           </div>
@@ -202,11 +206,27 @@ export function SalesTeam({ data, accounts = [], admin = false, initialTab = "pe
                     )}
                   </tr>
                 ))}
+                {data.others && (
+                  <tr className="bos-team-others">
+                    <td><strong>待分配 / 管理员名下</strong></td>
+                    <td>—</td>
+                    <td>{data.others.newCustomers} / {data.others.qualified}</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>
+                      {money(data.others.revenue, data.currency)}
+                      <small>{data.others.deals} 笔</small>
+                    </td>
+                    {Array.from({ length: 7 }, (_, i) => <td key={i}>—</td>)}
+                    {admin && <td />}
+                  </tr>
+                )}
               </Table>
             ) : (
               <EmptyState title="还没有销售账号" description="添加销售账号后，这里会显示每个人的客户进展和目标。" />
             )}
             <p className="bos-footnote">
+              {METRIC_NOTES.newInquiries}{METRIC_NOTES.qualified}
               首联按时率：本月开始计时的首联中，在期限内联系的比例（广告线索期限为 {data.adLeadFirstContactMinutes} 分钟）。首联时长仅统计有分配时间和联系记录的新流程客户。历史成交未保存销售快照时，按客户当前负责人展示并标记“历史归属”；转交客户不会改变新成交的销售快照。
             </p>
           </Card>
@@ -224,7 +244,7 @@ export function SalesTeam({ data, accounts = [], admin = false, initialTab = "pe
               {data.pending.length ? (
                 <div className="bos-team-pending">
                   {data.pending.map((customer) => (
-                    <Link href={`/sales?queue=new&customer=${encodeURIComponent(customer.id)}`} key={customer.id}>
+                    <Link href={`/customers/${encodeURIComponent(customer.id)}`} key={customer.id}>
                       <div>
                         <strong>{customer.name}</strong>
                         <small>

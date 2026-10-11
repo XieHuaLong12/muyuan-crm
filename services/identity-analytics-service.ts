@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { dayKey, localDate } from '@/lib/time';
+import { isQualified } from '@/lib/metrics';
 import { feedbackConnection } from './advertising-feedback-service';
 import { finalIntelligence, lossReasons } from './customer-intelligence-service';
 import { callDeepSeek } from './deepseek-customer-service';
@@ -49,7 +50,7 @@ async function periodAds(user:Actor,q:z.infer<typeof analyticsQuery>,window:Retu
     ...(q.campaignId?{campaignId:q.campaignId}:{}),...(q.adsetId?{adsetId:q.adsetId}:{}),...(q.adId?{adId:q.adId}:{}),...(q.creativeId?{creativeId:q.creativeId}:{}),
     ...(q.platform!=='ALL'?{platform:{in:platformAliases(q.platform)}}:{})};
   const leads=await db.customerLeadAttribution.findMany({where:leadWhere,select:{id:true,leadKey:true,customerId:true,occurredAt:true,adId:true,adName:true,adsetId:true,adsetName:true,campaignId:true,campaignName:true,creativeId:true,creativeName:true,platform:true,
-    customer:{select:{id:true,contactedAt:true,firstReplyAt:true,isQualified:true,purchaseType:true,aiScore:true,intelligence:true}}},orderBy:[{occurredAt:'asc'},{leadKey:'asc'}],take:10001});
+    customer:{select:{id:true,contactedAt:true,firstReplyAt:true,stage:true,isQualified:true,purchaseType:true,aiScore:true,intelligence:true}}},orderBy:[{occurredAt:'asc'},{leadKey:'asc'}],take:10001});
   if(leads.length>10000)throw new HttpError(400,'此范围超过 10000 条留资，请缩短日期范围');
   // One customer is counted once per chosen cohort touch, across all groups.
   const cohort=new Map<string,typeof leads[number]>();
@@ -75,7 +76,7 @@ async function periodAds(user:Actor,q:z.infer<typeof analyticsQuery>,window:Retu
   const currencyFor=(adId:string|null)=>{const currencies=[...new Set(metrics.filter(m=>m.adId===adId).map(m=>m.currency))];return currencies.length===1?currencies[0]:null;};
   for(const lead of leads)get(grouping(lead),currencyFor(lead.adId),q.group==='campaign'?lead.campaignName||'':q.group==='adset'?lead.adsetName||'':q.group==='creative'?lead.creativeName||'':lead.adName||'').leads++;
   for(const [customerId,lead] of cohort){const row=get(grouping(lead),currencyFor(lead.adId));const c=lead.customer!;row.customers.add(customerId);row.customerIds.push(customerId);
-    if(c.contactedAt)row.contacted.add(customerId);if(c.firstReplyAt)row.replied.add(customerId);if(c.isQualified===true)row.qualified.add(customerId);
+    if(c.contactedAt)row.contacted.add(customerId);if(c.firstReplyAt)row.replied.add(customerId);if(isQualified(c))row.qualified.add(customerId);
     const final=c.intelligence?.aiAnalysis?finalIntelligence(c.intelligence.aiAnalysis,c.intelligence.humanOverrides):null;
     const type=final?.customerType&&final.customerType!=='UNKNOWN'?final.customerType:c.purchaseType;
     if(['WHOLESALE','IMPORTER','DISTRIBUTOR'].includes(type))row.wholesale.add(customerId);

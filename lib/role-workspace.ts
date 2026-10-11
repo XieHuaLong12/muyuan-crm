@@ -3,13 +3,16 @@ export const workspaceHome = (role: string) => role === 'ADMIN' ? '/command-cent
 export type NavIcon = 'dashboard' | 'customers' | 'tasks' | 'orders' | 'growth' | 'team' | 'settings' | 'today' | 'products' | 'performance';
 /** A page inside a section. `match` lists the path prefixes that belong to it (defaults to `href`). */
 export type NavTab = { href: string; label: string; match?: readonly string[] };
-/** One sidebar entry. Related pages are tabs of the same section, so the sidebar stays short. */
-export type NavSection = { href: string; label: string; icon: NavIcon; tabs?: readonly NavTab[]; badge?: 'today' | 'pool' };
+/**
+ * One sidebar entry. Related pages are tabs of the same section, so the sidebar stays short. With `keepPeriod`, the
+ * section's pages share the analysis period (range / startDate / endDate), which is kept when switching tabs.
+ */
+export type NavSection = { href: string; label: string; icon: NavIcon; tabs?: readonly NavTab[]; badge?: 'today' | 'pool'; keepPeriod?: boolean };
 
 const adminSections: readonly NavSection[] = [
-  { href: '/command-center', label: '经营总览', icon: 'dashboard', tabs: [
+  { href: '/command-center', label: '经营总览', icon: 'dashboard', keepPeriod: true, tabs: [
     { href: '/command-center', label: '经营驾驶舱' },
-    { href: '/command-center/analysis', label: '销售分析' },
+    { href: '/command-center/analysis', label: '来源与国家' },
     { href: '/finance', label: '财务' },
   ] },
   { href: '/customers', label: '客户', icon: 'customers', badge: 'pool', tabs: [
@@ -23,9 +26,11 @@ const adminSections: readonly NavSection[] = [
     { href: '/products', label: '产品库' },
     { href: '/products/margin', label: '利润' },
   ] },
-  { href: '/growth', label: '广告与线索', icon: 'growth', tabs: [
-    { href: '/growth', label: '增长中心' },
-    { href: '/analytics/ads', label: '广告分析', match: ['/analytics'] },
+  { href: '/analytics/ads', label: '广告与线索', icon: 'growth', keepPeriod: true, tabs: [
+    { href: '/analytics/ads', label: '广告效果' },
+    { href: '/analytics/conversations', label: '会话质量' },
+    { href: '/analytics/loss-reasons', label: '丢单原因' },
+    { href: '/analytics/data-quality', label: '数据质量' },
     { href: '/growth/intake', label: '线索接入' },
   ] },
   { href: '/team', label: '团队', icon: 'team', tabs: [

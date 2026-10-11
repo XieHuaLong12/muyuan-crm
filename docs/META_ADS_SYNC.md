@@ -96,9 +96,9 @@ SELECT metricDate, spend, impressions, clicks, leads FROM MarketingMetric ORDER 
 SELECT formId, name, leadsCount, syncedAt FROM MetaLeadForm;
 ```
 
-4. **Growth Center**：`/growth?tab=campaigns` 的「广告表现」应出现 Meta 系列的真实
-   Spend / Impressions / Clicks / CTR / Leads / CPL；`tab=channels` 的 Facebook 卡片
-   显示「已连接广告平台」与广告花费、CPL。
+4. **广告效果**（增长中心已于 2026-10-11 并入）：打开「广告与线索 → 广告效果」，「按什么汇总」选「广告系列」，
+   表格应出现 Meta 系列的真实花费、平台线索与 CRM 留资；顶部状态显示「广告花费已同步」。
+   驾驶舱「Channel Performance」中 Facebook Ads 显示投入。
 
 ## 常见失败排查
 

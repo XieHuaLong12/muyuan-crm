@@ -3,10 +3,14 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { Actor,HttpError,scope } from '@/lib/auth';
 import { bosDateRange } from '@/lib/bos';
+import { cockpitSelection } from '@/lib/business-cockpit';
+import { dealsIn, moneyByCurrency, ordersIn } from '@/lib/metrics';
+import { dayKey } from '@/lib/time';
 
 const addDays=(date:Date,days:number)=>new Date(date.getTime()+days*86400000);
 const percentage=(current:number,previous:number)=>previous>0?Math.round((current-previous)/previous*100):null;
-const sumMoney=(rows:{currency:string;amount:Prisma.Decimal}[])=>Object.entries(rows.reduce<Record<string,Prisma.Decimal>>((result,row)=>{result[row.currency]=(result[row.currency]??new Prisma.Decimal(0)).plus(row.amount);return result;},{})).map(([currency,amount])=>({currency,amount:amount.toFixed(2)}));
+// One way to add up money in this codebase: per currency, never converted (lib/metrics).
+const sumMoney=moneyByCurrency;
 
 /** Read-only dashboard data. Every figure retains its source and currency. */
 export async function bosOverview(user:Actor,now=new Date()){
@@ -63,18 +67,19 @@ export async function bosOverview(user:Actor,now=new Date()){
 export type BosOverview=Awaited<ReturnType<typeof bosOverview>>;
 
 /** Finance is intentionally admin-only; net profit is unavailable without complete expense data. */
-export async function financeOverview(user:Actor,now=new Date()){
+export async function financeOverview(user:Actor,query:Parameters<typeof cockpitSelection>[0]={},now=new Date()){
  if(user.role!=='ADMIN')throw new HttpError(403,'需要管理员权限');
  const settings=await db.setting.findUniqueOrThrow({where:{id:'system'}});
- const {today,end,monthStart}=bosDateRange(now,settings.timezone);
- // Deals and orders of customers in the recycle bin are not revenue, the same rule as the cockpit.
- const live={deletedAt:null};
+ // Same periods and the same revenue and order rules as the cockpit (lib/metrics), so both pages agree.
+ const selected=cockpitSelection(query,settings.timezone,now);
+ const period={start:selected.start,end:new Date(Math.min(now.getTime(),selected.end.getTime()))},live={deletedAt:null};
  const [totals,deals,metrics,orders]=await Promise.all([
-  db.deal.groupBy({by:['currency'],where:{customer:live,dealDate:{gte:monthStart,lt:end}},_sum:{dealAmount:true,productCost:true,grossProfit:true}}),
-  db.deal.findMany({where:{customer:live,dealDate:{gte:monthStart,lt:end}},select:{currency:true,dealAmount:true,productCost:true,grossProfit:true,customer:{select:{id:true,name:true}},orderNumber:true,dealDate:true},orderBy:{dealDate:'desc'},take:12}),
-  db.marketingMetric.findMany({where:{metricDate:{gte:monthStart,lt:end}},select:{spend:true,campaign:{select:{currency:true,channel:true}}}}),
-  db.order.count({where:{customer:live,orderDate:{gte:monthStart,lt:end},status:{not:'CANCELLED'}}}),
+  db.deal.groupBy({by:['currency'],where:dealsIn(period,live),_sum:{dealAmount:true,productCost:true,grossProfit:true}}),
+  db.deal.findMany({where:dealsIn(period,live),select:{currency:true,dealAmount:true,productCost:true,grossProfit:true,customer:{select:{id:true,name:true}},orderNumber:true,dealDate:true},orderBy:{dealDate:'desc'},take:12}),
+  db.marketingMetric.findMany({where:{metricDate:{gte:period.start,lt:period.end}},select:{spend:true,campaign:{select:{currency:true,channel:true}}}}),
+  db.order.count({where:ordersIn(period,live)}),
  ]);
- return {today,timezone:settings.timezone,orders,revenue:sumMoney(totals.map(d=>({currency:d.currency,amount:d._sum.dealAmount??new Prisma.Decimal(0)}))),productCost:sumMoney(totals.map(d=>({currency:d.currency,amount:d._sum.productCost??new Prisma.Decimal(0)}))),grossProfit:sumMoney(totals.map(d=>({currency:d.currency,amount:d._sum.grossProfit??new Prisma.Decimal(0)}))),adSpend:sumMoney(metrics.map(m=>({currency:m.campaign.currency,amount:m.spend}))),deals:deals.map(d=>({customerId:d.customer.id,customerName:d.customer.name,orderNumber:d.orderNumber,date:d.dealDate.toISOString(),currency:d.currency,revenue:d.dealAmount.toFixed(2),cost:d.productCost.toFixed(2),profit:d.grossProfit.toFixed(2),margin:d.dealAmount.gt(0)?d.grossProfit.div(d.dealAmount).mul(100).toFixed(1):null}))};
+ const today=dayKey(now,settings.timezone);
+ return {selected:{range:selected.range,startKey:selected.startKey,endKey:selected.endKey,label:selected.label},today,timezone:settings.timezone,orders,revenue:sumMoney(totals.map(d=>({currency:d.currency,amount:d._sum.dealAmount??new Prisma.Decimal(0)}))),productCost:sumMoney(totals.map(d=>({currency:d.currency,amount:d._sum.productCost??new Prisma.Decimal(0)}))),grossProfit:sumMoney(totals.map(d=>({currency:d.currency,amount:d._sum.grossProfit??new Prisma.Decimal(0)}))),adSpend:sumMoney(metrics.map(m=>({currency:m.campaign.currency,amount:m.spend}))),deals:deals.map(d=>({customerId:d.customer.id,customerName:d.customer.name,orderNumber:d.orderNumber,date:d.dealDate.toISOString(),currency:d.currency,revenue:d.dealAmount.toFixed(2),cost:d.productCost.toFixed(2),profit:d.grossProfit.toFixed(2),margin:d.dealAmount.gt(0)?d.grossProfit.div(d.dealAmount).mul(100).toFixed(1):null}))};
 }
 export type FinanceOverview=Awaited<ReturnType<typeof financeOverview>>;

@@ -1,4 +1,5 @@
 import { dayKey, localDate } from './time';
+import { isQualified } from './metrics';
 
 export type CockpitRange = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 export type TrendView = 'day' | 'week' | 'month';
@@ -35,15 +36,14 @@ export function changeRate(current: number, previous: number): number | null { r
 
 export type FunnelCustomer = { stage: string; isQualified: boolean | null; quotedAt: Date | null; quotations: { id: string }[]; deals: { id: string }[] };
 export function customerFunnel(customers: FunnelCustomer[]) {
- const progressed = new Set(['QUOTED', 'FOLLOW_UP', 'ORDER', 'WON']);
  const quotedStages = new Set(['QUOTED', 'FOLLOW_UP', 'ORDER', 'WON']);
  const negotiationStages = new Set(['FOLLOW_UP', 'ORDER', 'WON']);
  let qualified = 0, quoted = 0, negotiation = 0, won = 0;
  for (const customer of customers) {
-  const isQualified = customer.isQualified === true || progressed.has(customer.stage);
-  const isQuoted = isQualified && (customer.quotedAt !== null || customer.quotations.length > 0 || quotedStages.has(customer.stage));
+  const isQualifiedCustomer = isQualified(customer);
+  const isQuoted = isQualifiedCustomer && (customer.quotedAt !== null || customer.quotations.length > 0 || quotedStages.has(customer.stage));
   const isNegotiating = isQuoted && (negotiationStages.has(customer.stage) || customer.deals.length > 0);
-  if (isQualified) qualified++;
+  if (isQualifiedCustomer) qualified++;
   if (isQuoted) quoted++;
   if (isNegotiating) negotiation++;
   if (isNegotiating && customer.deals.length > 0) won++;
