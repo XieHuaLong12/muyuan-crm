@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import type { Bootstrap } from '@/lib/types';
 import type { NotificationFeed } from '@/services/notification-service';
 import { activeWorkspace } from '@/lib/role-workspace';
@@ -17,14 +17,19 @@ let lastSyncRequest = 0;
 
 const minutesSince = (iso: string | null) => iso ? Math.floor((Date.now() - Date.parse(iso)) / 60_000) : 0;
 
+const PERIOD_PARAMS = ['range', 'startDate', 'endDate'];
+
 /** Pages that belong together (e.g. list and kanban of the same customers) share one sidebar entry and these tabs. */
 function SectionTabs({ path, role }: { path: string; role: string }) {
+  const params = useSearchParams();
   const active = activeWorkspace(path, role);
   if (!active?.section.tabs) return null;
+  // Analysis pages share one period, so moving between them keeps the selected range.
+  const period = new URLSearchParams(active.section.keepPeriod ? PERIOD_PARAMS.flatMap(key => params.get(key) ? [[key, params.get(key)!]] : []) : []).toString();
   return (
     <nav className="bos-section-tabs" aria-label={`${active.section.label}页面`}>
       {active.section.tabs.map(tab => (
-        <Link key={tab.href} href={tab.href} aria-current={active.tab?.href === tab.href ? 'page' : undefined}>{tab.label}</Link>
+        <Link key={tab.href} href={period ? `${tab.href}?${period}` : tab.href} aria-current={active.tab?.href === tab.href ? 'page' : undefined}>{tab.label}</Link>
       ))}
     </nav>
   );

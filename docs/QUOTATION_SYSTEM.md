@@ -63,7 +63,7 @@
 
 1. **需求理解**：在产品库内提供报价系统：币种决定单据语言（人民币中文 / 外币英文），单价自动带出且可人工调整以适配不同客群，运费按国家维护（按公斤、按立方等）并自动计算，生成图片与 PDF，报价关联到客户档案以便日后核对价格。歧义处理：欧元单据默认英文，另提供 Excel 已有的法文模板；调价只影响价格表带出的单价；成本仅管理员可见。
 2. **对 BOS 的影响**：属于 Product OS / Sales OS 交界；复用既有 `Quotation` 与「登记已发送」工作流，不改变其他 OS 的契约。
-3. **涉及模块**：`services/itemized-quote-service.ts`、`services/freight-service.ts`、`services/quote-template-service.ts`、`lib/quote-math.ts`、`lib/quote-i18n.ts`、`lib/quote-pdf.ts`、`lib/quote-export.ts`、`lib/quotation-amount.ts`、`components/bos/quote/*`、`components/workspace/QuotationPanel.tsx`、`app/(bos)/products/{quotes,freight}`、`app/api/{quotes,freight-rates,quote-settings}`；报价金额读取方 `bos-growth-service`、`bos-v2-service`、`business-cockpit-service`、`action-center-service`、`order-service`、`quotation-service`。
+3. **涉及模块**：`services/itemized-quote-service.ts`、`services/freight-service.ts`、`services/quote-template-service.ts`、`lib/quote-math.ts`、`lib/quote-i18n.ts`、`lib/quote-pdf.ts`、`lib/quote-export.ts`、`lib/quotation-amount.ts`、`components/bos/quote/*`、`components/workspace/QuotationPanel.tsx`、`app/(bos)/products/{quotes,freight}`、`app/api/{quotes,freight-rates,quote-settings}`；报价金额读取方 `bos-v2-service`、`business-cockpit-service`、`action-center-service`、`order-service`、`quotation-service`。
 4. **数据变化**（全部加性，见下表）。受保护语义核对：不涉及幂等键、单例行 id、软删除、`Deal.dealDate` / `Customer.inquiryAt` 口径。
 5. **API 变化**：新增端点，`{success,data}` 信封不变；旧 `POST/GET /api/quotations` 与 `PATCH /api/quotations/:id` 保持兼容。
 6. **UI 变化**：全部在 `.bos` 作用域，复用 `Header / Card / Table / Badge / Button / EmptyState` 与既有 token；对外单据（`.quote-doc`）只使用已有色值；已在 1600px 与 390px 核对，无横向溢出。
@@ -83,7 +83,7 @@
 
 ## 指标口径
 
-「报价金额」统一经 `lib/quotation-amount.ts`：多行报价取 `totalAmount`（产品小计 + 运费 + 其他费用，即客户看到的报价总额），旧报价取 `unitPrice × quantity`。已更新：增长中心报价金额、BOS 驾驶舱报价金额、经营驾驶舱本期 / 上期报价额、行动中心报价提醒金额、登记发送时的客户报价金额、订单详情的报价记录。口径定义（发送时间窗口、同币种汇总）不变。
+「报价金额」统一经 `lib/quotation-amount.ts`：多行报价取 `totalAmount`（产品小计 + 运费 + 其他费用，即客户看到的报价总额），旧报价取 `unitPrice × quantity`。已更新：BOS 驾驶舱报价金额、经营驾驶舱本期 / 上期报价额、行动中心报价提醒金额、登记发送时的客户报价金额、订单详情的报价记录。口径定义（发送时间窗口、同币种汇总）不变；「报价额」一行已写入 [指标口径](METRICS.md)。
 
 ## 导出
 

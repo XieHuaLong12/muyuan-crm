@@ -43,6 +43,11 @@ test('the sidebar is short: related pages are tabs of one section',()=>{
   }
 });
 
+test('analysis sections keep the shared period when switching tabs',()=>{
+  const keep=workspaceNavigation('ADMIN').filter(section=>section.keepPeriod).map(section=>section.label);
+  assert.deepEqual(keep,['经营总览','广告与线索']);
+});
+
 test('detail pages and tools highlight the section they belong to',()=>{
   const at=(path:string,role:string)=>{const active=activeWorkspace(path,role);return [active?.section.label,active?.tab?.label];};
   assert.deepEqual(at('/tasks','SALES'),['今日工作','全部待办']);
@@ -57,20 +62,21 @@ test('detail pages and tools highlight the section they belong to',()=>{
   assert.deepEqual(at('/orders/detail/order-id','ADMIN'),['订单','订单']);
   assert.deepEqual(at('/products/margin','ADMIN'),['订单','利润']);
   assert.deepEqual(at('/products/product-id','ADMIN'),['订单','产品库']);
-  assert.deepEqual(at('/analytics/loss-reasons','ADMIN'),['广告与线索','广告分析']);
-  assert.deepEqual(at('/analytics/ads/ad-id','ADMIN'),['广告与线索','广告分析']);
+  assert.deepEqual(at('/analytics/loss-reasons','ADMIN'),['广告与线索','丢单原因']);
+  assert.deepEqual(at('/analytics/ads/ad-id','ADMIN'),['广告与线索','广告效果']);
+  assert.deepEqual(at('/growth/intake','ADMIN'),['广告与线索','线索接入']);
   assert.deepEqual(at('/communication/whatsapp-sync','ADMIN'),['团队','沟通监督']);
   assert.deepEqual(at('/settings/integrations/whatsapp','ADMIN'),['设置','集成与接入']);
   assert.deepEqual(at('/admin/integration-debug','ADMIN'),['设置','集成与接入']);
-  assert.deepEqual(at('/command-center/analysis','ADMIN'),['经营总览','销售分析']);
-  assert.equal(activeWorkspaceLink('/growth/intake','ADMIN'),'/growth');
+  assert.deepEqual(at('/command-center/analysis','ADMIN'),['经营总览','来源与国家']);
+  assert.equal(activeWorkspaceLink('/growth/intake','ADMIN'),'/analytics/ads');
   assert.equal(activeWorkspace('/login','ADMIN'),null);
 });
 
 test('old addresses redirect to the merged pages instead of 404',async()=>{
   const rules=await nextConfig('phase-production-build').redirects!();
   const sources=rules.map(rule=>rule.source);
-  for(const old of ['/command-center/legacy','/analytics','/funnel','/orders/list','/customer-directory','/whatsapp','/whatsapp/inbox','/today'])assert.ok(sources.includes(old),old);
+  for(const old of ['/command-center/legacy','/analytics','/funnel','/orders/list','/customer-directory','/whatsapp','/whatsapp/inbox','/today','/growth'])assert.ok(sources.includes(old),old);
   for(const rule of rules){
     assert.equal(isPage(rule.source),false,`${rule.source} no longer has its own page`);
     assert.ok(isPage(rule.destination),`${rule.destination} exists`);

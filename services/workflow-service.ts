@@ -115,7 +115,8 @@ export async function syncAllWorkflows() {
 export async function getReminders(user: Actor) {
   const now = new Date();
   const rows = await db.reminder.findMany({ where: { status: 'PENDING', remindAt: { lte: now }, task: { ...taskScope(user), status: { not: 'DONE' } } },
-    include: { task: { include: taskInclude } }, orderBy: { remindAt: 'asc' }, take: 100 });
+    // Newest first: with more than 100 old reminders still pending, the oldest ones must not hide new ones.
+    include: { task: { include: taskInclude } }, orderBy: { remindAt: 'desc' }, take: 100 });
   const byTask = new Map<string, typeof rows[number]>();
   for (const r of rows) if (!byTask.has(r.taskId) || r.kind === 'OVERDUE') byTask.set(r.taskId, r);
   return [...byTask.values()];

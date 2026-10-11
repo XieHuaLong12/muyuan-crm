@@ -11,6 +11,7 @@ const moved: [string, string][] = [
   ['/whatsapp', '/communication'],
   ['/whatsapp/inbox', '/communication'],
   ['/today', '/'],
+  ['/growth', '/analytics/ads'],
 ];
 
 const config = (phase: string): NextConfig => ({

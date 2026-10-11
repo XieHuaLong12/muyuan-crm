@@ -5,6 +5,7 @@ import { Actor,HttpError,scope } from '@/lib/auth';
 import { dayKey,localDate } from '@/lib/time';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { requireManager } from './sales-account-service';
+import { dealsIn, inquiryIn, isQualified, QUALIFIED, sentQuotesIn } from '@/lib/metrics';
 
 const month=z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/,'请选择合法月份').refine(v=>Number(v.slice(0,4))>=2000&&Number(v.slice(0,4))<=2200,'月份超出范围');
 const queryInput=z.object({month:month.optional(),currency:z.enum(['CNY','USD','EUR']).optional()});
@@ -18,10 +19,12 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
   const users=await db.user.findMany({where:user.role==='ADMIN'?{role:'SALES'}:{id:user.id},select:{id:true,name:true,email:true,isActive:true},orderBy:[{isActive:'desc'},{name:'asc'}]});
   const ids=users.map(row=>row.id);
   const monthNumber=Number(selected.slice(5,7)),yearNumber=Number(selected.slice(0,4));
-  const [customers,deals,quotes,targets,assignments,pending,unassigned,closed,companyTarget,handover,deadlines,poolEntries]=await Promise.all([
-    db.customer.findMany({where:{deletedAt:null,ownerId:{in:ids},OR:[{inquiryAt:period},{inquiryAt:null,createdAt:period}]},select:{id:true,ownerId:true,isQualified:true,firstContactAt:true,contactedAt:true,assignedAt:true,firstContactDueAt:true,deals:{select:{dealDate:true}}}}),
-    db.deal.findMany({where:{currency,dealDate:period,customer:{deletedAt:null},OR:[{salespersonId:{in:ids}},{salespersonId:null,customer:{ownerId:{in:ids},deletedAt:null}}]},select:{id:true,salespersonId:true,dealAmount:true,customer:{select:{ownerId:true}}}}),
-    db.quotation.findMany({where:{status:'SENT',sentAt:period,createdBy:{in:ids},customer:{deletedAt:null}},select:{createdBy:true,customerId:true}}),
+  // Counted up to now, like the cockpit, so a future-dated record cannot make the two pages disagree.
+  const live={deletedAt:null},range={start,end:new Date(Math.min(now.getTime(),end.getTime()))};
+  const [customers,deals,quotes,targets,assignments,pending,unassigned,closed,companyTarget,handover,deadlines,poolEntries,company]=await Promise.all([
+    db.customer.findMany({where:{deletedAt:null,ownerId:{in:ids},...inquiryIn(range)},select:{id:true,ownerId:true,stage:true,isQualified:true,firstContactAt:true,contactedAt:true,assignedAt:true,firstContactDueAt:true,deals:{select:{dealDate:true}}}}),
+    db.deal.findMany({where:{currency,...dealsIn(range,live),OR:[{salespersonId:{in:ids}},{salespersonId:null,customer:{ownerId:{in:ids},deletedAt:null}}]},select:{id:true,salespersonId:true,dealAmount:true,customer:{select:{ownerId:true}}}}),
+    db.quotation.findMany({where:{...sentQuotesIn(range,live),createdBy:{in:ids}},select:{createdBy:true,customerId:true}}),
     db.userSalesTarget.findMany({where:{userId:{in:ids},month:selected,currency}}),
     db.customerAssignment.findMany({where:{toOwnerId:{in:ids},assignedAt:period,customer:{deletedAt:null}},select:{toOwnerId:true,customerId:true}}),
     db.customer.findMany({where:{...scope(user),ownerId:{in:ids},firstContactDueAt:{not:null},firstContactAt:null,contactedAt:null,lastOutboundAt:null,lastFollowUpAt:null,stage:{notIn:['WON','LOST','INVALID','PAUSED']}},select:{id:true,name:true,ownerId:true,firstContactDueAt:true},orderBy:{firstContactDueAt:'asc'}}),
@@ -33,6 +36,12 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
     // First-contact deadlines started this month (5 minutes for fresh ad leads, hours otherwise).
     db.customer.findMany({where:{deletedAt:null,ownerId:{in:ids},assignedAt:period,firstContactDueAt:{not:null}},select:{ownerId:true,firstContactAt:true,firstContactDueAt:true}}),
     user.role==='ADMIN'?db.customerAssignment.findMany({where:{reason:{contains:'进入待分配池'},assignedAt:period},select:{customerId:true,assignedAt:true}}):Promise.resolve([]),
+    // The whole company, counted exactly like the cockpit: includes unassigned customers and those an administrator owns.
+    user.role==='ADMIN'?Promise.all([
+      db.customer.count({where:{AND:[live,inquiryIn(range)]}}),
+      db.customer.count({where:{AND:[live,inquiryIn(range),QUALIFIED]}}),
+      db.deal.aggregate({where:{currency,...dealsIn(range,live)},_count:{_all:true},_sum:{dealAmount:true}}),
+    ]):Promise.resolve(null),
   ]);
   // Time a pooled lead waited before an administrator assigned it.
   const poolAssignments=poolEntries.length?await db.customerAssignment.findMany({where:{customerId:{in:[...new Set(poolEntries.map(e=>e.customerId))]},NOT:{reason:{contains:'进入待分配池'}},assignedAt:{gte:start}},select:{customerId:true,assignedAt:true},orderBy:{assignedAt:'asc'}}):[];
@@ -43,7 +52,7 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
     const response=cohort.filter(c=>c.assignedAt&&c.firstContactAt&&c.firstContactAt>=c.assignedAt).map(c=>(c.firstContactAt!.getTime()-c.assignedAt!.getTime())/60000);
     const won=cohort.filter(c=>c.deals.some(d=>d.dealDate>=start&&d.dealDate<end)).length;
     return {id:person.id,name:person.name,isActive:person.isActive,...(user.role==='ADMIN'?{email:person.email}:{}),newCustomers:cohort.length,assigned:new Set(assignments.filter(a=>a.toOwnerId===person.id).map(a=>a.customerId)).size,
-      contacted:cohort.filter(c=>c.firstContactAt||c.contactedAt).length,qualified:cohort.filter(c=>c.isQualified===true).length,
+      contacted:cohort.filter(c=>c.firstContactAt||c.contactedAt).length,qualified:cohort.filter(isQualified).length,
       quoted:new Set(quotes.filter(c=>c.createdBy===person.id).map(c=>c.customerId)).size,deals:sales.length,revenue:revenue.toFixed(2),legacyDeals:sales.filter(d=>!d.salespersonId).length,
       conversion:cohort.length?Math.round(won/cohort.length*1000)/10:null,averageFirstContactMinutes:response.length?Math.round(response.reduce((a,b)=>a+b,0)/response.length):null,
       pendingFirstContact:ownPending.length,overdueFirstContact:ownPending.filter(c=>c.firstContactDueAt!<now).length,
@@ -54,7 +63,12 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
       completion:target&&target.targetRevenue.gt(0)?revenue.div(target.targetRevenue).mul(100).toDecimalPlaces(1).toNumber():null};
   });
   const personalTargets=targets.reduce((sum,t)=>sum.plus(t.targetRevenue),new Prisma.Decimal(0));
-  return {month:selected,currency,timezone:settings.timezone,firstContactHours:settings.firstContactHours,adLeadFirstContactMinutes:settings.adLeadFirstContactMinutes,leadAssignMode:settings.leadAssignMode,rows,unassigned,
+  const total=(field:'newCustomers'|'qualified'|'deals')=>rows.reduce((n,row)=>n+row[field],0);
+  const companyTotals=company?{newCustomers:company[0],qualified:company[1],deals:company[2]._count._all,revenue:(company[2]._sum.dealAmount??new Prisma.Decimal(0)).toFixed(2)}:null;
+  // What no salesperson owns yet (the pool and administrators' customers), so the rows add up to the company total.
+  const others=companyTotals?{newCustomers:companyTotals.newCustomers-total('newCustomers'),qualified:companyTotals.qualified-total('qualified'),deals:companyTotals.deals-total('deals'),
+    revenue:new Prisma.Decimal(companyTotals.revenue).minus(rows.reduce((sum,row)=>sum.plus(row.revenue),new Prisma.Decimal(0))).toFixed(2)}:null;
+  return {month:selected,currency,timezone:settings.timezone,firstContactHours:settings.firstContactHours,adLeadFirstContactMinutes:settings.adLeadFirstContactMinutes,leadAssignMode:settings.leadAssignMode,rows,unassigned,company:companyTotals,others,
     targetSummary:user.role==='ADMIN'?{personal:personalTargets.toFixed(2),company:companyTarget&&companyTarget.currency===currency?companyTarget.targetRevenue.toFixed(2):null}:null,
     handover:handover.map(row=>({id:row.id,name:row.name,customers:row._count.customers})),
     poolWait:user.role==='ADMIN'?{assigned:waits.length,averageMinutes:waits.length?Math.round(waits.reduce((a,b)=>a+b,0)/waits.length*10)/10:null}:null,
