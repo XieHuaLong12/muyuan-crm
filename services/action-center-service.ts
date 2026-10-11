@@ -5,6 +5,7 @@ import { Actor, HttpError, scope } from '@/lib/auth';
 import { smartPriority, priorityReason, TASK_SOURCES, TASK_PRIORITIES, TASK_STATUS } from '@/lib/task-meta';
 import { taskScope,updateTask } from './task-service';
 import { dayKey, localDate } from '@/lib/time';
+import { overdueTasks, staleQuotes } from '@/lib/metrics';
 
 /**
  * AI 经营行动中心（AI Action Center）
@@ -102,7 +103,7 @@ export async function actionCenter(user: Actor, input: unknown = {}) {
   const [todayCount, highCount, overdueCount, doneCount, tasks, doneThisWeek, aiTotal, aiDone, recommendations] = await Promise.all([
     db.task.count({ where: { ...base, status: { not: 'DONE' }, dueDate: { lt: new Date(today.getTime() + DAY) } } }),
     db.task.count({ where: { ...base, status: { not: 'DONE' }, priority: 'HIGH' } }),
-    db.task.count({ where: { ...base, status: { not: 'DONE' }, dueDate: { lt: now } } }),
+    db.task.count({ where: overdueTasks(now, base) }),
     db.task.count({ where: { ...base, status: 'DONE', completedAt: { gte: today } } }),
     db.task.findMany({
       where: {
@@ -163,14 +164,13 @@ export type Recommendation = {
  */
 async function recommend(user: Actor): Promise<Recommendation[]> {
   const now = new Date();
-  const threeDaysAgo = new Date(now.getTime() - 3 * DAY);
   const dayAgo = new Date(now.getTime() - DAY);
   const out: Omit<Recommendation, 'rank' | 'id'>[] = [];
 
   const [quotes, awaitingPayment, inbound, risky] = await Promise.all([
-    // ① 报价后 3 天以上没有回复
+    // ① 报价发出 3 天以上、客户仍在推进中且之后没有联系（与驾驶舱「报价超时」同一口径）
     db.quotation.findMany({
-      where: { customer: scope(user), sentAt: { lte: threeDaysAgo }, status: { notIn: ['WON', 'LOST'] } },
+      where: staleQuotes(now, scope(user)),
       select: { id: true, customerId: true, unitPrice: true, quantity: true, currency: true, sentAt: true, customer: { select: { name: true, country: true } } },
       orderBy: { sentAt: 'asc' },
       take: 2,

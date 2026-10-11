@@ -7,6 +7,7 @@ import type { Actor } from '../lib/auth';
 import { salesQueue, todayWorkCounts } from '../services/bos-sales-service';
 import { notificationFeed } from '../services/notification-service';
 import { financeOverview } from '../services/bos-v2-service';
+import { getReminders } from '../services/workflow-service';
 import { deleteTestCustomers } from './identity-test-cleanup';
 
 const actor = (u: { id: string; name: string; email: string; role: string }): Actor => ({ id: u.id, name: u.name, email: u.email, role: u.role });
@@ -63,6 +64,24 @@ test('finance ignores deals of customers in the recycle bin', async () => {
     await assert.rejects(financeOverview({ ...admin, role: 'SALES' }), { status: 403 });
   } finally {
     await deleteTestCustomers({ where: { id: customer.id } });
+    await db.$disconnect();
+  }
+});
+
+test('a backlog of old reminders does not hide new ones', async () => {
+  const tag = randomUUID().slice(0, 8);
+  const owner = await db.user.create({ data: { name: `Backlog ${tag}`, email: `backlog-${tag}@example.test`, passwordHash: 'test', role: 'SALES' } });
+  try {
+    // 60 tasks overdue for days, each with pending EARLY and OVERDUE reminders: 120 old reminders.
+    const old = Array.from({ length: 60 }, (_, i) => ({ id: `backlog-${tag}-${i}`, title: `Old ${i}`, description: '', dueDate: minutes(-3 * 24 * 60 - i), createdBy: owner.id }));
+    await db.task.createMany({ data: old });
+    await db.reminder.createMany({ data: old.flatMap(t => [{ taskId: t.id, kind: 'EARLY', remindAt: new Date(t.dueDate.getTime() - 30 * 60_000) }, { taskId: t.id, kind: 'OVERDUE', remindAt: t.dueDate }]) });
+    const fresh = await db.task.create({ data: { title: `Fresh ${tag}`, description: '', dueDate: minutes(20), createdBy: owner.id } });
+    await db.reminder.create({ data: { taskId: fresh.id, kind: 'EARLY', remindAt: minutes(-10) } });
+    assert.ok((await getReminders(actor(owner))).some(r => r.taskId === fresh.id), 'the newest reminder is announced');
+  } finally {
+    await db.task.deleteMany({ where: { createdBy: owner.id } });
+    await db.user.delete({ where: { id: owner.id } });
     await db.$disconnect();
   }
 });

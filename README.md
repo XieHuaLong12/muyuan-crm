@@ -105,18 +105,20 @@ tests/                  核心指标与边界单元测试
 
 | 角色 | 分区 | 分区内的页面 |
 | --- | --- | --- |
-| 管理员 | 经营总览 | 经营驾驶舱 `/command-center` · 销售分析 `/command-center/analysis` · 财务 `/finance` |
+| 管理员 | 经营总览 | 经营驾驶舱 `/command-center` · 来源与国家 `/command-center/analysis` · 财务 `/finance` |
 | 管理员 | 客户 | 客户列表与档案 `/customers`（含待分配、回收站、智能导入）· 跟进队列 `/sales` · 销售看板 `/crm` |
 | 管理员 | 任务 | 团队任务 `/tasks` |
 | 管理员 | 订单 | 订单 `/orders` · 产品库 `/products` · 利润 `/products/margin` |
-| 管理员 | 广告与线索 | 增长中心 `/growth` · 广告分析 `/analytics/ads`（含会话质量、异议与丢失原因、身份链数据质量）· 线索接入 `/growth/intake` |
+| 管理员 | 广告与线索 | 广告效果 `/analytics/ads` · 会话质量 · 丢单原因 · 数据质量 · 线索接入 `/growth/intake` |
 | 管理员 | 团队 | 销售业绩与账号 `/team` · 目标 `/targets` · 沟通监督 `/communication` |
 | 管理员 | 设置 | 公司设置 `/settings` · 集成与接入 `/settings/integrations`（表单询盘、Meta、WhatsApp 与排查工具） |
 | 销售 | 今日工作 | 今日跟进 `/sales`（待首联、到期跟进与到期待办，按截止时间排序）· 全部待办 `/tasks` |
 | 销售 | 我的客户 | 客户列表与档案 `/customers` · 销售看板 `/crm` |
 | 销售 | 产品与报价 / 我的订单 / 我的业绩 | `/products` · `/orders` · `/sales/performance` |
 
-旧地址会自动跳转到合并后的页面（保留查询参数）：`/command-center/legacy`、`/analytics`、`/funnel` → 销售分析；`/orders/list` → 订单；`/customer-directory` → 客户；`/whatsapp`、`/whatsapp/inbox` → 沟通监督；`/today` → 角色首页。跳转统一配置在 `next.config.ts`。
+各页面的指标口径统一定义在 `lib/metrics.ts`，见 [指标口径](docs/METRICS.md)。
+
+旧地址会自动跳转到合并后的页面（保留查询参数）：`/command-center/legacy`、`/analytics`、`/funnel` → 来源与国家；`/growth` → 广告效果；`/orders/list` → 订单；`/customer-directory` → 客户；`/whatsapp`、`/whatsapp/inbox` → 沟通监督；`/today` → 角色首页。跳转统一配置在 `next.config.ts`。
 
 国家、产品、型号允许自由输入，支持可选 countryCode。今日跟进排最前，然后超时，最后最近新增客户。跟进提醒按配置时区的日历日期计算。
 

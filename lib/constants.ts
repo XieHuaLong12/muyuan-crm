@@ -7,3 +7,7 @@ export type Stage = keyof typeof stages;
 export const pipeline = Object.keys(stages).slice(0,7) as Stage[];
 /** An ad lead submitted within this many hours is "fresh": short first-contact deadline, repeat-submission alerts. */
 export const AD_LEAD_FRESH_HOURS = 24;
+/** Stages where a customer needs no further sales work. */
+export const TERMINAL_STAGES = ['WON', 'LOST', 'INVALID', 'PAUSED'] as const;
+/** Stages that only a real buyer reaches: from a quotation onwards. */
+export const ADVANCED_STAGES = ['QUOTED', 'FOLLOW_UP', 'ORDER', 'WON'] as const;
