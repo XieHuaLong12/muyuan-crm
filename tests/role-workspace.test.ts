@@ -49,7 +49,11 @@ test('detail pages and tools highlight the section they belong to',()=>{
   assert.deepEqual(at('/customers/customer-id','SALES'),['我的客户','客户列表']);
   assert.deepEqual(at('/crm','SALES'),['我的客户','销售看板']);
   assert.deepEqual(at('/sales/performance','SALES'),['我的业绩',undefined]);
-  assert.deepEqual(at('/products/product-id','SALES'),['产品与报价',undefined]);
+  assert.deepEqual(at('/products/product-id','SALES'),['产品与报价','产品库']);
+  assert.deepEqual(at('/products/quotes/quote-id','SALES'),['产品与报价','报价单']);
+  assert.deepEqual(at('/products/quotes/new','ADMIN'),['订单','报价单']);
+  assert.deepEqual(at('/products/quotes/settings','ADMIN'),['订单','报价单']);
+  assert.deepEqual(at('/products/freight','SALES'),['产品与报价','运费库']);
   assert.deepEqual(at('/orders/detail/order-id','ADMIN'),['订单','订单']);
   assert.deepEqual(at('/products/margin','ADMIN'),['订单','利润']);
   assert.deepEqual(at('/products/product-id','ADMIN'),['订单','产品库']);

@@ -7,7 +7,7 @@ import { getReminders } from './workflow-service';
 
 export const workspaceBootstrap = cache(async (user: Actor) => ({ user,
   users: await db.user.findMany({ where: user.role === 'ADMIN' ? {} : { id: user.id }, select: { id: true, name: true, email: true, role: true,isActive:true } }),
-  settings: await db.setting.findUniqueOrThrow({ where: { id: 'system' } }).then(s=>({...s,usdCnyRate:s.usdCnyRate.toString()})),
+  settings: await db.setting.findUniqueOrThrow({ where: { id: 'system' } }).then(s=>({...s,usdCnyRate:s.usdCnyRate.toString(),eurCnyRate:s.eurCnyRate?.toString()??null})),
   webhookConfigured: !!process.env.WEBHOOK_SECRET, deepseekConfigured: !!process.env.DEEPSEEK_API_KEY,
 }));
 export async function priorityCustomers(user: Actor) {

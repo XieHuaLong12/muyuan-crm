@@ -1,4 +1,5 @@
 import { freezeOrderAttribution } from './order-attribution-service';
+import { quotationAmount } from '@/lib/quotation-amount';
 import { purchaseFeedback } from './advertising-feedback-service';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
@@ -202,7 +203,7 @@ export async function orderDetail(user: Actor, id: string) {
     where: { customerId: order.customerId },
     orderBy: { createdAt: 'desc' },
     take: 10,
-    select: { id: true, quoteNumber: true, product: true, quantity: true, unitPrice: true, currency: true, status: true, sentAt: true, createdAt: true },
+    select: { id: true, quoteNumber: true, product: true, quantity: true, unitPrice: true, totalAmount: true, currency: true, status: true, sentAt: true, createdAt: true },
   });
 
   return {
@@ -244,6 +245,8 @@ export async function orderDetail(user: Actor, id: string) {
       product: q.product,
       quantity: q.quantity,
       unitPrice: q.unitPrice.toFixed(2),
+      amount: quotationAmount(q).toFixed(2),
+      itemized: q.totalAmount !== null,
       currency: q.currency,
       status: q.status,
       sentAt: q.sentAt ? q.sentAt.toISOString() : null,

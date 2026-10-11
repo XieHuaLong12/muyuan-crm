@@ -1,4 +1,5 @@
 import { taskScope } from './task-service';
+import { quotationAmount } from '@/lib/quotation-amount';
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { Actor,HttpError,scope } from '@/lib/auth';
@@ -18,7 +19,7 @@ export async function bosOverview(user:Actor,now=new Date()){
   db.customer.count({where:{...customer,createdAt:{gte:start,lt:end}}}),
   db.customer.count({where:{...customer,createdAt:{gte:previousStart,lt:start}}}),
   db.customer.count({where:{...customer,stage:{notIn:['WON','LOST','INVALID','PAUSED']},nextFollowUpAt:{lt:end}}}),
-  db.quotation.findMany({where:{customer,sentAt:{gte:start,lt:end}},select:{currency:true,unitPrice:true,quantity:true}}),
+  db.quotation.findMany({where:{customer,sentAt:{gte:start,lt:end}},select:{currency:true,unitPrice:true,quantity:true,totalAmount:true}}),
   db.deal.findMany({where:{customer,dealDate:{gte:monthStart,lt:end}},select:{currency:true,dealAmount:true,grossProfit:true}}),
   db.order.count({where:{customer,orderDate:{gte:monthStart,lt:end},status:{not:'CANCELLED'}}}),
   db.marketingMetric.findMany({where:{metricDate:{gte:monthStart,lt:end},campaign},select:{metricDate:true,spend:true,impressions:true,clicks:true,leads:true,campaign:{select:{currency:true,channel:true}}}}),
@@ -37,7 +38,7 @@ export async function bosOverview(user:Actor,now=new Date()){
  const todayMetrics=metrics.filter(m=>m.metricDate.toISOString().slice(0,10)===today);
  const adSpendToday=sumMoney(todayMetrics.map(m=>({currency:m.campaign.currency,amount:m.spend})));
  const adSpendMonth=sumMoney(metrics.map(m=>({currency:m.campaign.currency,amount:m.spend})));
- const quoteAmount=sumMoney(quotes.map(q=>({currency:q.currency,amount:q.unitPrice.mul(q.quantity)})));
+ const quoteAmount=sumMoney(quotes.map(q=>({currency:q.currency,amount:quotationAmount(q)})));
  const dealAmount=sumMoney(deals.map(d=>({currency:d.currency,amount:d.dealAmount})));
  const grossProfit=sumMoney(deals.map(d=>({currency:d.currency,amount:d.grossProfit})));
  const last30=metrics.filter(m=>m.metricDate>=windowStart);

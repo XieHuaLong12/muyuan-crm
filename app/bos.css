@@ -352,3 +352,235 @@
 @media(max-width:600px){.bos-section-tabs{width:100%;margin:0 0 20px}.bos-section-tabs a{flex:1;text-align:center;padding:8px 10px}}
 @media(max-width:600px){.bos-lead-filter{flex-wrap:wrap}.bos-lead-filter .bos-search,.bos-lead-filter select{width:100%}.bos-analytics .two-columns{grid-template-columns:minmax(0,1fr)}.bos-analytics .card{min-width:0;overflow-x:auto}}
 @media(max-width:760px){.bos-products-main{width:100%;max-width:100%}.bos-products-main .bos-card{overflow-x:auto}}
+
+/* ── 报价单：对外单据（固定 1000px 宽；预览、导出图片 / PDF、打印共用） ── */
+.quote-doc{width:1000px;background:#fff;color:#1d1d1f;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;font-size:13px;line-height:1.55;letter-spacing:0;padding:40px 36px 34px;box-sizing:border-box;text-align:left}
+.quote-doc *{box-sizing:border-box}
+.quote-doc h1,.quote-doc h2,.quote-doc p,.quote-doc dl,.quote-doc dd{margin:0}
+.quote-doc-head{display:flex;gap:24px;align-items:center;padding-bottom:22px;border-bottom:3px solid #164b3a}
+.quote-doc-logo{width:180px;height:73px;object-fit:cover;border-radius:10px;flex:none;display:block}
+.quote-doc-head h1{font-size:26px;font-weight:700;letter-spacing:.02em;color:#164b3a;line-height:1.25}
+.quote-doc-company{font-size:13px;font-weight:600;margin-top:6px!important}
+.quote-doc-contact{font-size:11.5px;color:#6e6e73;margin-top:4px!important}
+.quote-doc h2{font-size:12px;font-weight:700;letter-spacing:.08em;color:#164b3a;padding:6px 10px;background:#edf4ef;border-radius:6px;margin-bottom:8px}
+.quote-doc-info{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:22px}
+.quote-doc dl>div{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;padding:6px 10px;border-bottom:1px solid #e8eee8}
+.quote-doc dt{color:#6e6e73;font-size:12px}
+.quote-doc dd{font-size:12.5px;overflow-wrap:anywhere}
+.quote-doc-terms,.quote-doc-items,.quote-doc-totals,.quote-doc-notes{margin-top:22px}
+.quote-doc-terms dl>div{grid-template-columns:140px minmax(0,1fr)}
+.quote-doc table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11.5px;white-space:normal}
+.quote-doc th{background:#164b3a;color:#fff;font-weight:600;font-size:11px;padding:8px 5px;text-align:left;white-space:pre-line;vertical-align:middle;line-height:1.35}
+.quote-doc th:nth-child(1){width:32px}.quote-doc th:nth-child(2){width:90px}.quote-doc th:nth-child(3){width:132px}.quote-doc th:nth-child(5){width:120px}
+.quote-doc th:nth-child(7){width:42px}.quote-doc th:nth-child(8){width:40px}.quote-doc th:nth-child(9){width:54px}.quote-doc th:nth-child(10){width:56px}.quote-doc th:nth-child(11){width:82px}.quote-doc th:nth-child(12){width:94px}
+.quote-doc td{padding:8px 5px;border-bottom:1px solid #e8eee8;vertical-align:middle;overflow-wrap:anywhere}
+.quote-doc tbody tr:nth-child(even) td{background:#f5f5f7}
+.quote-doc .quote-doc-no{text-align:center}
+.quote-doc-image img{width:80px;height:60px;object-fit:cover;border-radius:6px;display:block}
+.quote-doc-noimage{color:#c7c7ca}
+.quote-doc-model strong{display:block;font-size:12px}
+.quote-doc-model small{display:block;color:#6e6e73;font-size:11px;margin-top:3px}
+.quote-doc .quote-doc-num{text-align:right;font-variant-numeric:tabular-nums}
+.quote-doc td.quote-doc-num{white-space:nowrap}
+.quote-doc-empty{text-align:center;color:#86868b;padding:28px 10px!important}
+.quote-doc-totals-grid{display:grid;grid-template-columns:1fr 1.25fr;gap:28px;align-items:start}
+.quote-doc-measures dd{font-variant-numeric:tabular-nums;font-weight:600}
+.quote-doc-money>div{grid-template-columns:minmax(0,1fr) auto!important}
+.quote-doc-money dd{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.quote-doc-money dt small{display:block;font-size:11px;color:#86868b}
+.quote-doc .quote-doc-grand{background:#164b3a;border-radius:8px;border-bottom:0;margin-top:6px;padding:10px}
+.quote-doc .quote-doc-grand dt,.quote-doc .quote-doc-grand dd{color:#fff;font-size:15px;font-weight:700}
+.quote-doc-notes p{white-space:pre-line;font-size:12px;color:#1d1d1f;line-height:1.8;padding:0 10px}
+.quote-doc-foot{margin-top:26px;padding-top:14px;border-top:1px solid #e8eee8;display:flex;justify-content:space-between;gap:16px;font-size:12px;color:#6e6e73}
+.quote-doc-slogan{color:#164b3a;font-weight:600}
+
+/* ── 报价单：构建器 ── */
+.bos-quote-builder{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+.bos-quote-form{display:grid;gap:16px;min-width:0}
+.bos-quote-preview-pane{position:sticky;top:18px;display:grid;gap:12px;min-width:0}
+.bos-quote-mobile-switch{display:none}
+.bos-quote-scale{overflow:hidden;border-radius:12px;border:1px solid var(--bos-border);background:#fff;box-shadow:0 2px 16px rgba(0,0,0,.06)}
+.bos-quote-scale-inner{transform-origin:top left}
+.bos-quote-field{display:grid;gap:6px;min-width:0;align-content:start}
+.bos-quote-field>span{font-size:12px;color:#6e6e73}
+.bos-quote-field em{font-style:normal;color:#86868b}
+.bos-quote-field textarea.bos-input{resize:vertical;font:inherit;line-height:1.6}
+.bos-quote-row{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-top:16px}
+.bos-quote-row>.bos-quote-field{flex:1 1 200px}
+.bos-quote-row>.bos-quote-grow{flex:2 1 260px}
+.bos-quote-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin:16px 0}
+.bos-quote-span{grid-column:1/-1}
+.bos-quote-segment{display:inline-flex;flex-wrap:wrap;gap:4px;padding:4px;background:#eef1ed;border-radius:12px;width:fit-content;max-width:100%}
+.bos-quote-segment button{border:0;background:transparent;border-radius:9px;padding:6px 14px;font-size:13px;color:#5d6b64;min-height:36px;display:inline-flex;align-items:baseline;gap:6px;transition:background .16s}
+.bos-quote-segment button small{font-size:11px;color:#86868b}
+.bos-quote-segment button[aria-checked=true]{background:#fff;color:#17382f;font-weight:600;box-shadow:0 1px 3px #17382f14}
+.bos-quote-adjust{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.bos-quote-adjust button{border:1px solid var(--bos-border);background:#fff;border-radius:10px;padding:6px 12px;font-size:12px;min-height:36px;font-variant-numeric:tabular-nums}
+.bos-quote-adjust button.is-active{background:var(--bos-green);border-color:var(--bos-green);color:#fff;font-weight:600}
+.bos-quote-adjust label{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#6e6e73}
+.bos-quote-adjust .bos-input{width:72px;padding:7px 10px}
+.bos-quote-combobox{position:relative}
+.bos-quote-options{list-style:none;margin:6px 0 0;padding:6px;border:1px solid var(--bos-border);border-radius:12px;background:#fff;max-height:280px;overflow:auto;box-shadow:var(--bos-shadow)}
+.bos-quote-options button{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;width:100%;text-align:left;background:none;border:0;border-radius:9px;padding:9px 10px;min-height:40px}
+.bos-quote-options button:hover{background:#f2f2f4}
+.bos-quote-options strong{font-size:13px}
+.bos-quote-options small{grid-column:1;font-size:12px;color:#86868b;overflow-wrap:anywhere}
+.bos-quote-options em{grid-column:2;grid-row:1/3;align-self:center;font-style:normal;font-size:11px;color:var(--bos-green)}
+.bos-quote-option-empty{padding:10px;font-size:12px;color:#86868b}
+.bos-quote-option-empty a{color:var(--bos-green)!important;text-decoration:underline}
+.bos-quote-customer-chip{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:#edf4ef}
+.bos-quote-customer-chip>div{flex:1;min-width:0;display:grid;gap:2px}
+.bos-quote-customer-chip small{font-size:12px;color:#5d6b64;overflow-wrap:anywhere}
+.bos-quote-avatar{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--bos-green);color:#fff;font-weight:600;flex:none}
+.bos-quote-picker-bar{display:flex;gap:10px;align-items:center}
+.bos-quote-picker-bar .bos-search{flex:1;min-width:0}
+.bos-quote-catalog{list-style:none;margin:10px 0 0;padding:4px;max-height:264px;overflow:auto;border:1px solid var(--bos-border);border-radius:12px}
+.bos-quote-catalog button{display:grid;grid-template-columns:52px minmax(0,1fr) auto 16px;gap:12px;align-items:center;width:100%;padding:6px 8px;border:0;background:none;border-radius:9px;text-align:left;color:#6e6e73}
+.bos-quote-catalog button:hover{background:#f2f2f4;color:var(--bos-green)}
+.bos-quote-catalog img{width:52px;height:40px;object-fit:cover;border-radius:6px;display:block}
+.bos-quote-thumb-missing{display:grid;place-items:center;width:52px;height:40px;border:1px dashed var(--bos-border);border-radius:6px;color:#a0a0a6;font-size:11px}
+.bos-quote-catalog-name{display:grid;min-width:0}
+.bos-quote-catalog-name strong{font-size:13px;color:var(--bos-primary)}
+.bos-quote-catalog-name small{font-size:12px;color:#86868b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bos-quote-catalog-price{display:grid;justify-items:end;font-size:12px;color:var(--bos-primary);font-variant-numeric:tabular-nums}
+.bos-quote-catalog-price small{font-size:11px;color:#86868b}
+.bos-quote-catalog-price .bos-quote-last{color:var(--bos-green)}
+.bos-quote-notice{margin-top:10px!important;font-size:12px;color:#85521b;background:#faf1e6;padding:8px 12px;border-radius:10px}
+.bos-quote-lines{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:10px}
+.bos-quote-lines>li{border:1px solid var(--bos-border);border-radius:12px;padding:10px 12px;background:#fff}
+.bos-quote-lines>li.is-missing{background:#faf1e6}
+.bos-quote-line{display:grid;grid-template-columns:20px 56px 84px 124px minmax(0,1fr) auto;grid-template-areas:'no img name name name tools' 'no img qty price amount amount';gap:8px 10px;align-items:center}
+.bos-quote-line-no{grid-area:no}
+.bos-quote-line>img,.bos-quote-line>.bos-quote-thumb-missing{grid-area:img;align-self:start}
+.bos-quote-line-name{grid-area:name}
+.bos-quote-line-tools{grid-area:tools;align-self:start}
+.bos-quote-line-qty{grid-area:qty}
+.bos-quote-line-price{grid-area:price}
+.bos-quote-line-amount{grid-area:amount;align-self:end}
+.bos-quote-line-no{font-size:12px;color:#86868b;text-align:center}
+.bos-quote-line>img{width:56px;height:42px;object-fit:cover;border-radius:6px;display:block}
+.bos-quote-line>.bos-quote-thumb-missing{width:56px;height:42px}
+.bos-quote-line-name{display:grid;gap:4px;min-width:0}
+.bos-quote-line-name small{font-size:11px;color:#86868b;overflow-wrap:anywhere}
+.bos-quote-line .bos-input{padding:8px 10px;font-size:13px}
+.bos-quote-line-qty,.bos-quote-line-price{display:grid;gap:4px;min-width:0}
+.bos-quote-line-qty span,.bos-quote-line-price span{font-size:11px;color:#86868b;white-space:nowrap}
+.bos-quote-line-qty .bos-input,.bos-quote-line-price .bos-input{font-variant-numeric:tabular-nums}
+.bos-quote-line-amount{display:grid;justify-items:end;gap:4px;font-variant-numeric:tabular-nums;min-width:0}
+.bos-quote-line-amount strong{font-size:14px;white-space:nowrap}
+.bos-quote-line-amount small{font-size:11px;white-space:nowrap}
+.bos-quote-source{display:inline-flex;align-items:center;gap:2px}
+.bos-quote-line-tools{display:flex;gap:2px}
+.bos-quote-icon{display:inline-grid;place-items:center;width:32px;height:32px;padding:0;border:0;border-radius:9px;background:none;color:#6e6e73;transition:background .16s}
+.bos-quote-icon:hover{background:#f2f2f4;color:var(--bos-primary)}
+.bos-quote-source .bos-quote-icon{width:26px;height:26px}
+.bos-quote-ok{color:var(--bos-green)}
+.bos-quote-warn{color:#85521b}
+.bos-quote-hint{font-size:12px;color:#86868b;margin-top:8px!important;line-height:1.7}
+.bos-quote-hint a{color:var(--bos-green)!important;text-decoration:underline}
+.bos-quote-line-detail{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--bos-border)}
+.bos-quote-empty{padding:24px;text-align:center;color:#86868b;font-size:13px;border:1px dashed var(--bos-border);border-radius:12px;margin-top:16px!important}
+.bos-quote-subtotals{display:flex;flex-wrap:wrap;gap:8px 28px;margin:16px 0 0;padding-top:14px;border-top:1px solid var(--bos-border)}
+.bos-quote-subtotals dt{font-size:11px;color:#86868b}
+.bos-quote-subtotals dd{margin:2px 0 0;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.bos-quote-subtotals small{display:block;font-size:11px;color:#86868b;font-weight:400}
+.bos-quote-internal dd{color:var(--bos-green)}
+.bos-quote-freight{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:16px}
+.bos-quote-freight button{display:grid;gap:4px;align-content:start;text-align:left;padding:12px 14px;border:1px solid var(--bos-border);border-radius:12px;background:#fff;min-height:40px;transition:background .16s}
+.bos-quote-freight button:hover{background:#f5f5f7}
+.bos-quote-freight button[aria-checked=true]{border-color:var(--bos-green);background:#edf4ef;box-shadow:inset 0 0 0 1px var(--bos-green)}
+.bos-quote-freight strong{font-size:13px}
+.bos-quote-freight small{font-size:11px;color:#86868b}
+.bos-quote-freight em{font-style:normal;font-size:12px;color:var(--bos-green);font-weight:600}
+.bos-quote-link-button{background:none;border:0;padding:0;margin-top:10px}
+.bos-quote-collapse{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:0;padding:0;text-align:left;gap:12px;color:inherit}
+.bos-quote-collapse>span{display:grid;gap:4px}
+.bos-quote-collapse small{font-size:12px;color:#86868b}
+.bos-quote-details{margin:8px 0 16px}
+.bos-quote-savebar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 18px;background:#fff;border:1px solid var(--bos-border);border-radius:16px;box-shadow:var(--bos-shadow)}
+.bos-quote-savebar>div{display:grid;gap:2px;min-width:0}
+.bos-quote-savebar span{font-size:11px;color:#86868b}
+.bos-quote-savebar strong{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;overflow-wrap:anywhere}
+.bos-quote-savebar small{font-size:12px;color:#85521b}
+.bos-quote-error{font-size:13px}
+@media(min-width:1600px){.bos-quote-builder{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
+@media(max-width:1250px){
+ .bos-quote-builder{grid-template-columns:minmax(0,1fr)}
+ .bos-quote-mobile-switch{display:flex}
+ .bos-quote-preview-pane{order:-1;top:0;z-index:5}
+ .bos-quote-builder.is-edit .bos-quote-scale{display:none}
+ .bos-quote-builder.is-preview .bos-quote-form{display:none}
+ .bos-quote-builder.is-preview .bos-quote-preview-pane{position:static}
+}
+@media(max-width:760px){
+ .bos-quote-line{grid-template-columns:72px minmax(0,1fr) auto;grid-template-areas:'img name tools' 'qty price amount'}
+ .bos-quote-line-no{display:none}
+ .bos-quote-savebar{padding:12px 14px}
+ .bos-quote-savebar strong{font-size:18px}
+}
+@media(max-width:600px){
+ .bos-quote-picker-bar{flex-wrap:wrap}
+ .bos-quote-picker-bar .bos-search{flex-basis:100%}
+ .bos-quote-catalog button{grid-template-columns:44px minmax(0,1fr) auto;gap:10px}
+ .bos-quote-catalog button>svg{display:none}
+ .bos-quote-catalog img,.bos-quote-catalog .bos-quote-thumb-missing{width:44px;height:34px}
+ .bos-quote-segment button{padding:6px 10px}
+ .bos-quote-savebar{flex-wrap:wrap}
+ .bos-quote-savebar .bos-button{flex:1}
+}
+
+/* ── 报价单：查看与导出 ── */
+.bos-quote-actions{margin-bottom:16px;display:grid;gap:12px}
+.bos-quote-action-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bos-quote-message{font-size:13px;color:var(--bos-green);background:#edf4ef;padding:10px 14px;border-radius:10px}
+.bos-quote-view{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.bos-quote-print-root{min-width:0}
+.bos-quote-side{display:grid;gap:16px;position:sticky;top:18px}
+.bos-quote-facts{display:grid;margin:12px 0 0}
+.bos-quote-facts>div{padding:10px 0;border-top:1px solid var(--bos-border)}
+.bos-quote-facts dt{font-size:11px;color:#86868b}
+.bos-quote-facts dd{margin:4px 0 0;font-size:13px;overflow-wrap:anywhere}
+.bos-quote-facts a{color:var(--bos-green)!important}
+.bos-quote-pre{white-space:pre-wrap}
+.bos-quote-tight{margin-top:6px!important}
+.bos-quote-sources{list-style:none;margin:12px 0 0;padding:0}
+.bos-quote-sources li{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--bos-border);font-size:12px}
+.bos-quote-sources li>span{display:grid;gap:3px;min-width:0}
+.bos-quote-sources li>span:last-child{justify-items:end;flex:none}
+.bos-quote-sources small{color:#86868b;font-size:11px}
+@media(min-width:1600px){.bos-quote-view{grid-template-columns:minmax(0,1fr) 340px}}
+@media(max-width:1100px){.bos-quote-view{grid-template-columns:minmax(0,1fr)}.bos-quote-side{position:static}}
+@media(max-width:600px){.bos-quote-action-row .bos-button{flex:1 1 calc(50% - 8px)}}
+
+/* ── 运费库 ── */
+.bos-freight-form{margin-bottom:16px}
+.bos-freight-rate{display:flex;gap:8px;align-items:center}
+.bos-freight-rate .bos-input:first-child{flex:1;min-width:0}
+.bos-freight-rate select{width:88px;flex:none}
+.bos-freight-rate span{font-size:12px;color:#86868b;white-space:nowrap}
+
+/* ── 客户档案：报价单 ── */
+.bos .bos-quote-panel .card-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bos-quote-panel-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:8px}
+.bos-quote-panel-list li{display:flex;align-items:center;gap:10px;border:1px solid var(--bos-border);border-radius:12px;padding:10px 12px}
+.bos-quote-panel-list a{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.bos-quote-panel-list a>span:not(.bos-quote-panel-amount){display:grid;min-width:0}
+.bos-quote-panel-list small{color:#86868b;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bos-quote-panel-amount{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bos-quote-panel-sub{margin-top:18px!important}
+.bos-quote-panel-sub small{font-size:12px;color:#86868b;font-weight:400;margin-left:6px}
+.bos-quote-panel td small{display:block;color:#86868b}
+@media(max-width:600px){.bos-quote-panel-list li{flex-wrap:wrap}.bos-quote-panel-list a{flex-basis:100%}}
+
+/* ── 报价单打印：只输出单据 ── */
+@media print{
+ @page{size:A4;margin:10mm}
+ .quote-printing .bos-sidebar,.quote-printing .bos-topbar,.quote-printing .bos-section-tabs,.quote-printing .bos-page-header,.quote-printing .bos-quote-actions,.quote-printing .bos-quote-side,.quote-printing .bos-live-toasts,.quote-printing .bos-skip,.quote-printing .bos-sync-error{display:none!important}
+ .quote-printing .bos,.quote-printing .bos-main-frame{display:block;background:#fff;min-height:0}
+ .quote-printing .bos-main{padding:0;max-width:none}
+ .quote-printing .bos-quote-view{display:block}
+ .quote-printing .bos-quote-scale{height:auto!important;overflow:visible;border:0;box-shadow:none;border-radius:0}
+ .quote-printing .bos-quote-scale-inner{transform:none!important;width:auto!important}
+ .quote-printing .quote-doc{zoom:.74;padding:0}
+ .quote-printing .quote-doc tr,.quote-printing .quote-doc dl>div,.quote-printing .quote-doc-totals,.quote-printing .quote-doc-notes,.quote-printing .quote-doc-foot{break-inside:avoid}
+}
