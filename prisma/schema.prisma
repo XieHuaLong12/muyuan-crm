@@ -234,6 +234,8 @@ model Setting {
  adLeadFirstContactMinutes Int @default(5)
  // 美元/人民币汇率。默认 6.70 取自 2026 中英文两份报价表之间的隐含汇率（54 组中 44 组精确为 6.70）。
  usdCnyRate Decimal @default(6.70) @db.Decimal(10, 4)
+ // 欧元/人民币汇率。为空时欧元报价不自动折算单价与运费，需要手动填写。
+ eurCnyRate Decimal? @db.Decimal(10, 4)
 }
 
 model LeadSubmission {
@@ -511,7 +513,102 @@ model Quotation {
  createdBy String
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
+ // ── 多行报价单（产品库 → 报价单）。旧的单行报价这些列保持为空，金额仍按 unitPrice × quantity。
+ // 多行报价：product 为产品摘要，quantity 为总件数，unitPrice 为均价（仅供旧读取方兜底），
+ // 报价金额以 totalAmount 为准（含运费与其他费用）。
+ language String @default("en") @db.VarChar(4)
+ quoteDate DateTime?
+ validUntil DateTime?
+ subtotalAmount Decimal? @db.Decimal(14, 2)
+ freightAmount Decimal? @db.Decimal(14, 2)
+ otherAmount Decimal? @db.Decimal(14, 2)
+ totalAmount Decimal? @db.Decimal(14, 2)
+ totalQuantity Int?
+ totalCbm Decimal? @db.Decimal(10, 4)
+ totalGrossWeightKg Decimal? @db.Decimal(12, 2)
+ destination String @default("") @db.VarChar(120)
+ freightRateId String?
+ freightRate FreightRate? @relation(fields: [freightRateId], references: [id], onDelete: SetNull)
+ // 报价当时的买方、条款、抬头与运费计算快照：之后改模板或运费库，已报出的单据不变。
+ documentJson String? @db.Text
+ items QuotationItem[]
  @@index([customerId, createdAt])
+ @@index([createdAt])
+ @@index([freightRateId])
+}
+// 报价单明细行：规格、包装、价格均为报价当时的快照，便于日后核对「给这个客户报过什么价」。
+model QuotationItem {
+ id String @id @default(cuid())
+ quotationId String
+ quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+ sort Int @default(0)
+ productId String?
+ variantId String?
+ model String @db.VarChar(80)
+ name String @db.VarChar(200)
+ dimensions String @default("") @db.VarChar(200)
+ material String @default("") @db.VarChar(400)
+ packing String @default("") @db.VarChar(300)
+ unit String @default("") @db.VarChar(20)
+ imageKey String? @db.VarChar(191)
+ note String @default("") @db.VarChar(300)
+ quantity Int
+ cbm Decimal @default(0) @db.Decimal(8, 4)
+ grossWeightKg Decimal @default(0) @db.Decimal(8, 2)
+ unitPrice Decimal @db.Decimal(14, 2)
+ amount Decimal @db.Decimal(14, 2)
+ // 报价当时价格表给出的建议价（内部参考，不出现在单据上）与单价来源：LIST / LAST_QUOTE / MANUAL
+ listPrice Decimal? @db.Decimal(14, 2)
+ priceSource String @default("MANUAL") @db.VarChar(16)
+ createdAt DateTime @default(now())
+ @@index([quotationId, sort])
+ @@index([variantId])
+}
+// 运费库：按目的国维护，例如 法国 DDP 22 CNY/kg、印度 550 USD/CBM。
+model FreightRate {
+ id String @id @default(cuid())
+ country String @db.VarChar(80)
+ port String @default("") @db.VarChar(120)
+ // SEA / AIR / EXPRESS / RAIL / TRUCK
+ mode String @default("SEA") @db.VarChar(16)
+ incoterm String @default("DDP") @db.VarChar(8)
+ // KG / CBM / CONTAINER_20GP / CONTAINER_40HQ / SHIPMENT
+ basis String @db.VarChar(16)
+ rate Decimal @db.Decimal(14, 2)
+ currency String @db.VarChar(3)
+ // 计泡系数：每立方米按多少公斤计费（按公斤计费时取 实重 与 体积×系数 的较大值）
+ volumetricKgPerCbm Int?
+ // 最低计费量，单位与计费方式一致（如 21 kg、1 CBM）
+ minChargeQty Decimal? @db.Decimal(10, 2)
+ transitDays String @default("") @db.VarChar(40)
+ note String @default("") @db.VarChar(500)
+ status String @default("ACTIVE") @db.VarChar(16)
+ createdBy String
+ updatedBy String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ quotations Quotation[]
+ @@index([status, country])
+}
+// 报价单模板：每种语言一行（zh / en / fr）。没有记录时使用代码里的默认文案，保存后以数据库为准。
+model QuoteTemplate {
+ language String @id @db.VarChar(4)
+ title String @db.VarChar(120)
+ companyLine String @db.VarChar(300)
+ contactLine String @db.VarChar(400)
+ paymentTerms String @db.VarChar(400)
+ leadTime String @db.VarChar(400)
+ moq String @db.VarChar(400)
+ packing String @db.VarChar(400)
+ warranty String @db.VarChar(400)
+ priceBasis String @db.VarChar(400)
+ notes String @db.Text
+ footer String @db.VarChar(200)
+ preparedByRole String @db.VarChar(60)
+ unitLabel String @db.VarChar(20)
+ validDays Int @default(15)
+ updatedBy String
+ updatedAt DateTime @updatedAt
 }
 model WorkflowEvent {
  id String @id @default(cuid())

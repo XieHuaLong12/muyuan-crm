@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { quotationAmount } from '@/lib/quotation-amount';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
@@ -171,7 +172,7 @@ async function recommend(user: Actor): Promise<Recommendation[]> {
     // ① 报价发出 3 天以上、客户仍在推进中且之后没有联系（与驾驶舱「报价超时」同一口径）
     db.quotation.findMany({
       where: staleQuotes(now, scope(user)),
-      select: { id: true, customerId: true, unitPrice: true, quantity: true, currency: true, sentAt: true, customer: { select: { name: true, country: true } } },
+      select: { id: true, customerId: true, unitPrice: true, quantity: true, totalAmount: true, currency: true, sentAt: true, customer: { select: { name: true, country: true } } },
       orderBy: { sentAt: 'asc' },
       take: 2,
     }),
@@ -206,7 +207,7 @@ async function recommend(user: Actor): Promise<Recommendation[]> {
       mark: '🔥',
       title: `跟进 ${q.customer.name} 的报价`,
       reason: `报价后 ${days} 天未回复`,
-      amount: q.unitPrice.mul(q.quantity).toFixed(2),
+      amount: quotationAmount(q).toFixed(2),
       customerId: q.customerId,
       customerName: q.customer.name,
       country: q.customer.country,

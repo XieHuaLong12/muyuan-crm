@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { Package,Layers3,AlertTriangle,ArrowUpRight } from 'lucide-react';
+import { Package,Layers3,AlertTriangle,ArrowUpRight,FilePlus2 } from 'lucide-react';
 import { Header,Card,Table,Badge,EmptyState,Typography } from '@/components/ui/bos';
 
 /**
@@ -75,6 +75,9 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
             <Link href={buildUrl(data.query, { review: 'NEEDS_REVIEW', page: 1 })} className="bos-button">
               <AlertTriangle size={15} />
               待核对 {data.reviewCount}
+            </Link>
+            <Link href="/products/quotes/new" className="bos-button bos-button-primary">
+              <FilePlus2 size={15} /> 新建报价
             </Link>
           </>
         }
@@ -255,8 +258,8 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
               <li>
                 <span className="bos-suggestion-number">02</span>
                 <div>
-                  <strong>报价助手</strong>
-                  <p>已可通过 <code>/api/products/:id/quote-price</code> 取到 FOB 真实价格与 MOQ 校验。</p>
+                  <strong>报价单</strong>
+                  <p><Link href="/products/quotes/new">新建报价</Link>：选客户和型号，单价按价格表或该客户上次报价自动带出，运费按<Link href="/products/freight">运费库</Link>计算，生成中英文图片与 PDF。</p>
                 </div>
               </li>
             </ul>

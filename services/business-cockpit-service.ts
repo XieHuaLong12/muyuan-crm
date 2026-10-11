@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { quotationAmount } from '@/lib/quotation-amount';
 import { db } from '@/lib/db';
 import { Actor, scope } from '@/lib/auth';
 import { dayKey, localDate, periodRange } from '@/lib/time';
@@ -35,7 +36,7 @@ export async function businessCockpit(user: Actor, query: Query, now = new Date(
  const [deals, orders, quotes, customers, previousCustomers, metrics, periodTargets, overdueTasks, dueTasks, doneTasks, lateQuotes] = await Promise.all([
   db.deal.findMany({ where: dealsIn(data, customerScope), select: { dealDate: true, currency: true, dealAmount: true, grossProfit: true, customer: { select: { source: true } } } }),
   db.order.findMany({ where: ordersIn(data, customerScope), select: { orderDate: true } }),
-  db.quotation.findMany({ where: sentQuotesIn(data, customerScope), select: { sentAt: true, currency: true, unitPrice: true, quantity: true } }),
+  db.quotation.findMany({ where: sentQuotesIn(data, customerScope), select: { sentAt: true, currency: true, unitPrice: true, quantity: true, totalAmount: true } }),
   db.customer.findMany({ where: { ...customerScope, ...inquiryIn(period) }, select: { stage: true, isQualified: true, quotedAt: true, source: true, quotations: { where: { status: 'SENT' }, select: { id: true }, take: 1 }, deals: { select: { id: true }, take: 1 } } }),
   db.customer.count({ where: { ...customerScope, ...inquiryIn({ start: previousStart, end: previousEnd }) } }),
   db.marketingMetric.findMany({ where: { metricDate: { gte: selected.start, lt: effectiveEnd }, campaign: campaignScope }, select: { spend: true, campaign: { select: { channel: true, currency: true } } } }),
@@ -50,8 +51,8 @@ export async function businessCockpit(user: Actor, query: Query, now = new Date(
  const periodRevenue = sum(periodDeals.map(deal => deal.dealAmount)).toNumber();
  const previousRevenue = sum(currencyDeals.filter(deal => within(deal.dealDate, previousStart, previousEnd)).map(deal => deal.dealAmount)).toNumber();
  const currencyQuotes = quotes.filter(quote => quote.currency === currency && quote.sentAt !== null);
- const quotedAmount = sum(currencyQuotes.filter(quote => quote.sentAt && within(quote.sentAt, selected.start, effectiveEnd)).map(quote => quote.unitPrice.mul(quote.quantity))).toNumber();
- const previousQuotedAmount = sum(currencyQuotes.filter(quote => quote.sentAt && within(quote.sentAt, previousStart, previousEnd)).map(quote => quote.unitPrice.mul(quote.quantity))).toNumber();
+ const quotedAmount = sum(currencyQuotes.filter(quote => quote.sentAt && within(quote.sentAt, selected.start, effectiveEnd)).map(quote => quotationAmount(quote))).toNumber();
+ const previousQuotedAmount = sum(currencyQuotes.filter(quote => quote.sentAt && within(quote.sentAt, previousStart, previousEnd)).map(quote => quotationAmount(quote))).toNumber();
  const grossProfit = user.role === 'ADMIN' ? sum(periodDeals.map(deal => deal.grossProfit)).toNumber() : null;
  const periodOrders = orders.filter(order => within(order.orderDate, selected.start, effectiveEnd)).length;
  const previousProfit = sum(currencyDeals.filter(deal => within(deal.dealDate, previousStart, previousEnd)).map(deal => deal.grossProfit)).toNumber();

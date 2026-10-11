@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { ArrowLeft,AlertTriangle,Boxes,Truck,Sparkles } from 'lucide-react';
+import { ArrowLeft,AlertTriangle,Boxes,Truck,Sparkles,FilePlus2 } from 'lucide-react';
 import { Header,Card,Table,Badge,EmptyState,Typography } from '@/components/ui/bos';
 
 type Carton = {
@@ -91,9 +91,14 @@ export function ProductDetail({ data }: { data: ProductDetailData }) {
         title={`${data.model} ${data.series ? `· ${data.series.nameEn}` : ''}`}
         description={`${data.lengthLabel || data.nameEn} · ${data.variants.length} 个尺寸变体 · 交期 ${data.leadTimeDays} 天 · 质保 ${data.qaMonths} 个月`}
         actions={
-          <Link href="/products" className="bos-button">
-            <ArrowLeft size={15} /> 返回产品库
-          </Link>
+          <>
+            <Link href="/products" className="bos-button">
+              <ArrowLeft size={15} /> 返回产品库
+            </Link>
+            <Link href={`/products/quotes/new?product=${data.id}`} className="bos-button bos-button-primary">
+              <FilePlus2 size={15} /> 用此产品报价
+            </Link>
+          </>
         }
       />
 

@@ -28,7 +28,7 @@ export type OrderDetailData = {
   progress: { done: boolean[]; cancelled: boolean };
   customer: { id: string; name: string; companyName: string; country: string; city: string | null; whatsapp: string | null; email: string | null; phone: string | null; language: string | null };
   deal: { id: string; orderNumber: string; dealDate: string; currency: string; dealAmount: string; product: string | null; productModel: string | null; quantity: number | null } | null;
-  quotations: { id: string; quoteNumber: string; product: string; quantity: number; unitPrice: string; currency: string; status: string; sentAt: string | null; createdAt: string }[];
+  quotations: { id: string; quoteNumber: string; product: string; quantity: number; unitPrice: string; amount: string; itemized: boolean; currency: string; status: string; sentAt: string | null; createdAt: string }[];
 };
 
 const day = (iso: string | null) => (iso ? iso.slice(0, 10) : '—');
@@ -113,10 +113,10 @@ export function OrderDetail({ data, timezone, admin = false }: { data: OrderDeta
             {data.quotations.map(q => (
               <li key={q.id}>
                 <div>
-                  <strong>{q.quoteNumber}</strong>
+                  {q.itemized ? <Link href={`/products/quotes/${q.id}`}><strong>{q.quoteNumber}</strong></Link> : <strong>{q.quoteNumber}</strong>}
                   <small>{q.product} · {q.quantity} 件 · {day(q.createdAt)}</small>
                 </div>
-                <span>{q.currency} {q.unitPrice}</span>
+                <span>{q.currency} {q.amount}</span>
               </li>
             ))}
           </ul>

@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { accessible } from './customer-service';
 import { syncCustomerWorkflow } from './workflow-service';
+import { quotationAmount } from '@/lib/quotation-amount';
 export async function createQuotation(input: unknown, user: Actor) {
   const v = z.object({ customerId:z.string().min(1),product:z.string().trim().min(1).max(180),quantity:z.number().int().positive().max(1000000),
     unitPrice:z.number().positive().max(100000000),currency:z.enum(['USD','EUR','CNY']),incoterm:z.enum(['FOB','DDP','EXW','CIF']),notes:z.string().max(4000).default('') }).parse(input);
@@ -24,7 +25,7 @@ export async function markQuoteSent(id: string, user: Actor) {
     const q=await tx.quotation.update({where:{id},data:{status:'SENT',sentAt}});
     const c=await tx.customer.findUniqueOrThrow({where:{id:quote.customerId}});
     const stage=['WON','ORDER','LOST','INVALID','PAUSED','FOLLOW_UP'].includes(c.stage)?c.stage:'QUOTED';
-    await tx.customer.update({where:{id:c.id},data:{stage,stageSource:stage!==c.stage?'SYSTEM':c.stageSource,quotedAt:c.quotedAt||sentAt,...(quote.currency===c.currency?{quotedAmount:quote.unitPrice.mul(quote.quantity)}:{})}});
+    await tx.customer.update({where:{id:c.id},data:{stage,stageSource:stage!==c.stage?'SYSTEM':c.stageSource,quotedAt:c.quotedAt||sentAt,...(quote.currency===c.currency?{quotedAmount:quotationAmount(quote)}:{})}});
     if(stage!==c.stage)await tx.stageHistory.create({data:{customerId:c.id,fromStage:c.stage,toStage:stage,changedBy:user.id,note:`报价 ${quote.quoteNumber} 已发送`}});
     const lead=await tx.customerLeadAttribution.findFirst({where:{customerId:c.id,status:'MATCHED',occurredAt:{lte:sentAt}},orderBy:[{occurredAt:'desc'},{leadKey:'desc'}]});
     await (await import('./workflow-service')).recordFirstContact(tx,c.id,sentAt,user.id);

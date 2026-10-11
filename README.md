@@ -1,5 +1,7 @@
 > 当前 LVANJU BOS 使用 Next.js 15.5 / React 19 / Prisma 6.19 / MySQL。下面的 V1 SQLite 说明保留作历史参考，当前部署请以 [身份链实现与部署报告](docs/IDENTITY_CHAIN.md) 和 `.env.example` 为准。
 
+产品库新增**报价单与运费库**：选客户和型号，单价按「该客户上次报价 → 价格表 → 汇率折算」自动带出、可逐行修改与整体调价；运费按目的国运价（按公斤含计泡 / 按立方 / 整柜 / 按票）自动计算；人民币自动出中文单据、外币出英文单据（可选法文），一键导出图片与 PDF；每份报价挂在客户档案下并列出报过的价格。详见 [报价单与运费库](docs/QUOTATION_SYSTEM.md)。
+
 Meta 广告表单线索通过 Webhook 实时入库，并由每 5 分钟的定时补拉兜底；管理员与销售在页面内和浏览器桌面实时收到新线索、新分配与首联超时提醒，广告线索分配后须在 5 分钟内联系，见 [Meta Lead Ads 接入说明](docs/META_LEAD_ADS.md)。
 
 自动进入的线索先进入待分配池（或按设置轮流分给销售），管理员在客户列表批量分配 / 转交；成交与跟进录错可由管理员更正或作废。详见 [角色工作空间](docs/ROLE_WORKSPACES.md) 的「客户分配、更正与性能修订」。
@@ -108,13 +110,14 @@ tests/                  核心指标与边界单元测试
 | 管理员 | 经营总览 | 经营驾驶舱 `/command-center` · 来源与国家 `/command-center/analysis` · 财务 `/finance` |
 | 管理员 | 客户 | 客户列表与档案 `/customers`（含待分配、回收站、智能导入）· 跟进队列 `/sales` · 销售看板 `/crm` |
 | 管理员 | 任务 | 团队任务 `/tasks` |
-| 管理员 | 订单 | 订单 `/orders` · 产品库 `/products` · 利润 `/products/margin` |
+| 管理员 | 订单 | 订单 `/orders` · 产品库 `/products` · 报价单 `/products/quotes`（含报价设置）· 运费库 `/products/freight` · 利润 `/products/margin` |
 | 管理员 | 广告与线索 | 广告效果 `/analytics/ads` · 会话质量 · 丢单原因 · 数据质量 · 线索接入 `/growth/intake` |
 | 管理员 | 团队 | 销售业绩与账号 `/team` · 目标 `/targets` · 沟通监督 `/communication` |
 | 管理员 | 设置 | 公司设置 `/settings` · 集成与接入 `/settings/integrations`（表单询盘、Meta、WhatsApp 与排查工具） |
 | 销售 | 今日工作 | 今日跟进 `/sales`（待首联、到期跟进与到期待办，按截止时间排序）· 全部待办 `/tasks` |
 | 销售 | 我的客户 | 客户列表与档案 `/customers` · 销售看板 `/crm` |
-| 销售 | 产品与报价 / 我的订单 / 我的业绩 | `/products` · `/orders` · `/sales/performance` |
+| 销售 | 产品与报价 | 产品库 `/products` · 报价单 `/products/quotes` · 运费库 `/products/freight`（只读） |
+| 销售 | 我的订单 / 我的业绩 | `/orders` · `/sales/performance` |
 
 各页面的指标口径统一定义在 `lib/metrics.ts`，见 [指标口径](docs/METRICS.md)。
 
