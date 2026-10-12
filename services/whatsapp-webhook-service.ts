@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { HttpError } from '@/lib/auth';
 import { parseGupshup, statusPredecessors, gupshupSource, providerTime } from '@/lib/gupshup';
 import { db } from '@/lib/db';
+import { withPhoneCountry } from '@/lib/phone-country';
 import { normalizeWhatsApp } from '@/lib/whatsapp';
 import { ensureConversation, messageFacts } from './conversation-identity-service';
 import { identityKey, canonicalPhone } from '@/lib/contact-identity';
@@ -150,7 +151,7 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
       // WHATSAPP_DEFAULT_OWNER_EMAIL still wins when it names an active account; otherwise the lead assignment rules decide.
       const intake=await assignment.resolveIntakeOwner(tx,process.env.WHATSAPP_DEFAULT_OWNER_EMAIL);
       const c=await tx.customer.create({data:{name:input.name.slice(0,191)||validPhone,ownerId:intake.ownerId,
-        phone:input.phone,whatsapp:input.phone,phoneE164:validPhone,waId,whatsappNormalized:waId,
+        ...withPhoneCountry({phone:input.phone,whatsapp:input.phone,waId}),phoneE164:validPhone,whatsappNormalized:waId,
         source:input.referral?'META_CLICK_TO_WHATSAPP':'WHATSAPP',sourceDetail:input.referral?'Gupshup referral':'Gupshup inbound',
         inquiryAt:input.providerOccurredAt||input.sentAt,stage:'NEW',stageSource:'SYSTEM'}});
       await rememberCustomerContacts(tx,c.id,'GUPSHUP_INBOUND');

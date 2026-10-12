@@ -45,7 +45,7 @@ export function BatchCustomerTable({ rows, tz, boot, onFollow, onSort, onChanged
           <small className="muted">{protectedCount ? `已选中 ${protectedCount} 位已成交客户：可以分配，不能删除。` : '更换筛选条件会清空选择。'}</small>
         </div>
       )}
-      <CustomerTable rows={rows} tz={tz} onFollow={onFollow} onSort={onSort} selection={admin ? {
+      <CustomerTable rows={rows} tz={tz} onFollow={onFollow} onSort={onSort} onChanged={onChanged} selection={admin ? {
         header: <SelectionBox label="全选当前页客户" checked={rows.length > 0 && rows.every(c => selectedIds.has(c.id))}
           mixed={rows.some(c => selectedIds.has(c.id)) && !rows.every(c => selectedIds.has(c.id))} disabled={!rows.length} onChange={selectPage} />,
         cell: c => <SelectionBox label={`选择客户 ${c.name}`} checked={selectedIds.has(c.id)} onChange={value => toggle(c, value)} />,

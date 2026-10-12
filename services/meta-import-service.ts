@@ -2,6 +2,7 @@ import { createHash,randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
+import { withPhoneCountry } from '@/lib/phone-country';
 import { Actor,HttpError,requireAdmin } from '@/lib/auth';
 import { dayKey } from '@/lib/time';
 import { parseInquiryDate } from '@/lib/customer-date';
@@ -211,7 +212,7 @@ async function executeCommitMeta(input:unknown,user:Actor){
    if(customerId?.startsWith('row:'))customerId=newIds.get(customerId);
    if(row.status==='REPEAT'&&!customerId)throw new HttpError(400,'同文件中的首次留资未选中，请同时选择首次留资行');
    if(row.status==='NEW'){const importedStage=stageCodes[f.stage]??'NEW';const importedPurchaseType=purchaseCodes[f.customerType]??'OTHER';const intake=v.ownerId?{ownerId:v.ownerId,pending:false,explicit:true}:await assignment.resolveIntakeOwner(tx);
-    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,phone:f.phone,whatsapp:f.whatsapp,whatsappNormalized:normalizePhone(f.whatsapp),email:f.email,country:f.country,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:importedPurchaseType,quantity:/^\d+$/.test(f.quantity)?Number(f.quantity):null,inquiryAt:sourceInstant(Object.entries(row.original).find(([header])=>draft.preview.mapping[header]==='inquiryAt')?.[1])||parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:intake.ownerId,currency:settings.currency,stage:importedStage,stageSource:f.stage?'HUMAN':'SYSTEM',isQualified:importedStage==='INVALID'?false:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
+    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,...withPhoneCountry({phone:f.phone,whatsapp:f.whatsapp,country:f.country}),whatsappNormalized:normalizePhone(f.whatsapp),email:f.email,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:importedPurchaseType,quantity:/^\d+$/.test(f.quantity)?Number(f.quantity):null,inquiryAt:sourceInstant(Object.entries(row.original).find(([header])=>draft.preview.mapping[header]==='inquiryAt')?.[1])||parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:intake.ownerId,currency:settings.currency,stage:importedStage,stageSource:f.stage?'HUMAN':'SYSTEM',isQualified:importedStage==='INVALID'?false:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
     customerId=c.id;newIds.set(`row:${row.row}`,c.id);result.created++;
     await tx.stageHistory.create({data:{customerId,changedBy:user.id,toStage:importedStage,note:'CSV 智能导入'}});
     await assignment.enterIntake(tx,customerId,user.id,intake,'CSV 智能导入');

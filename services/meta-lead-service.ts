@@ -10,6 +10,7 @@ import { retryTransaction } from '@/lib/transaction-retry';
 import { mapLeadFields, type LeadField } from '@/lib/meta-lead-fields';
 import { AD_LEAD_FRESH_HOURS } from '@/lib/constants';
 import { fetchLeadAdSnapshot } from './meta-lead-ad-snapshot';
+import { withPhoneCountry } from '@/lib/phone-country';
 import { graphVersion } from '@/lib/meta-graph';
 
 /**
@@ -262,8 +263,8 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
       if(resolved.status==='UNMATCHED'&&(phoneE164||emailNormalized)){
         const settings=await tx.setting.findUniqueOrThrow({where:{id:'system'}});
         intake=await assignment.resolveIntakeOwner(tx);
-        const customer=await tx.customer.create({data:{name:mapped.name,companyName:mapped.companyName,country:mapped.country,
-          phone:mapped.phone,whatsapp:mapped.whatsapp,whatsappNormalized:phoneE164?.slice(1)||'',email:emailNormalized||'',
+        const customer=await tx.customer.create({data:{name:mapped.name,companyName:mapped.companyName,...withPhoneCountry({country:mapped.country,phone:mapped.phone,whatsapp:mapped.whatsapp}),
+          whatsappNormalized:phoneE164?.slice(1)||'',email:emailNormalized||'',
           source:['ig','instagram'].includes(lead.lead.platform?.toLowerCase()??'')?'INSTAGRAM':'FACEBOOK',sourceDetail:lead.lead.ad_name||'Facebook Ads',purchaseType:mapped.purchaseType,productInterest:mapped.productInterest,
           quantity:mapped.quantity,notes:mapped.notes,stage:'NEW',stageSource:'SYSTEM',ownerId:intake.ownerId,currency:settings.currency,inquiryAt:occurredAt}});
         customerId=customer.id;status='CREATED';

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, scope } from '@/lib/auth';
 import { dayKey, localDate, periodRange, type Period } from '@/lib/time';
+import { contactNumber } from '@/lib/phone-country';
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).or(z.literal('')).default('');
 export const customerListQuery = z.object({
@@ -21,7 +22,8 @@ export const customerListQuery = z.object({
   period: z.enum(['', 'WEEK', 'MONTH', 'YEAR']).default(''),
   date: dateKey,
   assign: z.enum(['', 'pending']).default(''),
-  sort: z.enum(['priority', 'name', 'inquiryAt', 'country', 'source', 'productInterest', 'stage', 'isQualified', 'estimatedOrderValue', 'lastFollowUpAt', 'nextFollowUpAt', 'owner']).default('priority'),
+  // productInterest stays accepted so older bookmarked links still open.
+  sort: z.enum(['priority', 'name', 'inquiryAt', 'country', 'source', 'whatsapp', 'productInterest', 'stage', 'isQualified', 'estimatedOrderValue', 'lastFollowUpAt', 'nextFollowUpAt', 'owner']).default('priority'),
   dir: z.enum(['asc', 'desc']).default('asc'),
   page: z.coerce.number().int().min(1).max(100000).default(1),
   pageSize: z.coerce.number().int().refine(v => [10, 50, 100].includes(v), '每页数量只能是 10、50 或 100').default(10),
@@ -110,5 +112,5 @@ export async function customerList(user: Actor, input: unknown) {
     const orderBy: Prisma.CustomerOrderByWithRelationInput = q.sort === 'owner' ? { owner: { name: q.dir } } : { [q.sort]: q.dir };
     rows = await db.customer.findMany({ where, include, orderBy: [orderBy, { id: 'asc' }], skip, take: q.pageSize });
   }
-  return { rows, total, page: q.page, pageSize: q.pageSize, countries: countries.map(c => c.country), pool };
+  return { rows: rows.map(c => ({ ...c, contact: contactNumber(c) })), total, page: q.page, pageSize: q.pageSize, countries: countries.map(c => c.country), pool };
 }
