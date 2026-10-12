@@ -1,13 +1,74 @@
 'use client';
+import { useEffect,useState } from 'react';
 import Link from 'next/link';
-import { ArrowUpDown,MessageSquare } from 'lucide-react';
+import { ArrowUpDown,Check,ChevronDown,Copy,MessageCircle,MessageSquare } from 'lucide-react';
 import { Customer } from '@/lib/types';
 import { stages,sources } from '@/lib/constants';
-import { money,dateText } from '@/lib/client';
+import { KANBAN_REASON_STAGES,KANBAN_STAGES,type KanbanStage } from '@/lib/bos-kanban';
+import { api,money,dateText } from '@/lib/client';
 import { dayKey } from '@/lib/time';
 import { inquiryDate } from '@/lib/customer-date';
+import { ReasonDialog } from './forms';
 export function Badge({stage}:{stage:string}){return <span className={`badge badge-${stage.toLowerCase()}`}>{stages[stage as keyof typeof stages]??stage}</span>;}
 export function Due({date,tz}:{date:string|null;tz:string}){if(!date)return <span className="muted">未安排</span>;const key=dayKey(date,tz),today=dayKey(new Date(),tz),days=Math.round((Date.parse(today)-Date.parse(key))/86400000);return <span className={days>0?'overdue':days===0?'due-today':'muted'}>{days>0?`已超时 ${days} 天`:days===0?'今日跟进':dateText(date,tz)}</span>;}
 /** Minutes or hours a pooled lead has been waiting for an owner. */
 const waited=(since:string)=>{const m=Math.max(0,Math.floor((Date.now()-Date.parse(since))/60000));return m<60?`${m} 分钟`:m<1440?`${Math.floor(m/60)} 小时`:`${Math.floor(m/1440)} 天`;};
-export function CustomerTable({rows,tz,onFollow,onSort,selection}:{rows:Customer[];tz:string;onFollow:(c:Customer)=>void;onSort?:(key:string)=>void;selection?:{header:React.ReactNode;cell:(c:Customer)=>React.ReactNode}}){const headers=[['name','客户 / 公司'],['inquiryAt','询盘日期'],['country','国家'],['source','来源'],['productInterest','产品'],['stage','阶段'],['isQualified','有效性'],['estimatedOrderValue','预计金额'],['lastFollowUpAt','最后跟进'],['nextFollowUpAt','下次跟进'],['owner','负责人']];return <div className="table-scroll"><table><thead><tr>{selection&&<th className="selection-cell">{selection.header}</th>}{headers.map(([k,l])=><th key={k}>{onSort?<button className="sort" onClick={()=>onSort(k)}>{l}<ArrowUpDown size={12}/></button>:l}</th>)}<th>操作</th></tr></thead><tbody>{rows.map(c=><tr key={c.id}>{selection&&<td className="selection-cell">{selection.cell(c)}</td>}<td><Link className="customer-link" href={`/customers/${c.id}`}><span className="avatar">{c.name.slice(0,1)}</span><span><strong>{c.name}</strong><small>{c.companyName||'未填写公司'}</small></span></Link></td><td>{new Date(inquiryDate(c)).toLocaleDateString('zh-CN',{timeZone:tz})}</td><td>{c.country||'—'}</td><td>{sources[c.source as keyof typeof sources]}</td><td>{c.productModel||c.productInterest||'—'}</td><td><Badge stage={c.stage}/></td><td><span className={c.isQualified?'qualified':'muted'}>{c.isQualified===null?'待判断':c.isQualified?'有效':'无效'}</span></td><td>{money(c.estimatedOrderValue,c.currency)}</td><td>{dateText(c.lastFollowUpAt,tz)}</td><td><Due date={c.nextFollowUpAt} tz={tz}/></td><td>{c.pendingAssignment?<span className="badge" title="进入待分配池的时间起算">待分配 · 已等 {waited(c.createdAt)}</span>:c.owner?.name}</td><td><button className="text-button" onClick={()=>onFollow(c)}><MessageSquare size={14}/>跟进</button></td></tr>)}</tbody></table>{!rows.length&&<div className="empty">暂无数据，试试调整筛选或新建客户。</div>}</div>;}
+
+/** Clipboard API where allowed, otherwise the selection fallback (older browsers, non-HTTPS previews). */
+async function copyText(text:string){
+ try{await navigator.clipboard.writeText(text);return true;}catch{
+  const area=document.createElement('textarea');area.value=text;area.setAttribute('readonly','');area.style.position='fixed';area.style.opacity='0';
+  document.body.appendChild(area);area.select();const ok=document.execCommand('copy');area.remove();return ok;
+ }
+}
+
+/** The number to follow up on: one click copies it, the chat icon opens the WhatsApp conversation. */
+function ContactCell({c}:{c:Customer}){
+ const [copied,setCopied]=useState(false);const n=c.contact;
+ if(!n)return <span className="muted">—</span>;
+ return <span className="contact-cell">
+  <button type="button" className="contact-copy" title={`点击复制 ${n.copy}`} aria-label={`复制号码 ${n.display}`}
+   onClick={async()=>{if(await copyText(n.copy)){setCopied(true);setTimeout(()=>setCopied(false),1500);}}}>
+   <span>{n.display}</span>{copied?<Check size={13} aria-hidden/>:<Copy size={13} aria-hidden/>}
+  </button>
+  {n.chat&&<a className="contact-chat" href={n.chat} target="_blank" rel="noreferrer" title="在 WhatsApp 中打开聊天" aria-label={`在 WhatsApp 中与 ${c.name} 聊天`}><MessageCircle size={15}/></a>}
+  {n.kind==='PHONE'&&<small className="muted" title="客户没有单独填写 WhatsApp，这是联系电话">电话</small>}
+  <span className="visually-hidden" aria-live="polite">{copied?'已复制':''}</span>
+ </span>;
+}
+
+/**
+ * Change the stage straight from the list, with the kanban's rules: paused / lost / invalid ask for a reason, and a
+ * customer is only won through a deal (so won customers keep a plain badge).
+ */
+function StageCell({c,onChanged}:{c:Customer;onChanged?:(message:string)=>void}){
+ const [asking,setAsking]=useState<KanbanStage>(),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ // The chosen stage stays visible while the list reloads; a fresh stage from the server replaces it.
+ const [chosen,setChosen]=useState<string>();
+ useEffect(()=>{setChosen(undefined);},[c.stage]);
+ if(!onChanged||c.stage==='WON'||c.deals?.length)return <span title={c.stage==='WON'?'成交客户的阶段随成交记录变化':undefined}><Badge stage={c.stage}/></span>;
+ const label=(key:string)=>stages[key as keyof typeof stages]??key;
+ const shown=chosen??c.stage;
+ // Errors surface where the change was made: in the reason dialog, or under the stage.
+ const move=async(toStage:KanbanStage,reason='')=>{
+  setBusy(true);setError('');
+  try{await api('bos/crm-stage','PATCH',{customerId:c.id,fromStage:c.stage,toStage,reason});setChosen(toStage);setAsking(undefined);onChanged(`${c.name} 已改为「${label(toStage)}」`);}
+  finally{setBusy(false);}
+ };
+ return <span className="stage-cell">
+  <span className={`badge badge-${shown.toLowerCase()} stage-badge`} title="点击修改阶段">
+   <select className="stage-select" value={shown} disabled={busy} aria-label={`修改 ${c.name} 的阶段`}
+    onChange={e=>{const to=e.target.value as KanbanStage;if(KANBAN_REASON_STAGES.includes(to))setAsking(to);else move(to).catch(err=>setError((err as Error).message));}}>
+    {KANBAN_STAGES.map(s=><option key={s.key} value={s.key} disabled={s.key==='WON'}>{s.key==='WON'?`${s.label}（新增成交后自动）`:s.label}</option>)}
+    {!KANBAN_STAGES.some(s=>s.key===shown)&&<option value={shown}>{label(shown)}</option>}
+   </select>
+   <ChevronDown size={11} aria-hidden/>
+  </span>
+  {error&&<small role="alert" className="stage-error">{error}</small>}
+  {asking&&<ReasonDialog title={`改为「${label(asking)}」· ${c.name}`} confirmText="确认修改" label="原因"
+   description={<p>管理员会看到这个原因，用于复核对客户的判断。</p>}
+   onClose={()=>setAsking(undefined)} onConfirm={reason=>move(asking,reason)}/>}
+ </span>;
+}
+
+export function CustomerTable({rows,tz,onFollow,onSort,onChanged,selection}:{rows:Customer[];tz:string;onFollow:(c:Customer)=>void;onSort?:(key:string)=>void;onChanged?:(message:string)=>void;selection?:{header:React.ReactNode;cell:(c:Customer)=>React.ReactNode}}){const headers=[['name','客户 / 公司'],['inquiryAt','询盘日期'],['country','国家'],['source','来源'],['whatsapp','WhatsApp'],['stage','阶段'],['isQualified','有效性'],['estimatedOrderValue','预计金额'],['lastFollowUpAt','最后跟进'],['nextFollowUpAt','下次跟进'],['owner','负责人']];return <div className="table-scroll"><table><thead><tr>{selection&&<th className="selection-cell">{selection.header}</th>}{headers.map(([k,l])=><th key={k}>{onSort?<button className="sort" onClick={()=>onSort(k)}>{l}<ArrowUpDown size={12}/></button>:l}</th>)}<th>操作</th></tr></thead><tbody>{rows.map(c=><tr key={c.id}>{selection&&<td className="selection-cell">{selection.cell(c)}</td>}<td><Link className="customer-link" href={`/customers/${c.id}`}><span className="avatar">{c.name.slice(0,1)}</span><span><strong>{c.name}</strong><small>{c.companyName||'未填写公司'}</small></span></Link></td><td>{new Date(inquiryDate(c)).toLocaleDateString('zh-CN',{timeZone:tz})}</td><td>{c.country||'—'}</td><td>{sources[c.source as keyof typeof sources]}</td><td><ContactCell c={c}/></td><td><StageCell c={c} onChanged={onChanged}/></td><td><span className={c.isQualified?'qualified':'muted'}>{c.isQualified===null?'待判断':c.isQualified?'有效':'无效'}</span></td><td>{money(c.estimatedOrderValue,c.currency)}</td><td>{dateText(c.lastFollowUpAt,tz)}</td><td><Due date={c.nextFollowUpAt} tz={tz}/></td><td>{c.pendingAssignment?<span className="badge" title="进入待分配池的时间起算">待分配 · 已等 {waited(c.createdAt)}</span>:c.owner?.name}</td><td><button className="text-button" onClick={()=>onFollow(c)}><MessageSquare size={14}/>跟进</button></td></tr>)}</tbody></table>{!rows.length&&<div className="empty">暂无数据，试试调整筛选或新建客户。</div>}</div>;}

@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope, requireAdmin } from '@/lib/auth';
 import { canonicalPhone, canonicalEmail } from '@/lib/contact-identity';
+import { withPhoneCountry } from '@/lib/phone-country';
 import { customerSchema, dealSchema, followSchema, dealPatchSchema, reasonSchema, followPatchSchema, reasonRequiredStages } from '@/lib/validation';
 import { localDate, dayKey } from '@/lib/time';
 import { inquiryDate, parseInquiryDate } from '@/lib/customer-date';
@@ -92,7 +93,8 @@ type SaveOptions = {
 };
 
 export async function saveCustomer(input: unknown, user: Actor, id?: string, options: SaveOptions = {}) {
-  const v = customerSchema.parse(input);
+  // A blank country follows the WhatsApp number's calling code (86… is China).
+  const v = withPhoneCountry(customerSchema.parse(input));
   const admin = user.role === 'ADMIN';
   const old = id ? await accessible(id, user) : null;
   if (old && v.expectedUpdatedAt && old.updatedAt.getTime() !== new Date(v.expectedUpdatedAt).getTime()) {

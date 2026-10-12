@@ -11,3 +11,21 @@
 .badge-order{background:#e0f2e8;color:#17775b}.badge-lost{background:#f1e8e5;color:#985c4e}
 @media(max-width:1100px){.customer-workbench{grid-template-columns:1fr}}
 @media(max-width:520px){.customer-workbench-info .detail-stats{grid-template-columns:1fr}}
+
+/* Customer list: copy the WhatsApp number in one click, change the stage in place. */
+.visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.contact-cell{position:relative;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.customer-card .contact-copy{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:4px 6px;margin:-4px -6px;border-radius:6px;color:inherit;font:inherit;font-variant-numeric:tabular-nums;cursor:copy}
+.customer-card .contact-copy svg{color:#9aa79f}
+.customer-card .contact-copy:hover{background:#eef3ee}
+.customer-card .contact-copy:hover svg{color:var(--green)}
+.contact-chat{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:7px;color:#1f9d5c}
+.contact-chat:hover{background:#e6f5ec}
+.stage-cell{display:inline-flex;flex-direction:column;align-items:flex-start;gap:4px}
+.stage-badge{display:inline-flex;align-items:center;gap:2px;padding:0 7px 0 0;cursor:pointer}
+.stage-badge:hover{box-shadow:inset 0 0 0 1px currentColor}
+.stage-badge svg{pointer-events:none;flex:none}
+.customer-card .stage-select{appearance:none;-webkit-appearance:none;background:transparent;border:0;border-radius:5px;padding:4px 2px 4px 8px;color:inherit;font:inherit;font-size:11px;cursor:pointer;min-width:0}
+.customer-card .stage-select:disabled{cursor:progress}
+.customer-card .stage-select option{color:#203b33}
+.stage-error{color:#a44b36;font-size:11px;max-width:180px;white-space:normal}

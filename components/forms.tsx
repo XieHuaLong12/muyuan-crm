@@ -54,9 +54,9 @@ export function CustomerForm({ customer, boot, onClose, onSaved, inline = false 
       setDup(e instanceof ApiError && e.details?.potentialDuplicate ? e.details : null);
     }
   });
-  const text = (key: keyof z.input<typeof customerSchema>, label: string, type = 'text', disabled = false) => (
+  const text = (key: keyof z.input<typeof customerSchema>, label: string, type = 'text', disabled = false, placeholder?: string) => (
     <Field key={key} label={label}>
-      <input type={type} disabled={disabled} step={type === 'number' ? (key === 'quantity' ? 1 : 0.01) : undefined} min={type === 'number' ? 0 : undefined} {...register(key)} />
+      <input type={type} disabled={disabled} placeholder={placeholder} step={type === 'number' ? (key === 'quantity' ? 1 : 0.01) : undefined} min={type === 'number' ? 0 : undefined} {...register(key)} />
     </Field>
   );
   const owners = boot.users.filter(u => u.isActive !== false || u.id === customer?.ownerId);
@@ -69,7 +69,7 @@ export function CustomerForm({ customer, boot, onClose, onSaved, inline = false 
         <p className="muted">{lockedOrigin ? '询盘日期和客户来源影响广告归因与业绩统计，如需更正请联系管理员。' : '请选择客户实际产生询盘的日期，补录的历史客户将计入对应日期的询盘统计和来源分析。'}</p>
         <h3>基础资料</h3>
         <div className="form-grid">
-          {text('name', '客户姓名 *')}{text('companyName', '公司')}{text('country', '国家 / 地区')}{text('countryCode', '国家代码（可选）')}
+          {text('name', '客户姓名 *')}{text('companyName', '公司')}{text('country', '国家 / 地区', 'text', false, '留空则按 WhatsApp 号码自动识别')}{text('countryCode', '国家代码（可选）')}
           {text('city', '城市')}{text('whatsapp', 'WhatsApp')}{text('phone', '电话')}{text('email', '邮箱', 'email')}
           <Field label="客户来源"><select disabled={lockedOrigin} {...register('source')}><Options items={{ '': '未填写', ...sources }} /></select></Field>
           {text('sourceDetail', '来源详情', 'text', lockedOrigin)}{text('language', '沟通语言')}
