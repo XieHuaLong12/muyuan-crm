@@ -20,5 +20,9 @@ const config = (phase: string): NextConfig => ({
   async redirects() {
     return moved.map(([source, destination]) => ({ source, destination, permanent: false }));
   },
+  // Phones must pick up a new service worker on the next visit, even behind a caching proxy or CDN.
+  async headers() {
+    return [{ source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache' }] }];
+  },
 });
 export default config;

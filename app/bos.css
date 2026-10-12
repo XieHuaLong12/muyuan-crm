@@ -571,3 +571,12 @@
 .bos-source-grid .bos-card h2{font-size:17px;margin-bottom:12px}
 .bos-source-analysis .bos-page-header{align-items:flex-start}
 @media(max-width:1100px){.bos-source-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* ── 安装手机 App 提示（components/pwa.tsx），只在触屏设备出现 ── */
+.bos-install-banner{display:flex;align-items:center;gap:12px;margin:0 0 20px;padding:12px 12px 12px 16px;border:1px solid var(--bos-border);border-radius:var(--bos-radius);background:var(--bos-card);box-shadow:var(--bos-shadow)}
+.bos-install-banner>svg{flex:none;color:var(--bos-green)}
+.bos-install-banner p{flex:1;min-width:0;font-size:14px}
+.bos-install-banner strong{font-weight:600}
+.bos-install-banner small{display:block;margin-top:2px;color:var(--bos-secondary)}
+.bos .bos-install-close{flex:none;min-width:40px;padding:0;color:var(--bos-secondary)}
+@media print{.bos-install-banner{display:none}}
