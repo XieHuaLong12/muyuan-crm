@@ -8,7 +8,9 @@ import { isQualified, moneyByCurrency } from '../lib/metrics';
 import { businessCockpit } from '../services/business-cockpit-service';
 import { salesPerformance } from '../services/sales-team-service';
 import { sourcesAndCountries } from '../services/source-analysis-service';
-import { financeOverview } from '../services/bos-v2-service';
+import { financeOverview } from '../services/finance-service';
+import { targetProgress } from '../services/target-service';
+import { localDate } from '../lib/time';
 import { deleteTestCustomers } from './identity-test-cleanup';
 
 test('one rule per metric: qualified customers and money per currency', () => {
@@ -80,6 +82,32 @@ test('the cockpit, team, sources and finance pages show the same numbers for the
   } finally {
     await deleteTestCustomers({ where: { id: { in: ids } } });
     await db.user.delete({ where: { id: sales.id } });
+    await db.$disconnect();
+  }
+});
+
+test('the targets chart counts revenue per company-timezone month and skips the recycle bin', async () => {
+  const adminRow = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } });
+  const admin: Actor = { id: adminRow.id, name: adminRow.name, email: adminRow.email, role: adminRow.role };
+  const { timezone } = await db.setting.findUniqueOrThrow({ where: { id: 'system' } });
+  const tag = randomUUID().slice(0, 8), year = 2097;
+  const live = await db.customer.create({ data: { name: `Target live ${tag}`, ownerId: admin.id } });
+  const binned = await db.customer.create({ data: { name: `Target bin ${tag}`, ownerId: admin.id, deletedAt: new Date() } });
+  try {
+    const deal = (customerId: string, amount: number, at: string, currency = 'CNY') => db.deal.create({ data: {
+      customerId, dealAmount: amount, productCost: 0, grossProfit: amount, grossMargin: 100, currency, dealDate: localDate(at, timezone) } });
+    await deal(live.id, 1000, `${year}-03-01T00:00`);
+    await deal(live.id, 500, `${year}-03-31T23:30`);
+    await deal(live.id, 700, `${year}-03-15T12:00`, 'USD');
+    await deal(binned.id, 9999, `${year}-03-10T12:00`);
+    await db.salesTarget.create({ data: { periodKey: `MONTH-${year}-3`, periodType: 'MONTH', year, month: 3, targetRevenue: 2000, currency: 'CNY' } });
+    const progress = await targetProgress(admin, { year: String(year), currency: 'CNY' });
+    assert.deepEqual(progress.months.find(m => m.month === 3), { month: 3, label: '3月', 销售额: 1500, 目标: 2000 });
+    assert.equal(progress.months.filter(m => m.month !== 3).reduce((n, m) => n + m.销售额, 0), 0, 'nothing leaks into February or April');
+    await assert.rejects(targetProgress({ ...admin, role: 'SALES' }, { year, currency: 'CNY' }), { status: 403 });
+  } finally {
+    await db.salesTarget.deleteMany({ where: { year } });
+    await deleteTestCustomers({ where: { id: { in: [live.id, binned.id] } } });
     await db.$disconnect();
   }
 });

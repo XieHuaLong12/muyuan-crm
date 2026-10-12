@@ -1,11 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor,HttpError,scope } from '@/lib/auth';
+import { Actor,HttpError,scope,requireAdmin } from '@/lib/auth';
 import { dayKey,localDate } from '@/lib/time';
 import { retryTransaction } from '@/lib/transaction-retry';
-import { requireManager } from './sales-account-service';
 import { dealsIn, inquiryIn, isQualified, QUALIFIED, sentQuotesIn } from '@/lib/metrics';
+import { TERMINAL_STAGES } from '@/lib/constants';
 
 const month=z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/,'请选择合法月份').refine(v=>Number(v.slice(0,4))>=2000&&Number(v.slice(0,4))<=2200,'月份超出范围');
 const queryInput=z.object({month:month.optional(),currency:z.enum(['CNY','USD','EUR']).optional()});
@@ -27,7 +27,7 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
     db.quotation.findMany({where:{...sentQuotesIn(range,live),createdBy:{in:ids}},select:{createdBy:true,customerId:true}}),
     db.userSalesTarget.findMany({where:{userId:{in:ids},month:selected,currency}}),
     db.customerAssignment.findMany({where:{toOwnerId:{in:ids},assignedAt:period,customer:{deletedAt:null}},select:{toOwnerId:true,customerId:true}}),
-    db.customer.findMany({where:{...scope(user),ownerId:{in:ids},firstContactDueAt:{not:null},firstContactAt:null,contactedAt:null,lastOutboundAt:null,lastFollowUpAt:null,stage:{notIn:['WON','LOST','INVALID','PAUSED']}},select:{id:true,name:true,ownerId:true,firstContactDueAt:true},orderBy:{firstContactDueAt:'asc'}}),
+    db.customer.findMany({where:{...scope(user),ownerId:{in:ids},firstContactDueAt:{not:null},firstContactAt:null,contactedAt:null,lastOutboundAt:null,lastFollowUpAt:null,stage:{notIn:[...TERMINAL_STAGES]}},select:{id:true,name:true,ownerId:true,firstContactDueAt:true},orderBy:{firstContactDueAt:'asc'}}),
     user.role==='ADMIN'?db.customer.count({where:{deletedAt:null,pendingAssignment:true}}):Promise.resolve(null),
     // Lead-quality judgements made by each salesperson this month, so administrators can review them.
     db.stageHistory.findMany({where:{changedBy:{in:ids},toStage:{in:['INVALID','PAUSED','LOST']},changedAt:period,customer:{deletedAt:null}},select:{changedBy:true,customerId:true}}),
@@ -77,7 +77,7 @@ export async function salesPerformance(user:Actor,input:unknown={},now=new Date(
 export type SalesPerformance=Awaited<ReturnType<typeof salesPerformance>>;
 
 export async function saveSalesTarget(input:unknown,user:Actor){
-  requireManager(user);const v=targetInput.parse(input);
+  requireAdmin(user);const v=targetInput.parse(input);
   return retryTransaction(()=>db.$transaction(async tx=>{
     if(!await tx.user.findFirst({where:{id:v.userId,role:'SALES',isActive:true}}))throw new HttpError(404,'销售账号不存在或已停用');
     const where={userId_month_currency:{userId:v.userId,month:v.month,currency:v.currency}},old=await tx.userSalesTarget.findUnique({where});
@@ -92,13 +92,13 @@ export async function saveSalesTarget(input:unknown,user:Actor){
   }));
 }
 export async function saveFirstContactPolicy(input:unknown,user:Actor){
-  requireManager(user);
+  requireAdmin(user);
   const v=z.object({hours:z.coerce.number().int().min(1,'至少 1 小时').max(168,'最多 168 小时').optional(),
     adLeadMinutes:z.coerce.number().int().min(1,'广告线索至少 1 分钟').max(1440,'广告线索最多 1440 分钟').optional()}).parse(input);
   return db.$transaction(tx=>tx.setting.update({where:{id:'system'},data:{...(v.hours?{firstContactHours:v.hours}:{}),...(v.adLeadMinutes?{adLeadFirstContactMinutes:v.adLeadMinutes}:{})}}));
 }
 export async function firstContactFocus(user:Actor){
-  const where={...scope(user),stage:{notIn:['WON','LOST','INVALID','PAUSED']},firstContactDueAt:{not:null},firstContactAt:null,contactedAt:null,lastOutboundAt:null,lastFollowUpAt:null};
+  const where={...scope(user),stage:{notIn:[...TERMINAL_STAGES]},firstContactDueAt:{not:null},firstContactAt:null,contactedAt:null,lastOutboundAt:null,lastFollowUpAt:null};
   const [pending,overdue,pool]=await Promise.all([db.customer.count({where}),db.customer.count({where:{...where,firstContactDueAt:{lt:new Date()}}}),
     user.role==='ADMIN'?db.customer.count({where:{deletedAt:null,pendingAssignment:true}}):Promise.resolve(0)]);
   return {pending,overdue,pool};

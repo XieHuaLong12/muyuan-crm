@@ -7,6 +7,7 @@ import { callDeepSeek, deepSeekAnalysisSchema, finalizeDeepSeekAnalysis } from '
 import { lockIdentity } from './contact-identity-service';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { automatedTask } from './workflow-service';
+import { isTerminalStage } from '@/lib/constants';
 
 export const lossReasons = ['PRICE_TOO_HIGH','MOQ_TOO_HIGH','SHIPPING_TOO_HIGH','NO_REPLY','JUST_INQUIRY','DROPSHIPPING','DELIVERY_TIME','PRODUCT_NOT_SUITABLE','COMPETITOR','NO_PURCHASE_PLAN','INVALID_LEAD','OTHER'] as const;
 export const intelligenceSchema = deepSeekAnalysisSchema.extend({
@@ -81,7 +82,7 @@ export async function analyzeIncrementalCustomer(customerId: string, user: Actor
     const intelligence = await tx.customerIntelligence.upsert({ where: { customerId }, create: { customerId, ...data }, update: data });
     await tx.customer.update({ where: { id: customerId }, data: { aiScore: effective.score, aiPriority: priority, aiIntent: effective.intent,
       aiSummary: effective.summary, aiNextAction: effective.nextAction, aiReason: effective.reason, aiRisk: effective.risk, aiLastAnalyzedAt: now } });
-    if (nextFollowUpAt && effective.nextAction && effective.confidence >= 80 && !['WON','LOST','INVALID','PAUSED'].includes(freshCustomer.stage)) {
+    if (nextFollowUpAt && effective.nextAction && effective.confidence >= 80 && !isTerminalStage(freshCustomer.stage)) {
       const existing = await tx.task.findFirst({ where: { customerId, source: 'AI', type: 'FOLLOW_UP', status: { not: 'DONE' }, deletedAt: null } });
       if (!existing) await automatedTask(tx, { customerId, createdBy: freshCustomer.ownerId, title: effective.nextAction.slice(0,180),
         description: effective.reason, type: 'FOLLOW_UP', source: 'AI', dueDate: nextFollowUpAt,

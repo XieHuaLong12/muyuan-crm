@@ -1,6 +1,10 @@
 import { db } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { getISOWeeksInYear } from 'date-fns';
+import { z } from 'zod';
+import { Actor, requireAdmin } from '@/lib/auth';
+import { localDate } from '@/lib/time';
+import { dealsIn } from '@/lib/metrics';
 
 /**
  * Splits an amount into `parts` two-decimal shares that add up exactly to the amount:
@@ -36,3 +40,26 @@ export async function allocateTargets(year: number, amount: number, currency: st
     }
   });
 }
+
+const progressInput = z.object({ year: z.coerce.number().int().min(2000).max(2200), currency: z.enum(['CNY', 'USD', 'EUR']) });
+/**
+ * Monthly target against actual revenue for one year and currency (the targets page chart). Revenue uses the
+ * shared deal rule in lib/metrics, the same as the cockpit.
+ */
+export async function targetProgress(user: Actor, input: unknown) {
+  requireAdmin(user);
+  const { year, currency } = progressInput.parse(input);
+  const { timezone } = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { timezone: true } });
+  const monthStart = (month: number) => localDate(`${month > 12 ? year + 1 : year}-${String(month > 12 ? 1 : month).padStart(2, '0')}-01T00:00`, timezone);
+  const [deals, targets] = await Promise.all([
+    db.deal.findMany({ where: { ...dealsIn({ start: monthStart(1), end: monthStart(13) }, { deletedAt: null }), currency }, select: { dealDate: true, dealAmount: true } }),
+    db.salesTarget.findMany({ where: { year, periodType: 'MONTH', currency }, select: { month: true, targetRevenue: true } }),
+  ]);
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const start = monthStart(i + 1), end = monthStart(i + 2);
+    const revenue = deals.filter(deal => deal.dealDate >= start && deal.dealDate < end).reduce((sum, deal) => sum.plus(deal.dealAmount), new Prisma.Decimal(0));
+    return { month: i + 1, label: `${i + 1}月`, 销售额: revenue.toNumber(), 目标: targets.find(t => t.month === i + 1)?.targetRevenue.toNumber() ?? 0 };
+  });
+  return { year, currency, months };
+}
+export type TargetProgress = Awaited<ReturnType<typeof targetProgress>>;

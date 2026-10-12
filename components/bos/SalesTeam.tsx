@@ -42,8 +42,7 @@ export function SalesTeam({ data, accounts = [], admin = false, initialTab = "pe
   return (
     <div className="bos-team-page">
       <Header
-        eyebrow={admin ? "MANAGEMENT · 销售团队" : "SALES · 我的业绩"}
-        title={admin ? "看清团队进展，及时推进。" : "我的销售业绩"}
+        title={admin ? "销售业绩" : "我的业绩"}
         description={admin ? "按销售查看真实客户进展、首联时效和成交，管理月度目标与账号。" : "查看自己的客户进展、成交和月度目标。"}
         actions={
           admin ? (

@@ -8,7 +8,9 @@ function authSecret(){if(!process.env.AUTH_SECRET)throw new Error('AUTH_SECRET �
 export function token(id:string,version=0){return createSession(id,version,authSecret());}
 export async function sessionUser(raw:string){const parsed=parseSession(raw,authSecret());if(!parsed)return null;const user=await db.user.findUnique({where:{id:parsed.id},select:{id:true,name:true,email:true,role:true,isActive:true,sessionVersion:true}});if(!user||!user.isActive||user.sessionVersion!==parsed.version)return null;const {isActive,sessionVersion,...actor}=user;void isActive;void sessionVersion;return actor;}
 export async function currentUser(){const raw=(await cookies()).get('crm_session')?.value;return raw?sessionUser(raw):null;}
-export async function requireUser(admin=false){const user=await currentUser();if(!user)throw new HttpError(401,'请先登录');if(admin&&user.role!=='ADMIN')throw new HttpError(403,'需要管理员权限');return user;}
+export async function requireUser(admin=false){const user=await currentUser();if(!user)throw new HttpError(401,'请先登录');if(admin)requireAdmin(user);return user;}
 export class HttpError extends Error {constructor(public status:number,message:string,public details?:unknown){super(message);}}
 export type Actor = NonNullable<Awaited<ReturnType<typeof currentUser>>>;
+/** Admin-only actions; the message says what was refused (defaults to a generic one). */
+export function requireAdmin(user:Actor,message='需要管理员权限'){if(user.role!=='ADMIN')throw new HttpError(403,message);}
 export function scope(user:Actor){return {deletedAt:null,...(user.role==='ADMIN'?{}:{ownerId:user.id})};}

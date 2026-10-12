@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError } from '@/lib/auth';
+import { Actor, HttpError, requireAdmin } from '@/lib/auth';
 import { FREIGHT_BASES, FREIGHT_MODES, QUOTE_CURRENCIES, QUOTE_INCOTERMS } from '@/lib/quote-math';
 
 /**
@@ -34,9 +34,7 @@ const freightPatchInput = freightRateInput.extend({
 
 const listQuery = z.object({ status: z.enum(['ACTIVE', 'ARCHIVED', 'ALL']).default('ACTIVE') });
 
-function requireAdmin(user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以维护运费库');
-}
+const ADMIN_ONLY = '只有管理员可以维护运费库';
 
 export type FreightRateView = ReturnType<typeof serialize>;
 
@@ -81,7 +79,7 @@ export async function listFreightRates(user: Actor, input: unknown = {}) {
 }
 
 export async function createFreightRate(user: Actor, input: unknown) {
-  requireAdmin(user);
+  requireAdmin(user, ADMIN_ONLY);
   const v = freightRateInput.parse(input);
   const saved = await db.freightRate.create({ data: { ...data(v), createdBy: user.id } });
   return serialize(saved);
@@ -89,7 +87,7 @@ export async function createFreightRate(user: Actor, input: unknown) {
 
 /** 修改或归档运价；带版本号防止两人同时改同一条。 */
 export async function updateFreightRate(user: Actor, id: string, input: unknown) {
-  requireAdmin(user);
+  requireAdmin(user, ADMIN_ONLY);
   const { expectedUpdatedAt, status, ...v } = freightPatchInput.parse(input);
   const result = await db.freightRate.updateMany({
     where: { id, updatedAt: new Date(expectedUpdatedAt) },

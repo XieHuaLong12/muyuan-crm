@@ -1,8 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor,scope } from '@/lib/auth';
-import { requireManager } from './sales-account-service';
+import { Actor,scope,requireAdmin } from '@/lib/auth';
 
 export const communicationHistoryQuery = z.object({
   q: z.string().trim().max(100).default(''),
@@ -18,7 +17,7 @@ const archiveMessageSelect = { id: true, content: true, direction: true, status:
 
 /** 只读取已有消息，按真实消息时间排序；本地导入不会更新 Customer.lastWhatsAppAt。 */
 export async function communicationHistory(user: Actor, input: unknown) {
-  requireManager(user);
+  requireAdmin(user);
   const query = communicationHistoryQuery.parse(input);
   const search: Prisma.CustomerWhereInput = query.q ? { OR: [
     { name: { contains: query.q } }, { companyName: { contains: query.q } },

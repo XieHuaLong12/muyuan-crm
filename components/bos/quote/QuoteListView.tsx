@@ -23,7 +23,6 @@ export function QuoteListView({ data, isAdmin, timezone }: { data: QuoteList; is
   return (
     <>
       <Header
-        eyebrow="产品库 · 报价单"
         title="报价单"
         description="从产品库选型号、自动带价、按运费库算运费，一键生成中英文报价图片与 PDF。每份报价都挂在客户档案下。"
         actions={

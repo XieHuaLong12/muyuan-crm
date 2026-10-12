@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError } from '@/lib/auth';
+import { Actor, requireAdmin } from '@/lib/auth';
 import { QUOTE_LANGUAGES, type FxRates, type QuoteLanguage } from '@/lib/quote-math';
 import { DEFAULT_TEMPLATES, type QuoteTemplateText } from '@/lib/quote-i18n';
 
@@ -66,7 +66,7 @@ export async function quoteSettings(user: Actor) {
 }
 
 export async function saveQuoteTemplate(user: Actor, input: unknown) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以修改报价模板');
+  requireAdmin(user, '只有管理员可以修改报价模板');
   const { language, ...v } = templateInput.parse(input);
   await db.quoteTemplate.upsert({
     where: { language },
@@ -78,7 +78,7 @@ export async function saveQuoteTemplate(user: Actor, input: unknown) {
 
 /** 美元汇率与产品毛利共用 Setting.usdCnyRate，改一处两边一致。 */
 export async function saveQuoteRates(user: Actor, input: unknown) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以修改汇率');
+  requireAdmin(user, '只有管理员可以修改汇率');
   const v = ratesInput.parse(input);
   await db.setting.update({
     where: { id: 'system' },

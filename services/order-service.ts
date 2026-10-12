@@ -4,9 +4,11 @@ import { purchaseFeedback } from './advertising-feedback-service';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError, scope } from '@/lib/auth';
+import { Actor, HttpError, scope, requireAdmin } from '@/lib/auth';
 import { ORDER_MILESTONES,ORDER_STAGES,ORDER_STATUS,PAYMENT_STATUS,PRODUCTION_STATUS,SHIPPING_STATUS,stageProgress,type OrderMilestone,type OrderStatus } from '@/lib/order-status';
 import { retryTransaction } from '@/lib/transaction-retry';
+import { dayKey, localDate } from '@/lib/time';
+import { isBusinessDate } from '@/lib/customer-date';
 // 供 API 与导出复用
 export { ORDER_STAGES,ORDER_STATUS,PAYMENT_STATUS,PRODUCTION_STATUS,SHIPPING_STATUS,stageProgress };
 export type { OrderStatus };
@@ -71,10 +73,14 @@ const PAGE_SIZE = 20;
 // The CSV export takes every matching order; this only guards against an accidental runaway query.
 const EXPORT_LIMIT = 10_000;
 
-function dateRange(from: string, to: string) {
+const dayOnly = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && isBusinessDate(value);
+const nextDay = (value: string) => { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + 1); return date.toISOString().slice(0, 10); };
+
+/** From / to are whole days in the company timezone, the same days the order list shows. */
+function dateRange(from: string, to: string, timezone: string) {
   const range: Prisma.DateTimeFilter = {};
-  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) range.gte = new Date(`${from}T00:00:00.000Z`);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(to)) range.lte = new Date(`${to}T23:59:59.999Z`);
+  if (dayOnly(from)) range.gte = localDate(`${from}T00:00`, timezone);
+  if (dayOnly(to)) range.lt = localDate(`${nextDay(to)}T00:00`, timezone);
   return Object.keys(range).length ? range : undefined;
 }
 
@@ -85,7 +91,8 @@ function orderWhere(user: Actor, extra: Prisma.OrderWhereInput = {}): Prisma.Ord
 
 export async function orderList(user: Actor, input: unknown = {}, options: { all?: boolean } = {}) {
   const query = orderQuery.parse(input);
-  const range = dateRange(query.from, query.to);
+  const { timezone } = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { timezone: true } });
+  const range = dateRange(query.from, query.to, timezone);
   const paymentFilter: Prisma.OrderWhereInput = query.payment === 'UNPAID' ? { paymentStatus: 'UNPAID', status: { not: 'CANCELLED' } } : {};
 
   const base: Prisma.OrderWhereInput = {
@@ -169,7 +176,8 @@ export async function orderList(user: Actor, input: unknown = {}, options: { all
       paymentLabel: PAYMENT_STATUS[order.paymentStatus as keyof typeof PAYMENT_STATUS] ?? order.paymentStatus,
       productionLabel: PRODUCTION_STATUS[order.productionStatus as keyof typeof PRODUCTION_STATUS] ?? order.productionStatus,
       shippingLabel: SHIPPING_STATUS[order.shippingStatus as keyof typeof SHIPPING_STATUS] ?? order.shippingStatus,
-      orderDate: order.orderDate.toISOString(),
+      // The business day in the company timezone: a deal dated 3 Feb in Shanghai is stored as 2 Feb 16:00 UTC.
+      orderDate: dayKey(order.orderDate, timezone),
       estimatedDelivery: order.estimatedDelivery ? order.estimatedDelivery.toISOString() : null,
       overdue: Boolean(order.estimatedDelivery && order.estimatedDelivery < now && order.status !== 'COMPLETED' && order.status !== 'CANCELLED'),
       customer: {
@@ -198,6 +206,7 @@ export async function orderDetail(user: Actor, id: string) {
     },
   });
   if (!order) throw new HttpError(404, '订单不存在或无权查看');
+  const { timezone } = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { timezone: true } });
 
   const quotations = await db.quotation.findMany({
     where: { customerId: order.customerId },
@@ -221,7 +230,7 @@ export async function orderDetail(user: Actor, id: string) {
     // 30% 定金 / 70% 尾款：由 paymentStatus 推导，不额外存字段
     deposit: order.paymentStatus === 'UNPAID' ? '未付' : '已付',
     balance: order.paymentStatus === 'PAID' ? '已付' : '未付',
-    orderDate: order.orderDate.toISOString(),
+    orderDate: dayKey(order.orderDate, timezone),
     estimatedDelivery: order.estimatedDelivery ? order.estimatedDelivery.toISOString() : null,
     notes: order.notes,
     progress: stageProgress(order.status),
@@ -230,7 +239,7 @@ export async function orderDetail(user: Actor, id: string) {
       ? {
           id: order.deal.id,
           orderNumber: order.deal.orderNumber,
-          dealDate: order.deal.dealDate.toISOString(),
+          dealDate: dayKey(order.deal.dealDate, timezone),
           currency: order.deal.currency,
           dealAmount: order.deal.dealAmount.toFixed(2),
           product: order.deal.product,
@@ -349,7 +358,7 @@ const cancelInput = z.object({ reason: z.string().trim().min(2, '请填写取消
 
 /** 管理员取消订单。有关联成交时等同于作废该成交，避免「订单已取消但成交仍计入业绩」。 */
 export async function cancelOrder(user: Actor, id: string, input: unknown) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以取消订单');
+  requireAdmin(user, '只有管理员可以取消订单');
   const v = cancelInput.parse(input);
   const order = await db.order.findUnique({ where: { id }, select: { id: true, status: true, dealId: true, customerId: true, updatedAt: true } });
   if (!order) throw new HttpError(404, '订单不存在');

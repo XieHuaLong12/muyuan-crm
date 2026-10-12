@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { timingSafeEqual } from 'node:crypto';
+import { cronSecretValid } from '@/lib/secret';
 export const dynamic='force-dynamic';
 
 /**
@@ -8,9 +8,7 @@ export const dynamic='force-dynamic';
  * Pulls leads the webhook did not deliver and retries failed imports whose back-off has elapsed.
  */
 export async function POST(req:NextRequest){
-  const supplied=req.headers.get('x-cron-secret')||'';const secret=process.env.META_SYNC_SECRET?.trim()||'';
-  const left=Buffer.from(supplied),right=Buffer.from(secret);
-  if(!secret||left.length!==right.length||!timingSafeEqual(left,right))return Response.json({success:false,error:'未授权'},{status:401});
+  if(!cronSecretValid(req.headers.get('x-cron-secret')))return Response.json({success:false,error:'未授权'},{status:401});
   const [{runLeadIntakeJob},{handle,ok}]=await Promise.all([import('@/services/meta-lead-intake-service'),import('@/lib/http')]);
   return handle(async()=>ok(await runLeadIntakeJob()));
 }

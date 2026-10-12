@@ -99,7 +99,7 @@ Meta App → Webhooks → Page → **Test** 按钮，或到 **Lead Ads Testing T
 
 ### 3. 确认 CRM
 
-1. 打开 **客户管理**，应出现一条 `source=Facebook`、`sourceDetail=Facebook Ads`、阶段 **新客户** 的记录
+1. 打开 **客户 → 客户列表**，应出现一条 `source=Facebook`、`sourceDetail=Facebook Ads`、阶段 **新客户** 的记录
 2. 或直接查库：
 
 ```sql

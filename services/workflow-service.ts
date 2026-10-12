@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
-import { AD_LEAD_FRESH_HOURS } from '@/lib/constants';
+import { AD_LEAD_FRESH_HOURS, isTerminalStage } from '@/lib/constants';
 import { accessible } from './customer-service';
 import { taskReminders, taskScope, taskInclude } from './task-service';
 
@@ -24,7 +24,7 @@ export async function initializeFirstContact(tx:Prisma.TransactionClient,custome
   const c=await tx.customer.findUniqueOrThrow({where:{id:customerId}});
   const settings=await tx.setting.findUniqueOrThrow({where:{id:'system'}}),at=new Date();
   const hasContact=!!(c.firstContactAt||c.contactedAt||c.lastOutboundAt||c.lastFollowUpAt);
-  const open=!hasContact&&!['WON','LOST','INVALID','PAUSED'].includes(c.stage);
+  const open=!hasContact&&!isTerminalStage(c.stage);
   // Fresh ad leads are contacted within minutes of assignment; everything else keeps the hour-based policy.
   const adLead=open&&await freshAdLead(tx,c.id,at);
   const due=open?new Date(at.getTime()+(adLead?settings.adLeadFirstContactMinutes*60000:settings.firstContactHours*3600000)):null;
@@ -65,7 +65,7 @@ export async function syncCustomerWorkflow(customerId: string) {
       for (const rule of ['first-contact','reply','quote','follow']) await resolveRule(tx,c.id,`${rule}:${c.id}:`);
       return;
     }
-    const firstKey=c.firstContactDueAt&&!c.pendingAssignment&&!c.firstContactAt&&!c.contactedAt&&!c.lastOutboundAt&&!c.lastFollowUpAt&&!['WON','LOST','INVALID','PAUSED'].includes(c.stage)?`first-contact:${c.id}:${c.assignedAt?.getTime()||c.firstContactDueAt.getTime()}`:undefined;
+    const firstKey=c.firstContactDueAt&&!c.pendingAssignment&&!c.firstContactAt&&!c.contactedAt&&!c.lastOutboundAt&&!c.lastFollowUpAt&&!isTerminalStage(c.stage)?`first-contact:${c.id}:${c.assignedAt?.getTime()||c.firstContactDueAt.getTime()}`:undefined;
     await resolveRule(tx,c.id,`first-contact:${c.id}:`,firstKey);
     if(firstKey)await automatedTask(tx,{customerId:c.id,createdBy:c.ownerId,title:`首次联系 ${c.name}`,description:'新分配客户，请联系并记录跟进。',type:'FOLLOW_UP',priority:'HIGH',dueDate:c.firstContactDueAt!,automationKey:firstKey});
     // A recorded follow-up after the latest inbound message counts as a reply made outside the system.

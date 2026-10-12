@@ -214,12 +214,19 @@ import { Header, Card, Table, Badge, Button, EmptyState, Skeleton, Typography } 
 
 | 原语 | 何时用 |
 |---|---|
-| `Header` | 每个页面顶部（eyebrow + display 标题 + 描述 + actions） |
+| `Header` | 每个页面顶部（display 标题 + 描述 + actions；eyebrow 只在详情页作中文面包屑，见下方「页头与文案」） |
 | `Card` | 内容分区容器 |
 | `Table` | 任何表格（自带 `bos-table-scroll` 横向滚动 + `caption` 无障碍） |
 | `Badge` | 状态标记（`neutral` / `green` / `warning`） |
 | `Button` | `primary` / `secondary` / `ghost` |
 | `EmptyState` / `Skeleton` | 空态与加载态，**每个数据区块都要有**，加载态配 `app/*/loading.tsx` |
+
+**页头与文案**（全站一致，第三批统一）：
+
+- 标题用中文名词，与侧边栏分区下的页签同名（如「销售看板」「财务」「目标」），不用口号或英文副标题。
+- 列表页不加 eyebrow——顶部页签已说明位置；详情页的 eyebrow 写所属页面（如订单详情写「订单」、广告详情写「广告效果」）。
+- 描述一句话说清这页能做什么；区间、数量等动态信息可放在描述里。
+- 页面内分区标题同样用中文，不加编号或英文小标（如「01 / OUTCOME」）。
 
 ### 3.4 响应式与无障碍（不接受省略）
 
@@ -353,10 +360,10 @@ export async function createTask(input: unknown, user: Actor) {
    | 入口 | 路径 |
    |---|---|
    | 旧版统一 API | `app/api/[...path]/route.ts` |
-   | 显式 REST 路由 | `app/api/{tasks,quotations,reminders,workflow-events,workflows,sales-workspace,workspace-customers}/` |
-   | BOS 只读 API | `app/api/bos/{command-center,growth,sales}/` |
+   | 显式 REST 路由 | `app/api/{tasks,quotations,quotes,orders,products,notifications,workflow-events,workflows,action-center,analytics}/` |
+   | BOS API | `app/api/bos/{sales,crm-stage}/` |
    | WhatsApp 路由 | `app/api/whatsapp/*` |
-   | 页面 | `/`、`/customers`、`/command-center`、`/growth`、`/sales`、`/whatsapp`、`/tasks`、`/funnel`、`/targets`、`/analytics`、`/settings` |
+   | 页面 | 以 `lib/role-workspace.ts` 的导航为准：`/command-center`、`/customers`、`/sales`、`/tasks`、`/orders`、`/products`、`/analytics/*`、`/team`、`/targets`、`/settings` 等 |
 3. **是否触碰受保护语义**：对照 §1.1 的约束表逐条确认（幂等键、单例行、软删除、口径字段、枚举值域）。
 4. **是否影响指标口径**：销售额/毛利按 `Deal.dealDate`；转化率按「所选周期新建客户群体」；零分母返回 0。改动统计必须同步更新 `README.md` 的指标表与 `docs/`。
 5. **是否影响自动化与提醒**：涉及 `WorkflowEvent` / `Task` / `Reminder` 的改动，必须验证去重键、tombstone、重开提醒、409 冲突四条路径。
@@ -475,7 +482,7 @@ pnpm build                       # 生产构建（含 production-init + migrate 
 | 反例 | 为什么错 | 正确做法 |
 |---|---|---|
 | 在 `route.ts` 里 `db.customer.findMany(...)` | 绕过作用域与校验 | 调用 `services/` 函数 |
-| 在组件里 `fetch('/api/...')` 后直接改本地状态冒充成功 | 与服务端不一致 | 沿用乐观更新 + 失败回滚 + 409 处理（参考 `TaskCenter`） |
+| 在组件里 `fetch('/api/...')` 后直接改本地状态冒充成功 | 与服务端不一致 | 以服务端返回为准刷新（`router.refresh()` 或重新请求）；失败时保留原状态并显示错误，409 提示数据已被他人修改 |
 | `prisma db push` 快速同步 schema | 不生成迁移，生产无法升级 | `prisma migrate dev --name ...` |
 | 把 `Customer.stage` 改成数据库 enum | 破坏既有 String 列与迁移基线 | 保持 String，用 `z.enum` 约束 |
 | 直接删客户记录 | 丢失留资/订单/会话历史 | `deletedAt` 软删除 + 回收站 |

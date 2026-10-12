@@ -3,11 +3,12 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor,scope } from '@/lib/auth';
 import { bosDateRange,opportunityStage } from '@/lib/bos';
+import { TERMINAL_STAGES } from '@/lib/constants';
 
 export const salesQuery=z.object({queue:z.enum(['new','today','waiting','high','recent']).default('today'),q:z.string().trim().max(100).default(''),page:z.coerce.number().int().min(1).max(10000).default(1)});
 type Queue=z.infer<typeof salesQuery>['queue'];
 
-const ACTIVE:Prisma.CustomerWhereInput={stage:{notIn:['WON','LOST','INVALID','PAUSED']}};
+const ACTIVE:Prisma.CustomerWhereInput={stage:{notIn:[...TERMINAL_STAGES]}};
 // Assigned but nobody has contacted the customer yet.
 const PENDING_FIRST_CONTACT:Prisma.CustomerWhereInput={firstContactDueAt:{not:null},firstContactAt:null,contactedAt:null,lastOutboundAt:null,lastFollowUpAt:null};
 const openTaskDueBefore=(at:Date):Prisma.CustomerWhereInput=>({tasks:{some:{deletedAt:null,status:{not:'DONE'},dueDate:{lt:at}}}});

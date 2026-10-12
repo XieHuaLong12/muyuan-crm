@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { timingSafeEqual } from 'node:crypto';
+import { safeEqual } from '@/lib/secret';
 
 /**
  * /api/cron/meta-sync —— Meta 广告数据与表单目录的定时同步入口
@@ -14,13 +14,6 @@ import { timingSafeEqual } from 'node:crypto';
  * 与 /api/leads/webhook 同一教训 —— 顶层 import 会拉起 Prisma 与整棵依赖图，
  * 冷启动失败时连「密钥校验」这种不需要数据库的响应都发不出去。
  */
-
-function safeEqual(a: string, b: string) {
-  const left = Buffer.from(a, 'utf8');
-  const right = Buffer.from(b, 'utf8');
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
-}
 
 export async function GET(req: NextRequest) {
   // 推荐用请求头 x-cron-secret，避免密钥进入访问日志；?secret= 仅为兼容已配置的定时任务保留。

@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError } from '@/lib/auth';
+import { Actor, HttpError, requireAdmin } from '@/lib/auth';
 
 /**
  * 产品成本与毛利（仅管理员）
@@ -17,10 +17,6 @@ import { Actor, HttpError } from '@/lib/auth';
  */
 
 const ADMIN_ONLY = '仅管理员可以查看产品成本';
-
-export function requireCostAdmin(user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, ADMIN_ONLY);
-}
 
 export const marginQuery = z.object({
   q: z.string().trim().max(60).default(''),
@@ -50,13 +46,13 @@ export async function exchangeRate(): Promise<Prisma.Decimal> {
 }
 
 export async function getExchangeRate(user: Actor) {
-  requireCostAdmin(user);
+  requireAdmin(user, ADMIN_ONLY);
   const rate = await exchangeRate();
   return { rate: rate.toFixed(4), currencyPair: 'CNY/USD' };
 }
 
 export async function setExchangeRate(user: Actor, input: unknown) {
-  requireCostAdmin(user);
+  requireAdmin(user, ADMIN_ONLY);
   const { rate } = rateInput.parse(input);
   const saved = await db.setting.update({
     where: { id: 'system' },
@@ -82,7 +78,7 @@ function scenario(priceCny: Prisma.Decimal | null, cost: Prisma.Decimal | null):
  * 这样才能按毛利率排序（毛利率是计算值，数据库排不了）。
  */
 export async function marginOverview(user: Actor, input: unknown = {}) {
-  requireCostAdmin(user);
+  requireAdmin(user, ADMIN_ONLY);
   const query = marginQuery.parse(input);
   const rate = await exchangeRate();
 
@@ -189,7 +185,7 @@ export async function marginOverview(user: Actor, input: unknown = {}) {
 
 /** 产品详情用：单个型号各个尺寸的成本与毛利。 */
 export async function productCostSummary(user: Actor, productId: string) {
-  requireCostAdmin(user);
+  requireAdmin(user, ADMIN_ONLY);
   const rate = await exchangeRate();
   const product = await db.product.findFirst({
     where: { id: productId, deletedAt: null },
@@ -252,7 +248,7 @@ export async function productCostSummary(user: Actor, productId: string) {
 
 /** 录入或更新某个尺寸变体的成本（仅管理员）。 */
 export async function upsertCost(user: Actor, variantId: string, input: unknown) {
-  requireCostAdmin(user);
+  requireAdmin(user, ADMIN_ONLY);
   const v = costInput.parse(input);
 
   const variant = await db.productVariant.findFirst({

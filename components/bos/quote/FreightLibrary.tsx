@@ -66,7 +66,6 @@ export function FreightLibrary({ initialRates, isAdmin, fx }: { initialRates: Fr
   return (
     <>
       <Header
-        eyebrow="产品库 · 运费库"
         title="运费库"
         description="按目的国维护运价，例如 法国 22 元/kg、印度 550 美金/立方。报价时按产品总毛重或总体积自动算运费。"
         actions={isAdmin ? <Button variant="primary" onClick={() => open('new')}><Plus size={15} /> 新增运价</Button> : <Link href="/products/quotes/new" className="bos-button">新建报价</Link>}

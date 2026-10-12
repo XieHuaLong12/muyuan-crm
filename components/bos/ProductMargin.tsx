@@ -150,9 +150,8 @@ export function ProductMargin({ data }: { data: MarginData }) {
   return (
     <>
       <Header
-        eyebrow="PRODUCT OS · 仅管理员"
         title="成本与毛利"
-        description={`${data.totals.variants} 个尺寸变体 · 已填成本 ${data.totals.filled} · 未填 ${data.totals.missing} · 低毛利 ${data.totals.lowMargin}`}
+        description={`仅管理员可见 · ${data.totals.variants} 个尺寸变体 · 已填成本 ${data.totals.filled} · 未填 ${data.totals.missing} · 低毛利 ${data.totals.lowMargin}`}
         actions={
           <Link href="/products" className="bos-button">返回产品库</Link>
         }

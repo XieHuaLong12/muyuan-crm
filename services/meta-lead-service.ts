@@ -1,14 +1,16 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { safeEqual } from '@/lib/secret';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor,HttpError } from '@/lib/auth';
+import { Actor,requireAdmin } from '@/lib/auth';
 import { canonicalEmail, canonicalPhone, metaLeadKey, sourceInstant } from '@/lib/contact-identity';
 import { lockIdentity, resolveContact, rememberCustomerContacts, recordLeadAttribution } from './contact-identity-service';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { mapLeadFields, type LeadField } from '@/lib/meta-lead-fields';
 import { AD_LEAD_FRESH_HOURS } from '@/lib/constants';
 import { fetchLeadAdSnapshot } from './meta-lead-ad-snapshot';
+import { graphVersion } from '@/lib/meta-graph';
 
 /**
  * Meta Facebook Lead Ads 接入
@@ -34,10 +36,7 @@ function safeReason(value: unknown) {
   return (token ? message.replaceAll(token, '[redacted]') : message).slice(0, 2000);
 }
 
-/** Graph API 版本走配置，不硬编码：Meta 每约两年废弃一次版本号。 */
-export function graphVersion() {
-  return process.env.META_GRAPH_VERSION?.trim() || 'v26.0';
-}
+export { graphVersion };
 
 /**
  * R2：校验 Meta 的 X-Hub-Signature-256。
@@ -49,11 +48,7 @@ export function verifyMetaSignature(rawBody: string, header: string | null) {
   if (!header) return { ok: false, reason: '缺少 x-hub-signature-256 请求头' } as const;
 
   const expected = `sha256=${createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex')}`;
-  const a = Buffer.from(expected, 'utf8');
-  const b = Buffer.from(header, 'utf8');
-  // 长度不等时 timingSafeEqual 会抛错，先比长度
-  if (a.length !== b.length) return { ok: false, reason: '签名不匹配' } as const;
-  return timingSafeEqual(a, b) ? ({ ok: true } as const) : ({ ok: false, reason: '签名不匹配' } as const);
+  return safeEqual(expected, header) ? ({ ok: true } as const) : ({ ok: false, reason: '签名不匹配' } as const);
 }
 
 /** Meta Lead Ads webhook 推送体 */
@@ -355,7 +350,7 @@ export async function recentMetaLeadEvents(limit = 20) {
 
 /** Recover persisted failures even after a provider's retry window has ended. */
 export async function retryPendingMetaLeads(input:unknown,user:Actor){
-  if(user.role!=='ADMIN')throw new HttpError(403,'留资重试需要管理员权限');
+  requireAdmin(user, '留资重试需要管理员权限');
   const {limit}=z.object({limit:z.coerce.number().int().min(1).max(50).default(3)}).parse(input);
   if(!process.env.META_PAGE_ACCESS_TOKEN)return {status:'NOT_CONNECTED',succeeded:0,failed:0};
   const rows=await db.metaLeadEvent.findMany({where:{OR:[{status:'RECEIVED'},{status:'FAILED',NOT:[{error:{contains:'AMBIGUOUS'}},{error:{contains:'缺少可确认'}},{error:{contains:'回收站'}}]},{status:'PROCESSING',processingStartedAt:{lt:new Date(Date.now()-CLAIM_TIMEOUT_MS)}}]},orderBy:{createdAt:'asc'},take:limit});

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError, scope } from '@/lib/auth';
+import { Actor, HttpError, scope, requireAdmin } from '@/lib/auth';
 import { graphVersion } from '@/lib/meta-graph';
 import { canonicalPhone, canonicalEmail } from '@/lib/contact-identity';
 import { retryTransaction } from '@/lib/transaction-retry';
@@ -78,7 +78,7 @@ export async function recomputeAdvertisingFeedback(input: unknown, user: Actor) 
 
 /** At-least-once transport + stable event_id. Network calls are outside DB transactions. */
 export async function deliverAdvertisingFeedback(input: unknown, user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '广告反馈投递需要管理员权限');
+  requireAdmin(user, '广告反馈投递需要管理员权限');
   const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(50).default(20) }).parse(input);
   if (!feedbackConnection()) return { status: 'NOT_CONNECTED', sent: 0, failed: 0 };
   const now = new Date();

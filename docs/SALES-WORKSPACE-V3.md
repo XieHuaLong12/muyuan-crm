@@ -1,5 +1,7 @@
 # Sales Workspace V3
 
+> 2026-10-12：本文描述的 V3 工作台外壳、WhatsApp 工作台、AI 回复面板、任务中心以及 `/api/reminders`、`/api/sales-workspace`、`/api/workspace-customers` 已删除（入口早已改到 BOS 页面），当前结构见 [角色工作空间](ROLE_WORKSPACES.md)。
+
 ## 每天怎么用
 
 1. 打开 Today，看待回复、未读、今日任务、待发送报价与逾期待办。优先客户结合 AI 评分、采购意向、消息时间、逾期和预估金额排序。

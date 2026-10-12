@@ -2,8 +2,8 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { HttpError } from '@/lib/auth';
+import { graphVersion } from '@/lib/meta-graph';
 
-const graphVersion = () => process.env.META_GRAPH_VERSION?.trim() || 'v26.0';
 const graphBase = () => `https://graph.facebook.com/${graphVersion()}`;
 
 const encryptionKey = () => {

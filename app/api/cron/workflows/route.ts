@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { timingSafeEqual } from 'node:crypto';
+import { cronSecretValid } from '@/lib/secret';
 export const dynamic='force-dynamic';
 
 /**
@@ -9,9 +9,7 @@ export const dynamic='force-dynamic';
  * canonical contact keys for older customers in bounded batches.
  */
 export async function POST(req:NextRequest){
-  const supplied=req.headers.get('x-cron-secret')||'';const secret=process.env.META_SYNC_SECRET?.trim()||'';
-  const left=Buffer.from(supplied),right=Buffer.from(secret);
-  if(!secret||left.length!==right.length||!timingSafeEqual(left,right))return Response.json({success:false,error:'未授权'},{status:401});
+  if(!cronSecretValid(req.headers.get('x-cron-secret')))return Response.json({success:false,error:'未授权'},{status:401});
   const [{syncAllWorkflows},{backfillContactKeys},{handle,ok}]=await Promise.all([import('@/services/workflow-service'),import('@/services/contact-identity-service'),import('@/lib/http')]);
   return handle(async()=>ok({contactKeys:await backfillContactKeys(500),workflows:await syncAllWorkflows()}));
 }

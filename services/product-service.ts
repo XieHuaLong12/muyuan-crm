@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError } from '@/lib/auth';
+import { Actor, HttpError, requireAdmin } from '@/lib/auth';
 import { unitsPer40HQ } from '@/lib/product-packing';
 
 /**
@@ -53,9 +53,6 @@ export const productDetailQuery = z.object({ lang: z.enum(['zh', 'en']).default(
 
 const PAGE_SIZE = 24;
 
-function requireAdmin(user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '需要管理员权限');
-}
 
 const variantSummary = {
   id: true,

@@ -2,12 +2,13 @@ import { identityKey } from '@/lib/contact-identity';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError, scope } from '@/lib/auth';
+import { Actor, HttpError, scope, requireAdmin } from '@/lib/auth';
 import { dayKey, localDate } from '@/lib/time';
 import { isQualified } from '@/lib/metrics';
 import { feedbackConnection } from './advertising-feedback-service';
 import { finalIntelligence, lossReasons } from './customer-intelligence-service';
 import { callDeepSeek } from './deepseek-customer-service';
+import { isTerminalStage } from '@/lib/constants';
 
 export const analyticsQuery = z.object({
   preset: z.enum(['today','yesterday','7d','14d','30d','this_month','last_month','custom']).default('7d'),
@@ -128,7 +129,7 @@ export async function conversationAnalytics(input:unknown,user:Actor){
   const active=await db.customer.findMany({where:{...where,whatsappContacts:{some:{conversations:{some:{lastMessageAt:{gte:window.start,lt:window.end}}}}}},select:{stage:true,contactedAt:true,firstReplyAt:true,lastInboundAt:true,lastOutboundAt:true,intelligence:true},take:10001});
   if(active.length>10000)throw new HttpError(400,'此范围超过 10000 位会话客户，请缩短日期范围');
   const responseTimes=active.filter(c=>c.contactedAt&&c.firstReplyAt&&c.firstReplyAt>=c.contactedAt).map(c=>(c.firstReplyAt!.getTime()-c.contactedAt!.getTime())/60000);
-  const summary={customers:active.length,contacted:active.filter(c=>c.contactedAt).length,replied:active.filter(c=>c.firstReplyAt).length,noReply:active.filter(c=>c.contactedAt&&!c.firstReplyAt).length,waiting:active.filter(c=>c.lastInboundAt&&(!c.lastOutboundAt||c.lastInboundAt>c.lastOutboundAt)).length,overdue:active.filter(c=>!['WON','LOST','INVALID','PAUSED'].includes(c.stage)&&c.intelligence?.nextFollowUpAt&&c.intelligence.nextFollowUpAt<new Date()).length,averageFirstReplyMinutes:responseTimes.length?responseTimes.reduce((a,b)=>a+b,0)/responseTimes.length:null,responseSamples:responseTimes.length};
+  const summary={customers:active.length,contacted:active.filter(c=>c.contactedAt).length,replied:active.filter(c=>c.firstReplyAt).length,noReply:active.filter(c=>c.contactedAt&&!c.firstReplyAt).length,waiting:active.filter(c=>c.lastInboundAt&&(!c.lastOutboundAt||c.lastInboundAt>c.lastOutboundAt)).length,overdue:active.filter(c=>!isTerminalStage(c.stage)&&c.intelligence?.nextFollowUpAt&&c.intelligence.nextFollowUpAt<new Date()).length,averageFirstReplyMinutes:responseTimes.length?responseTimes.reduce((a,b)=>a+b,0)/responseTimes.length:null,responseSamples:responseTimes.length};
   return {query:q,window,total,counts,summary,rows:rows.map(r=>({...r,waitingForReply:!!r.lastInboundAt&&(!r.lastOutboundAt||r.lastInboundAt>r.lastOutboundAt),
     analysis:r.contact.customer?.intelligence?.aiAnalysis?finalIntelligence(r.contact.customer.intelligence.aiAnalysis,r.contact.customer.intelligence.humanOverrides):null}))};
 }
@@ -170,7 +171,7 @@ export async function identityDataQuality(input:unknown,user:Actor){
 }
 
 export async function dailyAdvertisingInsight(input:unknown,user:Actor){
-  if(user.role!=='ADMIN')throw new HttpError(403,'每日广告分析需要管理员权限');
+  requireAdmin(user, '每日广告分析需要管理员权限');
   const q=analyticsQuery.parse(input);const report=await adsAnalytics({...q,preset:q.preset},user);
   const {page:ignoredPage,...filters}=q;void ignoredPage;
   const key=identityKey(report.window.from,report.window.to,report.window.timezone,JSON.stringify(filters));

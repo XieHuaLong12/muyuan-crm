@@ -395,7 +395,7 @@ export function ActionCenter({ data, name, people = [] }: { data: ActionCenterDa
           <aside className="bos-drawer" role="dialog" aria-label={`任务详情：${insight.task.title}`}>
             <header>
               <div>
-                <span className="bos-eyebrow">TASK DETAIL</span>
+                <span className="bos-eyebrow">任务详情</span>
                 <h2>{insight.task.title}</h2>
               </div>
               <button className="bos-icon-button" type="button" aria-label="关闭" onClick={() => setInsight(null)}><X size={17} /></button>

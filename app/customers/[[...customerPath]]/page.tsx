@@ -10,5 +10,5 @@ export default async function Page({params}:{params:Promise<{customerPath?:strin
  const {customerPath}=await params;
  if(customerPath&&customerPath.length>1)notFound();
  const {boot}=await workspacePage();
- return <BOSShell boot={boot}><Reveal delay={MOTION_DELAY.main}><Workspace initialBoot={boot} pageOverride="customers" embedded/></Reveal></BOSShell>;
+ return <BOSShell boot={boot}><Reveal delay={MOTION_DELAY.main}><Workspace initialBoot={boot} pageOverride="customers"/></Reveal></BOSShell>;
 }

@@ -86,10 +86,8 @@ components/
   customer-table.tsx    列表、阶段标签、跟进提醒
   customer-detail.tsx   详情、跟进时间线、订单、阶段历史
   forms.tsx             客户、跟进、成交表单
-  dashboard.tsx         KPI、趋势、漏斗、来源与国家分析
   management.tsx        目标与设置
   ui/dialog.tsx         Radix 可访问对话框封装
-  agent-tools.tsx       可选的浏览器只读业绩工具
 lib/                    类型、枚举、验证、时间、认证、数据库连接
 services/               客户、业绩、目标、询盘导入业务服务
 prisma/schema.prisma    数据模型
