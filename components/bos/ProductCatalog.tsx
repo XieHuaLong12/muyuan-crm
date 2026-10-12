@@ -63,7 +63,6 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
   return (
     <>
       <Header
-        eyebrow="PRODUCT OS"
         title="产品库"
         description={`${data.total} 个型号 · 价格与包装以报价表为准（FOB）`}
         actions={

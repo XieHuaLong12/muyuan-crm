@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { handle, ok } from '@/lib/http';
@@ -10,10 +9,9 @@ import {
 } from '@/services/customer-service';
 import { customerList } from '@/services/customer-list-service';
 import { assignCustomers, saveLeadAssignMode } from '@/services/lead-assignment-service';
-import { dashboard } from '@/services/dashboard-service';
 import { createUserAccount, changeOwnPassword } from '@/services/sales-account-service';
-import { allocateTargets } from '@/services/target-service';
-import { importLead } from '@/services/lead-import-service';
+import { allocateTargets, targetProgress } from '@/services/target-service';
+import { workspaceBootstrap } from '@/services/sales-workspace-service';
 import { batchCustomers, purgeCustomers } from '@/services/customer-batch-service';
 import { previewMeta, commitMeta } from '@/services/meta-import-service';
 import { translationSettings, saveTranslationSettings } from '@/services/meta-translation-service';
@@ -47,14 +45,6 @@ async function login(req: NextRequest) {
   }
   recordLoginSuccess(email, address);
   return withSession(req, ok({ id: u.id, name: u.name, role: u.role }), u.id, u.sessionVersion);
-}
-
-async function leadWebhook(req: NextRequest) {
-  const secret = process.env.WEBHOOK_SECRET, provided = req.headers.get('x-webhook-secret');
-  if (!secret || !provided || Buffer.byteLength(secret) !== Buffer.byteLength(provided) || !timingSafeEqual(Buffer.from(secret), Buffer.from(provided))) {
-    throw new HttpError(401, 'Webhook 密钥无效');
-  }
-  return ok(await importLead(await req.json()));
 }
 
 async function customerDetail(id: string, user: Actor) {
@@ -140,24 +130,16 @@ async function route(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     const [resource, id] = path;
     const method = req.method;
     if (resource === 'auth' && id === 'login' && method === 'POST') return login(req);
-    if (resource === 'leads' && id === 'webhook' && method === 'POST') return leadWebhook(req);
 
     const user = await requireUser();
-    if (['dashboard', 'targets', 'settings', 'users'].includes(resource) && user.role !== 'ADMIN') throw new HttpError(403, '需要管理员权限');
+    if (['target-progress', 'targets', 'settings', 'users'].includes(resource) && user.role !== 'ADMIN') throw new HttpError(403, '需要管理员权限');
     if (resource === 'auth' && id === 'logout' && method === 'POST') { const res = ok({}); res.cookies.delete('crm_session'); return res; }
     if (resource === 'auth' && id === 'password' && method === 'POST') {
       const changed = await changeOwnPassword(await req.json(), user);
       return withSession(req, ok({ changed: true }), changed.id, changed.sessionVersion);
     }
-    if (resource === 'bootstrap' && method === 'GET') {
-      return ok({
-        user,
-        users: await db.user.findMany({ where: user.role === 'ADMIN' ? {} : { id: user.id }, select: { id: true, name: true, email: true, role: true, isActive: true } }),
-        settings: await db.setting.findUnique({ where: { id: 'system' } }),
-        webhookConfigured: !!process.env.WEBHOOK_SECRET,
-        deepseekConfigured: !!process.env.DEEPSEEK_API_KEY,
-      });
-    }
+    // The same bootstrap the server pages render with, so a refresh after saving settings has the same shape.
+    if (resource === 'bootstrap' && method === 'GET') return ok(await workspaceBootstrap(user));
     if (resource === 'meta-import') {
       await requireUser(true);
       if (id === 'preview' && method === 'POST') return ok(await previewMeta(await req.json(), user));
@@ -166,13 +148,7 @@ async function route(req: NextRequest, ctx: { params: Promise<{ path: string[] }
       if (id === 'translation' && method === 'PUT') return ok(await saveTranslationSettings(await req.json()));
     }
     if (resource === 'customers') { const res = await customers(req, user, path); if (res) return res; }
-    if (resource === 'dashboard' && method === 'GET') {
-      const q = req.nextUrl.searchParams;
-      const period = z.enum(['WEEK', 'MONTH', 'YEAR']).parse(q.get('period') ?? 'MONTH');
-      const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => !Number.isNaN(Date.parse(v))).parse(q.get('date'));
-      const currency = z.enum(['CNY', 'USD', 'EUR']).parse(q.get('currency') ?? 'CNY');
-      return ok(await dashboard(user, period, date, currency));
-    }
+    if (resource === 'target-progress' && method === 'GET') return ok(await targetProgress(user, Object.fromEntries(req.nextUrl.searchParams)));
     if (resource === 'targets') { const res = await targets(req, id); if (res) return res; }
     if (resource === 'settings' && method === 'PUT' && id === 'lead-assignment') return ok(await saveLeadAssignMode(await req.json(), user));
     if (resource === 'settings' && method === 'PUT' && !id) {

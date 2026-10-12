@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { BOSShell } from '@/components/bos/BOSShell';
+import { Header } from '@/components/ui/bos';
 import { CommunicationHistory } from '@/components/bos-v2/CommunicationHistory';
 import { adminWorkspacePage } from '@/services/workspace-page';
 import { communicationHistory } from '@/services/communication-history-service';
@@ -27,7 +28,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
   }
 
   return <BOSShell boot={boot}><div className="bos-v2-page">
-    <header className="bos-v2-hero"><div><span className="bos-v2-kicker">SALES SUPERVISION / 销售沟通监督</span><h1>查看销售沟通与客户跟进。</h1><p>按销售和客户查阅已保存的 WhatsApp 沟通记录，用于检查回复、话术与跟进质量。</p></div><Link href="/communication/whatsapp-sync" className="bos-v2-secondary">本地同步助手</Link></header>
+    <Header title="沟通监督" description="按销售和客户查阅已保存的 WhatsApp 沟通记录，用于检查回复、话术与跟进质量。" actions={<Link href="/communication/whatsapp-sync" className="bos-v2-secondary">本地同步助手</Link>}/>
     <nav className="bos-v2-channel-tabs" aria-label="沟通渠道">{[['whatsapp', 'WhatsApp'], ['messenger', 'Messenger'], ['email', 'Email']].map(([key, label]) => <Link key={key} href={`/communication?channel=${key}`} aria-current={channel === key ? 'page' : undefined}>{label}{key !== 'whatsapp' && <small>待接入</small>}</Link>)}</nav>
     {content}
   </div></BOSShell>;

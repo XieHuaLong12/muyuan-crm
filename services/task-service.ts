@@ -2,7 +2,7 @@ import { retryTransaction } from '@/lib/transaction-retry';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError, scope } from '@/lib/auth';
+import { Actor, HttpError, scope, requireAdmin } from '@/lib/auth';
 import { accessible } from './customer-service';
 import { dayKey, localDate } from '@/lib/time';
 
@@ -34,7 +34,7 @@ export async function createTask(input: unknown, user: Actor) {
   // Only administrators hand a standalone task to someone else; customer tasks follow the customer owner.
   if (v.customerId) v.assigneeId = null;
   else if (v.assigneeId && v.assigneeId !== user.id) {
-    if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以给其他人派任务');
+    requireAdmin(user, '只有管理员可以给其他人派任务');
     if (!await db.user.findFirst({ where: { id: v.assigneeId, isActive: true } })) throw new HttpError(400, '执行人不存在或账号已停用');
   }
   return retryTransaction(() => db.$transaction(async tx => {

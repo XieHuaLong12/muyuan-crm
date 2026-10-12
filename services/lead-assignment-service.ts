@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError } from '@/lib/auth';
+import { Actor, HttpError, requireAdmin } from '@/lib/auth';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { automatedTask, initializeFirstContact, syncCustomerWorkflow } from './workflow-service';
 
@@ -87,7 +87,7 @@ const assignInput = z.object({
  * rewritten, so a stale profile form can never undo an assignment and vice versa.
  */
 export async function assignCustomers(input: unknown, user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以分配客户');
+  requireAdmin(user, '只有管理员可以分配客户');
   const v = assignInput.parse(input);
   const ids = [...new Set(v.ids)].sort();
   const owner = await db.user.findFirst({ where: { id: v.ownerId, isActive: true }, select: { id: true, name: true } });
@@ -113,7 +113,7 @@ export async function assignCustomers(input: unknown, user: Actor) {
 }
 
 export async function saveLeadAssignMode(input: unknown, user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '需要管理员权限');
+  requireAdmin(user);
   const { mode } = z.object({ mode: z.enum(Object.keys(LEAD_ASSIGN_MODES) as [LeadAssignMode, ...LeadAssignMode[]]) }).parse(input);
   const saved = await db.setting.update({ where: { id: 'system' }, data: { leadAssignMode: mode }, select: { leadAssignMode: true } });
   return { mode: saved.leadAssignMode };

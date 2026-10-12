@@ -12,6 +12,7 @@ import { syncCustomerWorkflow } from './workflow-service';
 import { normalizeWhatsApp } from '@/lib/whatsapp';
 import { decryptWhatsAppAccessToken } from './whatsapp-connect-service';
 import { gupshupSource } from '@/lib/gupshup';
+import { graphVersion } from '@/lib/meta-graph';
 import { customerServiceWindow, requireOpenWindow } from './whatsapp-window-service';
 import { replayWhatsAppReceipts } from './whatsapp-webhook-service';
 
@@ -112,8 +113,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
   let providerMessageId = '';
   try {
     if (transport === 'META') {
-      const graphVersion = process.env.META_GRAPH_VERSION?.trim() || 'v26.0';
-      const endpoint = `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`;
+      const endpoint = `https://graph.facebook.com/${graphVersion()}/${phoneNumberId}/messages`;
       let outbound: Record<string, unknown>;
       if (!asset) {
         outbound = {

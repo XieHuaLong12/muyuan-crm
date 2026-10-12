@@ -5,7 +5,7 @@ import { db } from '../lib/db';
 import { parseMetaCsv,identifyHeader } from '../lib/meta-import';
 import { previewMeta,commitMeta,metaDate } from '../services/meta-import-service';
 import { saveTranslationSettings,translationSettings,translator } from '../services/meta-translation-service';
-import { dashboard } from '../services/dashboard-service';
+import { sourcesAndCountries } from '../services/source-analysis-service';
 
 test('Meta CSV：多分隔符、BOM、引号/换行、字符串 ID、法文问题及严格日期',()=>{
  const a=parseMetaCsv('\uFEFFid,full_name,phone_number,comments\r\n1234567890123456789,"Jean, Martin",0033612345678,"Bonjour\n""test"""\r\n');
@@ -26,16 +26,17 @@ test('智能导入：预览零写入、幂等、重复留资、疑似重复、�
  const commit=async(p:Awaited<ReturnType<typeof preview>>,rows?:number[],allowPendingTranslation=false)=>{const r=await commitMeta({token:p.token,rows:rows??p.rows.filter(r=>['NEW','REPEAT'].includes(r.status)).map(r=>r.row),confirmed:true,allowPendingTranslation},user);ids.push(...r.customerIds.filter((id:string)=>!ids.includes(id)));return r;};
  try{
   await assert.rejects(previewMeta({filename:'x',text:make(prefix)}, {...user,role:'SALES'}),/管理员/);
-  const decBefore=await dashboard(user,'MONTH','2024-12-01','CNY');
+  const december=async()=>(await sourcesAndCountries(user,{range:'custom',startDate:'2024-12-01',endDate:'2024-12-31'})).totals.inquiries;
+  const decBefore=await december();
   const p=await preview(make(prefix));assert.equal(p.rows[0].status,'NEW');assert.equal(p.rows[0].values.productInterest,'沙发');assert.equal(p.rows[0].values.customerType,'批发商');assert.equal(p.rows[0].values.name,'Jean Test');assert.equal(p.rows[0].values.productModel,'X-100');assert.equal(p.rows[0].values.adName,'Original Ad');assert.deepEqual(p.rows[0].pending,[]);
   assert.equal(await db.customer.count(),beforeCount);assert.equal(await db.leadSubmission.count(),beforeSub);
   const result=await commit(p);assert.equal(result.created,1);const customer=await db.customer.findUniqueOrThrow({where:{id:result.customerIds[0]}});
-  assert.equal(customer.quantity,20);assert.equal(customer.source,'FACEBOOK');assert.equal((await dashboard(user,'MONTH','2024-12-01','CNY')).current.inquiries,decBefore.current.inquiries+1);
+  assert.equal(customer.quantity,20);assert.equal(customer.source,'FACEBOOK');assert.equal(await december(),decBefore+1);
   assert.deepEqual(await commit(p),result);assert.equal(await db.leadSubmission.count({where:{customerId:customer.id}}),1);
   const duplicated=await preview(make(prefix));assert.equal(duplicated.rows[0].status,'IMPORTED');
   const repeat=await preview(make(prefix+'-2','Jean Test','0033987654321','chair','40'));assert.equal(repeat.rows[0].status,'REPEAT');assert.equal(repeat.rows[0].ordinal,2);
   assert.equal((await commit(repeat)).repeated,1);assert.deepEqual(await db.customer.findUniqueOrThrow({where:{id:customer.id}}),customer);
-  assert.equal(await db.customer.count(),beforeCount+1);assert.equal((await dashboard(user,'MONTH','2024-12-01','CNY')).current.inquiries,decBefore.current.inquiries+1);
+  assert.equal(await db.customer.count(),beforeCount+1);assert.equal(await december(),decBefore+1);
   const third=await preview(make(prefix+'-3'));assert.equal(third.rows[0].ordinal,3);await commit(third);
   const changedOriginal=await preview(make(prefix,'Different spelling','+33111111111'));assert.equal(changedOriginal.rows[0].status,'IMPORTED');
   const reordered=parseMetaCsv(make(prefix+'-noid')).rows[0];delete reordered.id;

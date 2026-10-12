@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { smartPriority, priorityReason, TASK_SOURCES, TASK_PRIORITIES, TASK_STATUS } from '@/lib/task-meta';
-import { taskScope,updateTask } from './task-service';
+import { taskReminders,taskScope,updateTask } from './task-service';
 import { dayKey, localDate } from '@/lib/time';
 import { overdueTasks, staleQuotes } from '@/lib/metrics';
 
@@ -364,22 +364,32 @@ export async function autoGenerate(user: Actor) {
     const key = `order:${order.id}:${spec.type}`;
     const exists = await db.task.findUnique({ where: { automationKey: key }, select: { id: true } });
     if (exists) return;
-    await db.task.create({
-      data: {
-        customerId: order.customerId,
-        orderId: order.id,
-        amount: order.amountRMB,
-        title: spec.title,
-        description: spec.description,
-        type: spec.type,
-        source: spec.source,
-        priority: smartPriority({ amount: Number(order.amountRMB), orderRisk: spec.type === 'SHIPPING' }),
-        dueDate: spec.dueDate,
-        aiReason: spec.reason,
-        createdBy: user.id,
-        automationKey: key,
-      },
-    });
+    try {
+      await db.$transaction(async tx => {
+        const task = await tx.task.create({
+          data: {
+            customerId: order.customerId,
+            orderId: order.id,
+            amount: order.amountRMB,
+            title: spec.title,
+            description: spec.description,
+            type: spec.type,
+            source: spec.source,
+            priority: smartPriority({ amount: Number(order.amountRMB), orderRisk: spec.type === 'SHIPPING' }),
+            dueDate: spec.dueDate,
+            aiReason: spec.reason,
+            createdBy: user.id,
+            automationKey: key,
+          },
+        });
+        // Like every other task: remind before it is due and again when it is overdue.
+        await taskReminders(tx, task.id, task.dueDate, task.reminderMinutes);
+      });
+    } catch (error) {
+      // Another run created the same task a moment earlier.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return;
+      throw error;
+    }
     created.push(spec.title);
   };
 

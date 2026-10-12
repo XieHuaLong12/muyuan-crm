@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { db } from '../lib/db';
-import { commandCenter } from '../services/bos-command-service';
+import { sourcesAndCountries } from '../services/source-analysis-service';
 import { salesQueue } from '../services/bos-sales-service';
 
 test('BOS read services preserve CRM, scope customers/marketing, and separate currencies',async()=>{
@@ -16,7 +16,8 @@ test('BOS read services preserve CRM, scope customers/marketing, and separate cu
   await db.customer.create({data:{name:'BOS deleted',ownerId:a.id,deletedAt:now}});
   await db.deal.createMany({data:[{customerId:c.id,dealAmount:100,productCost:20,grossProfit:80,grossMargin:.8,currency:'USD',dealDate:now},{customerId:c.id,dealAmount:200,productCost:20,grossProfit:180,grossMargin:.9,currency:'EUR',dealDate:now}]});
   const before=await db.customer.findUniqueOrThrow({where:{id:c.id}}),taskCount=await db.task.count({where:{customerId:c.id}});
-  const command=await commandCenter(user,now);assert.equal(command.scope,'PERSONAL');assert.equal(command.newLeads,1);assert.equal(command.followUps,1);assert.equal(command.orders,2);assert.deepEqual(command.revenue.sort((x,y)=>x.currency.localeCompare(y.currency)),[{currency:'EUR',amount:'200'},{currency:'USD',amount:'100'}]);assert.equal(command.funnel.find(s=>s.key==='QUOTED')?.count,1);
+  // A salesperson's totals cover only their live customers, and currencies are never added together.
+  const totals=(await sourcesAndCountries(user,{range:'today'},new Date(now.getTime()+1000))).totals;assert.equal(totals.inquiries,1);assert.equal(totals.wonCustomers,1);assert.deepEqual(totals.revenue,[{currency:'EUR',amount:'200.00'},{currency:'USD',amount:'100.00'}]);
   for(const queue of ['today','waiting','high','recent']){const data=await salesQueue(user,{queue},now);assert.deepEqual(data.customers.map(c=>c.id),[customerId]);assert.equal(data.customers[0].leadScore,91);assert.equal(data.customers[0].opportunityStage,'QUOTED');}
   assert.equal((await db.customer.findUniqueOrThrow({where:{id:c.id}})).updatedAt.getTime(),before.updatedAt.getTime());
   await db.customer.update({where:{id:c.id},data:{lastOutboundAt:new Date(now.getTime()+1000)}});

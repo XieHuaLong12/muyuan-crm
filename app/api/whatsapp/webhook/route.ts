@@ -1,15 +1,11 @@
 import { ZodError } from 'zod';
 import { HttpError } from '@/lib/auth';
 import { normalizeProviderEnvelope } from '@/lib/gupshup';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
+import { safeEqual } from '@/lib/secret';
 import { after, NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-
-function safeEqual(a: string, b: string) {
-  const left = Buffer.from(a), right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
-}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

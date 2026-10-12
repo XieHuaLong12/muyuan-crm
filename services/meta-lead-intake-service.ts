@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { Actor, HttpError } from '@/lib/auth';
+import { Actor, HttpError, requireAdmin } from '@/lib/auth';
 import { dayKey, localDate } from '@/lib/time';
 import { explainGraphError, graphGet, graphPost, pagedGraphGet, type GraphErrorHelp } from '@/lib/meta-graph';
 import { sourceInstant } from '@/lib/contact-identity';
@@ -128,7 +128,7 @@ async function pageSubscription(token: string, pageId: string) {
 
 /** Subscribes the Page to this app's leadgen webhook, keeping fields that were already subscribed. */
 export async function subscribePageToLeadgen(user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '需要管理员权限');
+  requireAdmin(user);
   const { token, pageId, missing } = formsEnv();
   if (!token || !pageId) throw new HttpError(400, `缺少 ${missing.join('、')}`);
   const current = await pageSubscription(token, pageId);
@@ -208,7 +208,7 @@ function percentile(values: number[], p: number) {
 
 /** Everything an administrator needs to trust that ad leads arrive in time, plus what to fix if not. */
 export async function metaLeadHealth(user: Actor, options: { live?: boolean } = {}) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '需要管理员权限');
+  requireAdmin(user);
   const settings = await db.setting.findUniqueOrThrow({ where: { id: 'system' } });
   const now = new Date();
   const todayStart = localDate(`${dayKey(now, settings.timezone)}T00:00`, settings.timezone);

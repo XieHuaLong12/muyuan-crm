@@ -38,7 +38,7 @@ export function OrderDetail({ data, timezone, admin = false }: { data: OrderDeta
   return (
     <>
       <Header
-        eyebrow="ORDER MANAGEMENT · 订单详情"
+        eyebrow="订单"
         title={data.orderNo}
         description={`${data.customer.name}${data.customer.country ? ` · ${data.customer.country}` : ''} · ${data.statusLabel} · 七段流程已完成 ${completed} / ${ORDER_STAGES.length}`}
         actions={<>{admin && data.status !== 'CANCELLED' && <CancelOrderButton orderId={data.id} orderNo={data.orderNo} updatedAt={data.updatedAt} hasDeal={!!data.deal} />}<Link className="bos-button" href="/orders"><ArrowLeft size={15} />返回订单列表</Link></>}

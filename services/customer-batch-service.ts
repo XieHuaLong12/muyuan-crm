@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError } from '@/lib/auth';
+import { Actor, HttpError, requireAdmin } from '@/lib/auth';
 
 const batchSchema = z.object({ ids: z.array(z.string().min(1)).min(1, '请选择客户').max(200, '单次最多选择200位客户') });
 const purgeSchema = z.object({ ids: z.array(z.string().min(1)).min(1, '请选择客户').max(500, '单次最多彻底删除500位客户') });
 
 export async function batchCustomers(input: unknown, user: Actor, restore = false) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以删除或恢复客户');
+  requireAdmin(user, '只有管理员可以删除或恢复客户');
   const ids = [...new Set(batchSchema.parse(input).ids)];
   return db.$transaction(async tx => {
     const records = await tx.customer.findMany({
@@ -31,7 +31,7 @@ export async function batchCustomers(input: unknown, user: Actor, restore = fals
  * per-customer reason. Lead and WhatsApp identities are unlinked so a later import can claim them again.
  */
 export async function purgeCustomers(input: unknown, user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以彻底删除客户');
+  requireAdmin(user, '只有管理员可以彻底删除客户');
   const ids = [...new Set(purgeSchema.parse(input).ids)];
   return db.$transaction(async tx => {
     const records = await tx.customer.findMany({

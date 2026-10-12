@@ -8,7 +8,7 @@ export default async function Page(){
   const {user,boot}=await adminWorkspacePage();
   const state=await gupshupIntegrationStatus({},user);
   const date=(d:Date|null)=>d?new Intl.DateTimeFormat('zh-CN',{timeZone:boot.settings.timezone,dateStyle:'medium',timeStyle:'short'}).format(d):'—';
-  return <BOSShell boot={boot}><Header eyebrow="COMMUNICATION INTEGRATION" title="WhatsApp 接入" description="Gupshup 实时收发、Meta Cloud 和本地历史同步共同关联现有 CRM 客户。"/>
+  return <BOSShell boot={boot}><Header eyebrow="集成与接入" title="WhatsApp 接入" description="Gupshup 实时收发、Meta Cloud 和本地历史同步共同关联现有 CRM 客户。"/>
     <Card><Badge tone={state.status==='LIVE_INBOUND_VERIFIED'?'green':'warning'}>{state.status}</Badge>
       <Table caption="Gupshup 真实接入状态" headings={['检查项','状态或时间']}>
         {Object.entries({Provider:state.provider,App:state.appName,'业务号码':state.sourceNumber,'Webhook':state.webhookStatus,

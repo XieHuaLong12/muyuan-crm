@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
-import { Actor, HttpError, scope } from '@/lib/auth';
+import { Actor, HttpError, scope, requireAdmin } from '@/lib/auth';
 import { canonicalPhone, canonicalEmail } from '@/lib/contact-identity';
 import { customerSchema, dealSchema, followSchema, dealPatchSchema, reasonSchema, followPatchSchema, reasonRequiredStages } from '@/lib/validation';
 import { localDate, dayKey } from '@/lib/time';
@@ -202,7 +202,7 @@ export async function saveCustomer(input: unknown, user: Actor, id?: string, opt
 
 /** Soft delete. Customers with deals stay: their revenue would silently disappear from every statistic. */
 export async function deleteCustomer(id: string, user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '需要管理员权限');
+  requireAdmin(user);
   const c = await accessible(id, user);
   if (c.deals.length || c.stage === 'WON') throw new HttpError(409, '已成交客户不能删除。如成交录入有误，请先在客户档案中作废成交。');
   await db.customer.update({ where: { id }, data: { deletedAt: new Date() } });
@@ -266,7 +266,7 @@ export async function updateFollowUp(customerId: string, followUpId: string, inp
 }
 
 export async function deleteFollowUp(customerId: string, followUpId: string, input: unknown, user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以删除跟进记录');
+  requireAdmin(user, '只有管理员可以删除跟进记录');
   const follow = await followUpFor(customerId, followUpId, user);
   const { reason } = reasonSchema.parse(input);
   await retryTransaction(() => db.$transaction(async tx => {
@@ -324,7 +324,7 @@ async function refreshWonAt(tx: Tx, customerId: string) {
 
 /** Administrators correct amount, cost, date or currency; profit and the linked order follow. */
 export async function updateDeal(customerId: string, dealId: string, input: unknown, user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以修改成交');
+  requireAdmin(user, '只有管理员可以修改成交');
   const customer = await accessible(customerId, user);
   const { expectedUpdatedAt, ...v } = dealPatchSchema.parse(input);
   const dealDate = await validDealDate(v.dealDate, customer);
@@ -348,7 +348,7 @@ export async function updateDeal(customerId: string, dealId: string, input: unkn
  * event is then never sent) and a customer without other deals returns to the stage before it was won.
  */
 export async function voidDeal(customerId: string, dealId: string, input: unknown, user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '只有管理员可以作废成交');
+  requireAdmin(user, '只有管理员可以作废成交');
   await accessible(customerId, user);
   const { reason } = reasonSchema.parse(input);
   await retryTransaction(() => db.$transaction(async tx => {

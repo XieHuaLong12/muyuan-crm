@@ -13,7 +13,6 @@ import { salesPerformance,saveSalesTarget,saveFirstContactPolicy,firstContactFoc
 import { syncCustomerWorkflow,getReminders } from '../services/workflow-service';
 import { deleteTestCustomers } from './identity-test-cleanup';
 import { identityChain } from '../services/identity-chain-service';
-import { priorityCustomers } from '../services/sales-workspace-service';
 
 test('two sales, transferred customers, first contact, performance targets and revoked sessions stay isolated',async()=>{
   const adminRow=await db.user.findUniqueOrThrow({where:{email:'admin@example.com'}}),admin={id:adminRow.id,name:adminRow.name,email:adminRow.email,role:'ADMIN'};
@@ -43,7 +42,6 @@ test('two sales, transferred customers, first contact, performance targets and r
     assert.equal((await taskInsight(admin,linked.id)).customer?.whatsappMessages[0].content,'Administrator supervision only');
     assert.deepEqual((await identityChain({customerId:c.id},actorA)).messages,[]);
     assert.equal((await identityChain({customerId:c.id},admin)).messages[0].content,'Administrator supervision only');
-    assert.equal((await priorityCustomers(actorA)).find(item=>item.id===c.id)?.latestMessage,'');
     const outsider=await createTask({customerId:outside.id,title:'Scope needle outsider',dueDate:new Date().toISOString()},actorB);
     const searched=await actionCenter(actorA,{view:'ALL',q:'Scope needle'});
     assert.ok(searched.tasks.some(t=>t.id===linked.id));assert.ok(searched.tasks.some(t=>t.id===personal.id));assert.ok(!searched.tasks.some(t=>t.id===outsider.id));

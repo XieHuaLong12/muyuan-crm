@@ -8,7 +8,6 @@ import { db } from '../lib/db';
 import { createTask,updateTask,deleteTask,listTasks } from '../services/task-service';
 import { syncCustomerWorkflow,getReminders,dismissReminder,recordWorkflowEvent } from '../services/workflow-service';
 import { uploadMedia,readMedia,signedMediaUrl,verifyMediaToken,mediaKind } from '../services/whatsapp-media-service';
-import { priorityCustomers } from '../services/sales-workspace-service';
 
 test('media transport types match Gupshup supported types',()=>{
  assert.equal(mediaKind('image/png'),'image');assert.equal(mediaKind('image/webp'),'file');assert.equal(mediaKind('audio/mpeg'),'audio');assert.equal(mediaKind('audio/ogg'),'file');assert.equal(mediaKind('audio/ogg; codecs=opus'),'audio');
@@ -93,10 +92,6 @@ test('V3 tasks, reminders, scope, workflow lifecycle and media integration',asyn
   assert.ok(verifyMediaToken(media.id,url.searchParams.get('expires')!,url.searchParams.get('token')!));
   assert.equal(verifyMediaToken('another',url.searchParams.get('expires')!,url.searchParams.get('token')!),false);
   assert.equal(verifyMediaToken(media.id,'1',url.searchParams.get('token')!),false);
-  await db.customer.update({where:{id:customerId},data:{lastInboundAt:new Date()}});
-  assert.equal((await priorityCustomers(actor)).find(c=>c.id===customerId)?.unread,true);
-  await db.whatsAppReadState.create({data:{customerId,userId:actor.id,readAt:new Date(Date.now()+1000)}});
-  assert.equal((await priorityCustomers(actor)).find(c=>c.id===customerId)?.unread,false);
  }finally{
   await deleteTestCustomers({where:{id:customerId}});
   if(oldStorage===undefined)delete process.env.MEDIA_STORAGE_DIR;else process.env.MEDIA_STORAGE_DIR=oldStorage;

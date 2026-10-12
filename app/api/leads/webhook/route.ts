@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { safeEqual } from '@/lib/secret';
 
 /**
  * /api/leads/webhook
@@ -13,14 +14,6 @@ import { randomUUID, timingSafeEqual } from 'node:crypto';
  *
  * 因此 GET 完全不碰数据库/Service，POST 需要什么就动态 import。
  */
-
-/** 常量时间比较，避免通过响应时间逐字节猜出 verify token。 */
-function safeEqual(a: string, b: string) {
-  const left = Buffer.from(a, 'utf8');
-  const right = Buffer.from(b, 'utf8');
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
-}
 
 /**
  * Meta Webhook 验证。

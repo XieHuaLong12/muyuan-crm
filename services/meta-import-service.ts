@@ -2,7 +2,7 @@ import { createHash,randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor,HttpError } from '@/lib/auth';
+import { Actor,HttpError,requireAdmin } from '@/lib/auth';
 import { dayKey } from '@/lib/time';
 import { parseInquiryDate } from '@/lib/customer-date';
 import { metaFields,identifyHeader,parseMetaCsv,normHeader,MetaField,MetaValues,MetaRow,MetaPreview,MetaDecision } from '@/lib/meta-import';
@@ -17,7 +17,7 @@ const fieldEnum=z.enum(Object.keys(metaFields) as [MetaField,...MetaField[]]);
 const previewSchema=z.object({filename:z.string().min(1).max(200),text:z.string().max(2_000_000),mapping:z.record(fieldEnum).optional(),overrides:z.record(z.record(z.string().max(5000))).optional(),decisions:z.record(z.object({action:z.enum(['create','link']),customerId:z.string().optional()})).optional()});
 type Draft={userId:string;fileHash:string;expires:number;preview:MetaPreview;decisions:Record<string,MetaDecision>};
 const drafts=new Map<string,Draft>();
-function admin(user:Actor){if(user.role!=='ADMIN')throw new HttpError(403,'智能导入需要管理员权限');}
+function admin(user:Actor){requireAdmin(user, '智能导入需要管理员权限');}
 const phones=(c:{phone:string;whatsapp:string;countryCode?:string})=>[canonicalPhone(c.phone,c.countryCode,true),canonicalPhone(c.whatsapp,undefined,true)].filter((v):v is string=>!!v).map(v=>v.slice(1));
 const email=(s:string)=>s.trim().toLowerCase();
 type Candidate={id:string;name:string;companyName:string;phones:string[];emails:string[];deleted:boolean;ordinal:number};

@@ -2,27 +2,27 @@
 import { useCallback, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
-import { WorkspaceShell } from './workspace/WorkspaceShell';
 import { api } from '@/lib/client';
-import { Bootstrap, Customer, Dashboard, Deal, Target as TargetType } from '@/lib/types';
+import { Bootstrap, Customer, Deal, Target as TargetType } from '@/lib/types';
+import type { TargetProgress } from '@/services/target-service';
 import { CustomerForm, FollowForm, DealForm, AssignDialog, ReasonDialog } from './forms';
 import { CustomerList, rememberedListUrl } from './customer-list';
 import { CustomerDetail } from './customer-detail';
 import { Targets, Settings, Integrations } from './management';
 import { MetaLeadIntake } from './meta-lead-intake';
 import { Dialog } from './ui/dialog';
+import { Header } from './ui/bos';
 import { SmartImport } from './smart-import';
 
 type Page = 'customers' | 'targets' | 'settings' | 'integrations' | 'lead-intake';
 
 /** Older-generation pages inside the BOS shell: customers, company targets, settings, integrations and lead intake. */
-export function Workspace({ initialBoot, pageOverride, embedded }: { initialBoot?: Bootstrap; pageOverride?: Page; embedded?: boolean } = {}) {
+export function Workspace({ initialBoot, pageOverride: page }: { initialBoot: Bootstrap; pageOverride: Page }) {
   const pathname = usePathname(), router = useRouter();
-  const page: Page = pageOverride || (pathname.split('/')[1] as Page) || 'customers';
   const customerId = page === 'customers' ? pathname.split('/')[2] : undefined;
-  const [boot, setBoot] = useState<Bootstrap | undefined>(initialBoot);
+  const [boot, setBoot] = useState<Bootstrap>(initialBoot);
   const [detail, setDetail] = useState<Customer>();
-  const [targets, setTargets] = useState<TargetType[]>([]), [annual, setAnnual] = useState<Dashboard>();
+  const [targets, setTargets] = useState<TargetType[]>([]), [annual, setAnnual] = useState<TargetProgress>();
   const [year, setYear] = useState(new Date().getFullYear());
   const [revision, setRevision] = useState(0), [error, setError] = useState(''), [loading, setLoading] = useState(true), [toast, setToast] = useState('');
   const [edit, setEdit] = useState<Customer | null | undefined>(), [follow, setFollow] = useState<Customer>();
@@ -32,13 +32,9 @@ export function Workspace({ initialBoot, pageOverride, embedded }: { initialBoot
   const [analyzingAi, setAnalyzingAi] = useState(false);
   const [backHref, setBackHref] = useState('/customers');
 
-  useEffect(() => {
-    if (initialBoot) return;
-    api<Bootstrap>('bootstrap').then(setBoot).catch(e => setError(e.message));
-  }, [initialBoot]);
   useEffect(() => { setBackHref(rememberedListUrl()); }, [customerId]);
   useEffect(() => {
-    if (!boot || (page === 'customers' && !customerId) || page === 'settings' || page === 'integrations' || page === 'lead-intake') { setLoading(false); return; }
+    if ((page === 'customers' && !customerId) || page === 'settings' || page === 'integrations' || page === 'lead-intake') { setLoading(false); return; }
     let cancelled = false;
     setLoading(true); setError('');
     (async () => {
@@ -49,7 +45,7 @@ export function Workspace({ initialBoot, pageOverride, embedded }: { initialBoot
         } else if (page === 'targets') {
           const [t, a] = await Promise.all([
             api<TargetType[]>(`targets?year=${year}`),
-            api<Dashboard>(`dashboard?period=YEAR&date=${year}-01-01&currency=${boot.settings.currency}`),
+            api<TargetProgress>(`target-progress?year=${year}&currency=${boot.settings.currency}`),
           ]);
           if (!cancelled) { setTargets(t); setAnnual(a); }
         }
@@ -73,29 +69,26 @@ export function Workspace({ initialBoot, pageOverride, embedded }: { initialBoot
     setToast(message);
   }, []);
 
-  if (!boot) return <div className="loading">{error || '正在打开工作台…'}</div>;
   const admin = boot.user.role === 'ADMIN';
   const tz = boot.settings.timezone;
   const heading = page === 'customers'
-    ? { title: admin ? '客户管理' : '我的客户', description: admin ? '集中管理询盘，分配客户并把握每一次成交机会。' : '维护你负责的客户资料、报价与成交。' }
-    : page === 'targets' ? { title: '目标管理', description: '让年度计划，落到每个月和每一周。' }
+    ? { title: admin ? '客户列表' : '我的客户', description: admin ? '全部客户：搜索、筛选、分配和批量处理。' : '维护你负责的客户资料、报价与成交。' }
+    : page === 'targets' ? { title: '目标', description: '设置年度、月度和每周的销售目标，查看完成进度。' }
       : page === 'lead-intake' ? { title: '线索接入', description: 'Meta 广告线索是否实时进入客户中心；读取失败时这里会列出原因和处理办法。' }
       : page === 'integrations' ? { title: '集成与接入', description: '表单询盘、Meta 广告与 WhatsApp 的接入状态和同步。' }
         : { title: '公司设置', description: '公司名称、默认货币与时区。' };
 
   return (
-    <WorkspaceShell boot={boot} embedded={embedded}>
+    // The BOS shell provides the sidebar and top bar; .v3-shell only scopes the older page styles.
+    <div className="v3-shell bos-embed"><main className="v3-content">
       <div className="v3-legacy">
         {!customerId && (
-          <div className="page-heading">
-            <div><h1>{heading.title}</h1><p className="muted">{heading.description}</p></div>
-            {page === 'customers' && (
-              <div className="actions">
-                <button className="primary" onClick={() => setEdit(null)}><Plus size={17} />新建客户</button>
-                {admin && <button onClick={() => setDialog('import')}>智能导入</button>}
-              </div>
-            )}
-          </div>
+          <Header title={heading.title} description={heading.description} actions={page === 'customers' && (
+            <>
+              <button className="primary" onClick={() => setEdit(null)}><Plus size={17} />新建客户</button>
+              {admin && <button onClick={() => setDialog('import')}>智能导入</button>}
+            </>
+          )} />
         )}
         {error && <div role="alert" className="error-banner">{error}<button onClick={() => setRevision(v => v + 1)}>重试</button></div>}
         {page === 'customers' && !customerId && <CustomerList boot={boot} revision={revision} onFollow={setFollow} onChanged={saved} />}
@@ -151,6 +144,6 @@ export function Workspace({ initialBoot, pageOverride, embedded }: { initialBoot
         </Dialog>
       )}
       {toast && <div className="toast" role="status">✓ {toast}</div>}
-    </WorkspaceShell>
+    </main></div>
   );
 }

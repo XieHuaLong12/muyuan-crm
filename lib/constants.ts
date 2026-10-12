@@ -9,5 +9,6 @@ export const pipeline = Object.keys(stages).slice(0,7) as Stage[];
 export const AD_LEAD_FRESH_HOURS = 24;
 /** Stages where a customer needs no further sales work. */
 export const TERMINAL_STAGES = ['WON', 'LOST', 'INVALID', 'PAUSED'] as const;
+export const isTerminalStage = (stage: string) => (TERMINAL_STAGES as readonly string[]).includes(stage);
 /** Stages that only a real buyer reaches: from a quotation onwards. */
 export const ADVANCED_STAGES = ['QUOTED', 'FOLLOW_UP', 'ORDER', 'WON'] as const;

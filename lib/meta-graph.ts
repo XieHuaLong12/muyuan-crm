@@ -1,4 +1,4 @@
-/** Graph requests keep credentials in headers and preserve pagination query parameters. */
+/** Graph API 版本走配置，不硬编码：Meta 约每两年废弃一个版本号。全项目只在这里读取。 */
 export function graphVersion() { return process.env.META_GRAPH_VERSION?.trim() || 'v26.0'; }
 type GraphError = { ok: false; error: string };
 type GraphOk<T> = { ok: true; data: T };
@@ -11,6 +11,7 @@ function graphFailure(status: number, body: GraphErrorBody, token: string) {
   if (token) message = message.replaceAll(token, '[redacted]');
   return `${e?.code===190?'TOKEN_EXPIRED':'GRAPH_ERROR'} HTTP ${status} code ${e?.code??'unknown'} subcode ${e?.error_subcode??'unknown'}${message ? `: ${message.slice(0, 300)}` : ''}`;
 }
+/** Graph requests keep credentials in headers and preserve pagination query parameters. */
 export async function graphGet<T>(path: string, token: string, params: Record<string,string>): Promise<GraphOk<T>|GraphError> {
   const unversioned = path.replace(/^\/?v\d+\.\d+\//,'').replace(/^\//,'');
   const url = new URL(`https://graph.facebook.com/${graphVersion()}/${unversioned}`);

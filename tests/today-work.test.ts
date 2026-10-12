@@ -6,7 +6,7 @@ import { db } from '../lib/db';
 import type { Actor } from '../lib/auth';
 import { salesQueue, todayWorkCounts } from '../services/bos-sales-service';
 import { notificationFeed } from '../services/notification-service';
-import { financeOverview } from '../services/bos-v2-service';
+import { financeOverview } from '../services/finance-service';
 import { getReminders } from '../services/workflow-service';
 import { deleteTestCustomers } from './identity-test-cleanup';
 

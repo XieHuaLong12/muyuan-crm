@@ -2,7 +2,7 @@ import { finalIntelligence } from './customer-intelligence-service';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, HttpError, scope } from '@/lib/auth';
+import { Actor, HttpError, scope, requireAdmin } from '@/lib/auth';
 import { canonicalEmail, canonicalPhone, metaLeadKey, sourceInstant } from '@/lib/contact-identity';
 import { lockIdentity, rememberCustomerContacts, recordLeadAttribution, resolveContact } from './contact-identity-service';
 import { ensureConversation, messageFacts } from './conversation-identity-service';
@@ -95,7 +95,7 @@ async function assignIdentityMessage(input: unknown,user:Actor,manual:boolean) {
 }
 
 export async function claimIdentityLead(input: unknown, user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '留资认领需要管理员权限');
+  requireAdmin(user, '留资认领需要管理员权限');
   const v = z.object({ leadKey: id, customerId: id, reason: z.string().trim().min(1).max(1000) }).parse(input);
   return retryTransaction(() => db.$transaction(async tx => {
     await lockIdentity(tx);
@@ -127,7 +127,7 @@ export async function reconcilePendingIdentityMessages(input:unknown,user:Actor)
 
 /** No GET mutation and no automatic production backfill. Each pass returns a resumable cursor. */
 export async function reconcileIdentityChain(input: unknown, user: Actor) {
-  if (user.role !== 'ADMIN') throw new HttpError(403, '历史身份补齐需要管理员权限');
+  requireAdmin(user, '历史身份补齐需要管理员权限');
   const v = z.object({ target: z.enum(['customers', 'submissions', 'events', 'orders', 'messages']), cursor: id.optional(),
     limit: z.coerce.number().int().min(1).max(200).default(100), dryRun: z.boolean().default(true) }).parse(input);
   const paging = { orderBy: { id: 'asc' as const }, take: v.limit + 1, ...(v.cursor ? { cursor: { id: v.cursor }, skip: 1 } : {}) };

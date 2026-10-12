@@ -7,6 +7,7 @@ import { KANBAN_STAGES, KANBAN_REASON_STAGES, type KanbanStage } from '@/lib/bos
 import type { CrmBoard } from '@/services/bos-crm-service';
 import { sources } from '@/lib/constants';
 import { ReasonDialog } from '@/components/forms';
+import { Header } from '@/components/ui/bos';
 
 type Customer = CrmBoard['customers'][number];
 const money = (amount: string, currency: string) =>
@@ -58,13 +59,7 @@ export function CrmKanban({ data }: { data: CrmBoard }) {
 
   return (
     <div className="bos-v2-page bos-v2-crm">
-      <header className="bos-v2-hero">
-        <div>
-          <span className="bos-v2-kicker">CRM CENTER / 销售看板</span>
-          <h1>每一位客户，都有下一步。</h1>
-          <p>拖拽卡片或用「移动至」推进阶段。报价、成交与跟进在客户档案中完成。</p>
-        </div>
-      </header>
+      <Header title="销售看板" description="拖拽卡片或用「移动至」推进阶段。报价、成交与跟进在客户档案中完成。" />
       <div className="bos-v2-board-toolbar">
         <div><strong>{data.total}</strong> 位客户 <small>· 每列显示最近需要跟进的 {data.limit} 位</small></div>
         <label>

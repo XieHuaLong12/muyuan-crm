@@ -1,4 +1,5 @@
-import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
+import { safeEqual } from '@/lib/secret';
 import { mkdir, writeFile, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { db } from '@/lib/db';
@@ -9,7 +10,7 @@ export function mediaKind(mimeType:string){return ['image/jpeg','image/png'].inc
 const storage = () => process.env.MEDIA_STORAGE_DIR || path.join(process.cwd(),'uploads','whatsapp');
 function signature(id:string,expires:string){if(!process.env.AUTH_SECRET)throw new HttpError(503,'未配置媒体签名密钥');return createHmac('sha256',process.env.AUTH_SECRET).update(`${id}:${expires}`).digest('hex');}
 export function signedMediaUrl(id:string,origin:string){const expires=String(Date.now()+7*86400000);return `${origin}/api/whatsapp/media/${id}?expires=${expires}&token=${signature(id,expires)}`;}
-export function verifyMediaToken(id:string,expires:string,token:string){if(!/^\d+$/.test(expires)||Number(expires)<Date.now()||Number(expires)>Date.now()+7*86400000)return false;const expected=signature(id,expires);return token.length===expected.length&&timingSafeEqual(Buffer.from(token),Buffer.from(expected));}
+export function verifyMediaToken(id:string,expires:string,token:string){if(!/^\d+$/.test(expires)||Number(expires)<Date.now()||Number(expires)>Date.now()+7*86400000)return false;return safeEqual(token,signature(id,expires));}
 export async function uploadMedia(file:File,customerId:string,user:Actor){
   await accessible(customerId,user);
   if(!allowed.has(file.type))throw new HttpError(400,'支持图片、PDF、音视频、Office 文档、ZIP 和文本文件');

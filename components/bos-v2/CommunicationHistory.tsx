@@ -45,7 +45,7 @@ export function CommunicationHistory({ data, timezone }: { data: CommunicationHi
   const { query, conversations, selected, messages } = data;
   return <section className="bos-history-layout" aria-label="WhatsApp 聊天记录档案">
     <aside className="bos-history-index">
-      <header className="bos-history-index-head"><div><span className="bos-v2-kicker">SALES SUPERVISION</span><h2>销售沟通记录</h2></div><strong>{data.total}</strong></header>
+      <header className="bos-history-index-head"><div><h2>销售沟通记录</h2></div><strong>{data.total}</strong></header>
       <form action="/communication" className="bos-history-supervision-filter"><label>销售负责人<select name="ownerId" aria-label="筛选销售负责人" defaultValue={query.ownerId}><option value="">全部负责人</option>{data.sales.map(s=><option key={s.id} value={s.id}>{s.name}{s.isActive?'':'（已停用）'}</option>)}</select></label><div className="bos-history-search"><Search size={16} aria-hidden="true" /><input name="q" type="search" defaultValue={query.q} aria-label="搜索有聊天记录的客户" placeholder="搜索客户、公司或国家" /><button type="submit">筛选</button></div></form>
       <p className="bos-history-index-note">仅显示已有 WhatsApp 历史记录的客户，按最新消息排序。</p>
       <div className="bos-history-conversations">
@@ -64,7 +64,7 @@ export function CommunicationHistory({ data, timezone }: { data: CommunicationHi
 
     <div className="bos-history-record">
       {selected ? <>
-        <header className="bos-history-record-head"><div><span className="bos-v2-kicker">WHATSAPP / 只读监督</span><h2>{selected.name}</h2><p>当前负责人：{selected.owner.name} · {[selected.companyName, selected.country, stages[selected.stage as keyof typeof stages] || selected.stage].filter(Boolean).join(' · ')}</p></div><div className="bos-history-record-actions"><Link href={`/customers/${selected.id}`}>客户资料<ArrowUpRight size={14} /></Link></div></header>
+        <header className="bos-history-record-head"><div><span className="bos-v2-kicker">WhatsApp · 只读</span><h2>{selected.name}</h2><p>当前负责人：{selected.owner.name} · {[selected.companyName, selected.country, stages[selected.stage as keyof typeof stages] || selected.stage].filter(Boolean).join(' · ')}</p></div><div className="bos-history-record-actions"><Link href={`/customers/${selected.id}`}>客户资料<ArrowUpRight size={14} /></Link></div></header>
         <div className="bos-history-summary"><Archive size={16} aria-hidden="true" /><span>按时间保存客户与我方的沟通记录。此处只供查阅，不会发送消息。</span></div>
         <div className="bos-history-log">
           {data.viewingOlder && <Link className="bos-history-older" href={historyHref(query, { before: undefined })}>返回最新记录</Link>}

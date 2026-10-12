@@ -6,6 +6,8 @@ import { Prisma } from '@prisma/client';
 import { db } from '../lib/db';
 import { ORDER_STAGES,stageProgress } from '../lib/order-status';
 import { changeOrderMilestone,ensureOrderForDeal,orderList,orderDetail,orderMilestoneInput } from '../services/order-service';
+import { autoGenerate } from '../services/action-center-service';
+import { localDate } from '../lib/time';
 
 test('订单进度按七段流程推导', () => {
  // 七段：下单 付款 生产 发货 运输 清关 收货
@@ -128,5 +130,35 @@ test('成交自动建单：幂等、人民币换算、按客户隔离', async ()
   await deleteTestOrders({ where: { customerId: customer.id } });
   await db.deal.delete({ where: { id: deal.id } });
   await deleteTestCustomers({ where: { id: customer.id } });
+ }
+});
+
+test('订单日期按公司时区显示与筛选；自动生成的订单任务带提醒', async () => {
+ const tag = randomUUID();
+ const { timezone } = await db.setting.findUniqueOrThrow({ where: { id: 'system' } });
+ const owner = await db.user.create({ data: { name: 'Order day owner', email: `order-day-${tag}@example.test`, passwordHash: 'test', role: 'SALES' } });
+ const customer = await db.customer.create({ data: { name: 'Order day customer', ownerId: owner.id } });
+ const actor = { id: owner.id, name: owner.name, email: owner.email, role: owner.role };
+ try {
+  // A deal dated 3 Feb is stored at local midnight, which is still 2 Feb in UTC for any timezone east of UTC.
+  const order = await db.order.create({ data: { orderNo: `DAY-${tag.replaceAll('-', '')}`, customerId: customer.id, amountRMB: 100, notes: '', createdBy: owner.id,
+   status: 'PRODUCING', paymentStatus: 'DEPOSIT_PAID', orderDate: localDate('2025-02-03T00:00', timezone) } });
+  const day = async (from: string, to: string) => (await orderList(actor, { from, to })).orders.map(o => o.orderDate);
+  assert.deepEqual(await day('2025-02-03', '2025-02-03'), ['2025-02-03']);
+  assert.deepEqual(await day('2025-02-02', '2025-02-02'), []);
+  assert.deepEqual(await day('2025-02-04', ''), []);
+  assert.equal((await orderDetail(actor, order.id)).orderDate, '2025-02-03');
+
+  await autoGenerate(actor);
+  const tasks = await db.task.findMany({ where: { orderId: order.id }, include: { reminders: true } });
+  assert.ok(tasks.length > 0, 'the deposit-paid order in production gets follow-up tasks');
+  for (const task of tasks) assert.deepEqual(task.reminders.map(r => r.kind).sort(), ['EARLY', 'OVERDUE'], task.title);
+  await autoGenerate(actor);
+  assert.equal(await db.task.count({ where: { orderId: order.id } }), tasks.length, 'running it again creates nothing new');
+ } finally {
+  await db.task.deleteMany({ where: { createdBy: owner.id } });
+  await deleteTestCustomers({ where: { id: customer.id } });
+  await db.user.delete({ where: { id: owner.id } });
+  await db.$disconnect();
  }
 });

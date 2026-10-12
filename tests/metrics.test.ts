@@ -1,14 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { metrics,profit,ratio,forecast } from '../services/dashboard-service';
 import { normalizePhone } from '../services/customer-service';
 import { periodRange,dayKey } from '../lib/time';
 import { customerSchema,dealSchema } from '../lib/validation';
-test('单笔毛利与加权整体毛利',()=>{assert.deepEqual(profit(100000,60000),{grossProfit:40000,grossMargin:40});const result=metrics([],[{dealAmount:100000,productCost:60000},{dealAmount:20000,productCost:15000}]);assert.equal(result.grossProfit,45000);assert.equal(result.kpis[5],37.5);});
-test('客户有效、回复、报价、成交率按去重客户计算',()=>{const base={isQualified:true,stage:'FOLLOW_UP',contactedAt:new Date(),firstReplyAt:null,quotedAt:null,deals:[]};const result=metrics([{...base,firstReplyAt:new Date(),quotedAt:new Date(),deals:[{},{}]},base,{...base,isQualified:false,stage:'INVALID'}],[]);assert.equal(result.kpis[1],2/3*100);assert.equal(result.kpis[2],100);assert.equal(result.kpis[3],50);assert.equal(result.kpis[4],50);assert.equal(result.won,1);});
-test('回复率按当前阶段判断，不依赖首次联系时间戳',()=>{const result=metrics([{isQualified:true,stage:'REPLIED',contactedAt:null,firstReplyAt:new Date(),quotedAt:null,deals:[]}],[]);assert.equal(result.kpis[2],100);});
-test('零分母与超额目标',()=>{assert.equal(ratio(100,0),0);assert.equal(ratio(120000,100000),120);assert.deepEqual(metrics([],[]).kpis,[0,0,0,0,0,0]);assert.equal(profit(0,0).grossMargin,0);});
-test('年度预测与闰年',()=>{assert.equal(forecast(100000,100,365),365000);assert.equal(forecast(100000,100,366),366000);assert.equal(forecast(0,0,365),0);});
 test('电话规范化识别空格、括号和国际区号前缀',()=>{assert.equal(normalizePhone('+33 (6) 12-34'),normalizePhone('003361234'));});
 test('上海周一边界与 ISO 跨年周',()=>{const range=periodRange('WEEK','2026-09-10','Asia/Shanghai');assert.equal(range.start.toISOString(),'2026-09-06T16:00:00.000Z');assert.equal(range.end.toISOString(),'2026-09-13T16:00:00.000Z');assert.equal(dayKey('2026-09-10T18:00:00Z'),'2026-09-11');assert.equal(periodRange('WEEK','2027-01-01','Asia/Shanghai').key,'WEEK-2026-53');});
 test('表单校验拒绝负金额、缺失成本与无效原因',()=>{assert.equal(dealSchema.safeParse({dealAmount:100,dealDate:'2026-09-10'}).success,false);assert.equal(dealSchema.safeParse({dealAmount:-1,productCost:0,dealDate:'2026-09-10'}).success,false);assert.equal(customerSchema.safeParse({name:'John',ownerId:'owner',isQualified:false}).success,false);assert.equal(customerSchema.safeParse({name:'John',ownerId:'owner',email:'bad'}).success,false);});

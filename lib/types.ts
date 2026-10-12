@@ -6,7 +6,4 @@ export type CustomerIntelligence={id:string;customerId:string;score:number;prior
 export type Settings={companyName:string;currency:string;timezone:string;leadAssignMode?:string;adLeadFirstContactMinutes?:number};
 export type Bootstrap={user:User;users:User[];settings:Settings;webhookConfigured:boolean;deepseekConfigured?:boolean};
 export type Target={id:string;periodKey:string;periodType:string;year:number;month:number|null;week:number|null;targetRevenue:string;manual:boolean;currency:string};
-export type Metrics={inquiries:number;qualified:number;contacted:number;replied:number;quoted:number;won:number;revenue:number;cost:number;grossProfit:number;kpis:number[]};
-export type Dashboard={period:string;date:string;currency:string;current:Metrics;previous:Metrics;target:number;completion:number;remaining:number;excess:number;annual:{target:number;revenue:number;forecast:number};trend:{label:string;销售额:number;毛利润:number;询盘:number;有效客户:number;报价:number;成交:number;目标:number}[];funnel:{stage:string;count:number}[];sources:Distribution[];countries:Distribution[];today:Customer[];overdue:number;recentDeals:Deal[];targetConfigured:boolean};
-export type Distribution={name:string;inquiries:number;qualified:number;rate:number;won:number;revenue:number};
 export type CustomerPage={rows:Customer[];total:number;page:number;pageSize:number;countries:string[];pool:number};

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor,HttpError } from '@/lib/auth';
+import { Actor,requireAdmin } from '@/lib/auth';
 import { gupshupSource } from '@/lib/gupshup';
 import { canonicalPhone } from '@/lib/contact-identity';
 import { resolveContact } from './contact-identity-service';
@@ -9,7 +9,7 @@ import { identityChain } from './identity-chain-service';
 
 export async function gupshupIntegrationStatus(input:unknown,user:Actor) {
   z.object({}).strict().parse(input);
-  if(user.role!=='ADMIN')throw new HttpError(403,'需要管理员权限');
+  requireAdmin(user);
   const source=gupshupSource();
   const account={source:'gupshup',providerAccountId:source||'NOT_CONNECTED'};
   const [incoming,outgoing,webhook,failed,unmatched,unknownConsent,liveConversation]=await Promise.all([
@@ -32,7 +32,7 @@ export async function gupshupIntegrationStatus(input:unknown,user:Actor) {
 }
 
 export async function integrationDebug(input:unknown,user:Actor) {
-  if(user.role!=='ADMIN')throw new HttpError(403,'需要管理员权限');
+  requireAdmin(user);
   const v=z.object({q:z.string().trim().min(1).max(191)}).parse(input);
   const phone=canonicalPhone(v.q,undefined,true);
   const customer=await db.customer.findFirst({where:{id:v.q,deletedAt:null},select:{id:true}});
