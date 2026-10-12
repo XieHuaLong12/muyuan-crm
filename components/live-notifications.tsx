@@ -44,6 +44,18 @@ export function notificationsSupported() {
 }
 
 /**
+ * Phones (Android, the installed iPhone app) only show notifications through the service worker (public/sw.js),
+ * which also opens item.href when one is tapped. Without a worker the page API is used, as desktop browsers allow.
+ */
+async function showSystemNotification(item: NotificationItem) {
+  const options: NotificationOptions = { body: item.body, tag: item.id, requireInteraction: item.urgent, icon: '/icons/icon-192.png', data: { href: item.href } };
+  const registration = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
+  if (registration?.active) return registration.showNotification(item.title, options);
+  const n = new Notification(item.title, options);
+  n.onclick = () => { window.focus(); window.location.href = item.href; n.close(); };
+}
+
+/**
  * Announces each feed item once per browser: an in-page toast, a chime and, with permission, a desktop
  * notification (shown even when the tab is in the background). The seen list is shared by all tabs.
  */
@@ -84,12 +96,7 @@ export function LiveNotifications({ userId, items }: { userId: string; items: No
       const desktop = urgentFirst.length > MAX_DESKTOP
         ? [...urgentFirst.slice(0, MAX_DESKTOP - 1), { ...urgentFirst[0], id: `summary:${Date.now()}`, title: `${urgentFirst.length} 条新提醒`, body: urgentFirst.slice(0, 3).map(i => i.title).join('、'), href: urgentFirst[0].href }]
         : urgentFirst;
-      for (const item of desktop) {
-        try {
-          const n = new Notification(item.title, { body: item.body, tag: item.id, requireInteraction: item.urgent });
-          n.onclick = () => { window.focus(); window.location.href = item.href; n.close(); };
-        } catch { /* some mobile browsers only allow notifications from a service worker */ }
-      }
+      for (const item of desktop) showSystemNotification(item).catch(() => { /* the in-page toast and chime still announce it */ });
     }
   }, [items, seenKey]);
 

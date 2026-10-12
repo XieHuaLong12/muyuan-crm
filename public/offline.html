@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17382f">
+  <title>网络未连接 · 木远 CRM</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:#f7f7f2;color:#1d1d1f;font:15px/1.55 -apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC','Microsoft YaHei',sans-serif}
+    main{max-width:360px;text-align:center}
+    .mark{display:inline-grid;place-items:center;width:46px;height:46px;border-radius:14px;background:#17382f;color:#fff;font:400 27px Georgia,serif}
+    h1{font-size:20px;font-weight:600;margin:18px 0 8px}
+    p{margin:0 0 24px;color:#6e6e73;font-size:14px}
+    button{min-height:40px;padding:9px 18px;border:0;border-radius:12px;background:#174b3b;color:#fff;font:inherit;font-size:14px;cursor:pointer}
+    button:focus-visible{outline:3px solid #498b73;outline-offset:3px}
+  </style>
+</head>
+<body>
+  <main>
+    <span class="mark" aria-hidden="true">L</span>
+    <h1>网络未连接</h1>
+    <p>CRM 需要联网才能查看最新的客户和订单。连上网络后会自动重新打开。</p>
+    <button type="button" onclick="location.reload()">重新加载</button>
+  </main>
+  <script>addEventListener('online', function () { location.reload(); });</script>
+</body>
+</html>

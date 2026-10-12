@@ -8,6 +8,7 @@ import { activeWorkspace } from '@/lib/role-workspace';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { Search } from '@/components/ui/bos';
 import { LiveNotifications, NotificationControls } from '@/components/live-notifications';
+import { InstallAppBanner } from '@/components/pwa';
 
 // New leads must reach someone within minutes, so the feed refreshes every 20 seconds (every minute while the
 // tab is in the background, where desktop notifications still fire). The full task sync is only a safety net
@@ -96,7 +97,7 @@ export function BOSShell({ boot, children }: { boot: Bootstrap; children: React.
           <NotificationControls />
         </div>
         {error && <p className="bos-sync-error" role="status">{error}，将在后台重试。</p>}
-        <main id="bos-main" className="bos-main"><SectionTabs path={path} role={boot.user.role} />{children}</main>
+        <main id="bos-main" className="bos-main"><InstallAppBanner /><SectionTabs path={path} role={boot.user.role} />{children}</main>
       </div>
       <LiveNotifications userId={boot.user.id} items={feed?.items ?? []} />
     </div>
