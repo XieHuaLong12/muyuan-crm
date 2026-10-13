@@ -130,6 +130,16 @@ try {
     console.warn('Product OS seed skipped:', error instanceof Error ? error.message : error);
   }
 
+  // 2026 图册校正：已有产品库不再跑种子，压缩沙发（Y 系列）在这里按图册改正
+  // （Y-615 / Y-616 编号对调、尺寸 / 包装 / CBM / 毛重、人民币价）。逐字段受保护：只改仍是旧种子值的字段，
+  // 人工改过的保留并在日志列出；改完后每次部署只做只读比对。
+  try {
+    const { applyCatalog2026 } = await import('../prisma/catalog-2026.mjs');
+    await applyCatalog2026(db, message => console.log(`Product OS: ${message}`));
+  } catch (error) {
+    console.warn('Product OS: 图册校正未完成：', error instanceof Error ? error.message : error);
+  }
+
   // 产品主图补登记：已有产品库不再跑种子，新增的图片文件（public/products/<型号>.jpg）在这里登记。
   // 只为「有图片文件、但还没有主图记录」的型号新建 HERO 记录；不改动已有图片记录和任何人工资料。
   try {
