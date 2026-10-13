@@ -130,6 +130,32 @@ try {
     console.warn('Product OS seed skipped:', error instanceof Error ? error.message : error);
   }
 
+  // 产品主图补登记：已有产品库不再跑种子，新增的图片文件（public/products/<型号>.jpg）在这里登记。
+  // 只为「有图片文件、但还没有主图记录」的型号新建 HERO 记录；不改动已有图片记录和任何人工资料。
+  try {
+    const missing = await db.product.findMany({
+      where: { deletedAt: null, media: { none: { role: 'HERO' } } },
+      select: { id: true, model: true },
+    });
+    const owner = await db.user.findUnique({ where: { email: 'admin@example.com' }, select: { id: true } });
+    let added = 0;
+    for (const product of missing) {
+      const file = `public/products/${product.model}.jpg`;
+      const storageKey = `products/${product.model}.jpg`;
+      if (!owner || !fs.existsSync(file) || await db.productMedia.findUnique({ where: { storageKey } })) continue;
+      await db.productMedia.create({
+        data: {
+          productId: product.id, role: 'HERO', storageKey, mimeType: 'image/jpeg', fileName: `${product.model}.jpg`,
+          size: fs.statSync(file).size, sort: 0, createdBy: owner.id,
+        },
+      });
+      added += 1;
+    }
+    if (added) console.log(`Product OS: 补登记 ${added} 张产品主图。`);
+  } catch (error) {
+    console.warn('Product OS image registration skipped:', error instanceof Error ? error.message : error);
+  }
+
   // 订单：为启用订单模块之前已有的成交补单。按 dealId 幂等，重复运行不会重复建单。
   try {
     const tsxCli = 'node_modules/tsx/dist/cli.mjs';
