@@ -1,0 +1,1610 @@
+{
+ "description": "2026 压缩沙发图册校正清单（prisma/catalog-2026.mjs 使用）。由「旧种子结果 → 新种子结果」逐字段比对生成：from 为旧种子写入的值，to 为按图册改正后的值。",
+ "generatedAt": "2026-10-13",
+ "variants": [
+  {
+   "sku": "Y-602-150x100x70",
+   "model": "Y-602",
+   "packing": {
+    "from": {
+     "packingRaw": "64*34*112",
+     "cbm": 0.35,
+     "grossWeightKg": 37
+    },
+    "to": {
+     "packingRaw": "64*34*112",
+     "cbm": 0.24,
+     "grossWeightKg": 37,
+     "cartonCount": 1,
+     "cbmComputed": 0.24,
+     "grossWeightRaw": "37",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 64,
+       "widthCm": 34,
+       "heightCm": 112,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.35，按包装推导 0.24；[来源] 中英文报价表不一致 —— CBM 中文 0.24 / 英文 0.35"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— CBM 0.35"
+    }
+   }
+  },
+  {
+   "sku": "Y-602-180x100x70",
+   "model": "Y-602",
+   "packing": {
+    "from": {
+     "packingRaw": "67*34*112",
+     "cbm": 0.35,
+     "grossWeightKg": 43
+    },
+    "to": {
+     "packingRaw": "67*34*112",
+     "cbm": 0.26,
+     "grossWeightKg": 39,
+     "cartonCount": 1,
+     "cbmComputed": 0.26,
+     "grossWeightRaw": "39",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 67,
+       "widthCm": 34,
+       "heightCm": 112,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.35，按包装推导 0.26；[来源] 中英文报价表不一致 —— CBM 中文 0.26 / 英文 0.35；毛重 中文 39 / 英文 43"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— CBM 0.35；毛重 43"
+    }
+   }
+  },
+  {
+   "sku": "Y-602-200x100x70",
+   "model": "Y-602",
+   "packing": {
+    "from": {
+     "packingRaw": "67*37*112",
+     "cbm": 0.35,
+     "grossWeightKg": 47
+    },
+    "to": {
+     "packingRaw": "67*37*112",
+     "cbm": 0.28,
+     "grossWeightKg": 42,
+     "cartonCount": 1,
+     "cbmComputed": 0.28,
+     "grossWeightRaw": "42",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 67,
+       "widthCm": 37,
+       "heightCm": 112,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.35，按包装推导 0.28；[来源] 中英文报价表不一致 —— CBM 中文 0.28 / 英文 0.35；毛重 中文 42 / 英文 47"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— CBM 0.35；毛重 47"
+    }
+   }
+  },
+  {
+   "sku": "Y-603-267x175x70",
+   "model": "Y-603",
+   "packing": {
+    "from": {
+     "packingRaw": "100*40*70",
+     "cbm": 0.39,
+     "grossWeightKg": 60
+    },
+    "to": {
+     "packingRaw": "100*40*70",
+     "cbm": 0.28,
+     "grossWeightKg": 60,
+     "cartonCount": 1,
+     "cbmComputed": 0.28,
+     "grossWeightRaw": "60",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 100,
+       "widthCm": 40,
+       "heightCm": 70,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.39，按包装推导 0.28；[来源] 中英文报价表不一致 —— CBM 中文 0.28 / 英文 0.39"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— CBM 0.39"
+    }
+   }
+  },
+  {
+   "sku": "Y-604-120x110x66",
+   "model": "Y-604",
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.2，按包装推导 0.15；[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。"
+    },
+    "to": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.2，按包装推导 0.15"
+    }
+   }
+  },
+  {
+   "sku": "Y-604-280x102x66",
+   "model": "Y-604",
+   "identity": {
+    "from": {
+     "model": "Y-604",
+     "sku": "Y-604-280x102x66",
+     "lengthCm": 280,
+     "widthCm": 102,
+     "heightCm": 66
+    },
+    "to": {
+     "model": "Y-604",
+     "sku": "Y-604-240x102x66",
+     "lengthCm": 240,
+     "widthCm": 102,
+     "heightCm": 66
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.4，按包装推导 0.31；[来源] 中英文报价表不一致 —— 尺寸 中文 240*102*66 / 英文 280*102*66；[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。"
+    },
+    "to": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.4，按包装推导 0.31；[来源] 2026 图册标注待确认：CBM 0.4；[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 尺寸 280*102*66"
+    }
+   }
+  },
+  {
+   "sku": "Y-604-340x102x66",
+   "model": "Y-604",
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": ""
+    }
+   }
+  },
+  {
+   "sku": "Y-605-182x96x68",
+   "model": "Y-605",
+   "identity": {
+    "from": {
+     "model": "Y-605",
+     "sku": "Y-605-182x96x68",
+     "lengthCm": 182,
+     "widthCm": 96,
+     "heightCm": 68
+    },
+    "to": {
+     "model": "Y-605",
+     "sku": "Y-605-180x96x68",
+     "lengthCm": 180,
+     "widthCm": 96,
+     "heightCm": 68
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.24，按包装推导 0.15；[来源] 中英文报价表不一致 —— 尺寸 中文 180*96*68 / 英文 182*96*68"
+    },
+    "to": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.24，按包装推导 0.15；[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 尺寸 182*96*68"
+    }
+   }
+  },
+  {
+   "sku": "Y-605-275x96x68",
+   "model": "Y-605",
+   "identity": {
+    "from": {
+     "model": "Y-605",
+     "sku": "Y-605-275x96x68",
+     "lengthCm": 275,
+     "widthCm": 96,
+     "heightCm": 68
+    },
+    "to": {
+     "model": "Y-605",
+     "sku": "Y-605-270x96x68",
+     "lengthCm": 270,
+     "widthCm": 96,
+     "heightCm": 68
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.36，按包装推导 0.23；[来源] 中英文报价表不一致 —— 尺寸 中文 270*96*68 / 英文 275*96*68"
+    },
+    "to": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.36，按包装推导 0.23；[来源] 2026 图册标注待确认：CBM 0.36；[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 尺寸 275*96*68"
+    }
+   }
+  },
+  {
+   "sku": "Y-606-198x100x68",
+   "model": "Y-606",
+   "packing": {
+    "from": {
+     "packingRaw": "43*45*114",
+     "cbm": 0.22,
+     "grossWeightKg": 32.9
+    },
+    "to": {
+     "packingRaw": "43*45*114",
+     "cbm": 0.22,
+     "grossWeightKg": 33,
+     "cartonCount": 1,
+     "cbmComputed": 0.22,
+     "grossWeightRaw": "33",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 43,
+       "widthCm": 45,
+       "heightCm": 114,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— 毛重 中文 33 / 英文 32.9；[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 毛重 32.9"
+    }
+   }
+  },
+  {
+   "sku": "Y-606-288x100x68",
+   "model": "Y-606",
+   "packing": {
+    "from": {
+     "packingRaw": "31*31*102+43*45*114",
+     "cbm": 0.32,
+     "grossWeightKg": 48.9
+    },
+    "to": {
+     "packingRaw": "31*31*102+43*45*114",
+     "cbm": 0.32,
+     "grossWeightKg": 49,
+     "cartonCount": 2,
+     "cbmComputed": 0.32,
+     "grossWeightRaw": "49",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 31,
+       "widthCm": 31,
+       "heightCm": 102,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      },
+      {
+       "label": "",
+       "lengthCm": 43,
+       "widthCm": 45,
+       "heightCm": 114,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 1
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— 毛重 中文 49 / 英文 48.9；[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 毛重 48.9"
+    }
+   }
+  },
+  {
+   "sku": "Y-606-92x100x68",
+   "model": "Y-606",
+   "packing": {
+    "from": {
+     "packingRaw": "31*31*102",
+     "cbm": 0.1,
+     "grossWeightKg": 16
+    },
+    "to": {
+     "packingRaw": "31*31*102",
+     "cbm": 0.1,
+     "grossWeightKg": 17,
+     "cartonCount": 1,
+     "cbmComputed": 0.1,
+     "grossWeightRaw": "17",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 31,
+       "widthCm": 31,
+       "heightCm": 102,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— 毛重 中文 17 / 英文 16；[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 毛重 16"
+    }
+   }
+  },
+  {
+   "sku": "Y-607-220x100x62",
+   "model": "Y-607",
+   "identity": {
+    "from": {
+     "model": "Y-607",
+     "sku": "Y-607-220x100x62",
+     "lengthCm": 220,
+     "widthCm": 100,
+     "heightCm": 62
+    },
+    "to": {
+     "model": "Y-607",
+     "sku": "Y-607-220x96x68",
+     "lengthCm": 220,
+     "widthCm": 96,
+     "heightCm": 68
+    }
+   },
+   "packing": {
+    "from": {
+     "packingRaw": "35*35*106*2pc",
+     "cbm": 0.27,
+     "grossWeightKg": 40
+    },
+    "to": {
+     "packingRaw": "35*35*106*2pc",
+     "cbm": 0.26,
+     "grossWeightKg": 42,
+     "cartonCount": 2,
+     "cbmComputed": 0.26,
+     "grossWeightRaw": "42",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 35,
+       "widthCm": 35,
+       "heightCm": 106,
+       "cartonCount": 2,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— CBM 中文 0.26 / 英文 0.27；毛重 中文 42 / 英文 40；尺寸 中文 220*96*68 / 英文 220*100*62"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 尺寸 220*100*62；CBM 0.27；毛重 40"
+    }
+   }
+  },
+  {
+   "sku": "Y-607-260x100x62",
+   "model": "Y-607",
+   "identity": {
+    "from": {
+     "model": "Y-607",
+     "sku": "Y-607-260x100x62",
+     "lengthCm": 260,
+     "widthCm": 100,
+     "heightCm": 62
+    },
+    "to": {
+     "model": "Y-607",
+     "sku": "Y-607-280x96x68",
+     "lengthCm": 280,
+     "widthCm": 96,
+     "heightCm": 68
+    }
+   },
+   "packing": {
+    "from": {
+     "packingRaw": "35*35*106*2pc",
+     "cbm": 0.31,
+     "grossWeightKg": 45
+    },
+    "to": {
+     "packingRaw": "35*35*106*2pc",
+     "cbm": 0.34,
+     "grossWeightKg": 47,
+     "cartonCount": 2,
+     "cbmComputed": 0.26,
+     "grossWeightRaw": "47",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 35,
+       "widthCm": 35,
+       "heightCm": 106,
+       "cartonCount": 2,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.31，按包装推导 0.26；[来源] 中英文报价表不一致 —— CBM 中文 0.34 / 英文 0.31；毛重 中文 47 / 英文 45；尺寸 中文 280*96*68 / 英文 260*100*62"
+    },
+    "to": {
+     "needsReview": true,
+     "reviewNote": "[算术] CBM 与包装不一致：采用 0.34，按包装推导 0.26；[来源] 2026 图册标注待确认：CBM 0.34；[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 尺寸 260*100*62；CBM 0.31；毛重 45"
+    }
+   }
+  },
+  {
+   "sku": "Y-607-300x100x62",
+   "model": "Y-607",
+   "identity": {
+    "from": {
+     "model": "Y-607",
+     "sku": "Y-607-300x100x62",
+     "lengthCm": 300,
+     "widthCm": 100,
+     "heightCm": 62
+    },
+    "to": {
+     "model": "Y-607",
+     "sku": "Y-607-300x96x68",
+     "lengthCm": 300,
+     "widthCm": 96,
+     "heightCm": 68
+    }
+   },
+   "packing": {
+    "from": {
+     "packingRaw": "32*32*95+35*35*106*2pc",
+     "cbm": 0.4,
+     "grossWeightKg": 50
+    },
+    "to": {
+     "packingRaw": "32*32*95+35*35*106*2pc",
+     "cbm": 0.37,
+     "grossWeightKg": 59,
+     "cartonCount": 3,
+     "cbmComputed": 0.36,
+     "grossWeightRaw": "59",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 32,
+       "widthCm": 32,
+       "heightCm": 95,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      },
+      {
+       "label": "",
+       "lengthCm": 35,
+       "widthCm": 35,
+       "heightCm": 106,
+       "cartonCount": 2,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 1
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— CBM 中文 0.37 / 英文 0.4；毛重 中文 59 / 英文 50；尺寸 中文 300*96*68 / 英文 300*100*62"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 尺寸 300*100*62；CBM 0.4；毛重 50"
+    }
+   }
+  },
+  {
+   "sku": "Y-608-196x98x65",
+   "model": "Y-608",
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "双人位"
+    }
+   },
+   "packing": {
+    "from": {
+     "packingRaw": "32*32*108 2pc",
+     "cbm": 0.22,
+     "grossWeightKg": 29
+    },
+    "to": {
+     "packingRaw": "32*32*108 2pc",
+     "cbm": 0.22,
+     "grossWeightKg": 40,
+     "cartonCount": 2,
+     "cbmComputed": 0.22,
+     "grossWeightRaw": "40",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 32,
+       "widthCm": 32,
+       "heightCm": 108,
+       "cartonCount": 2,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— 毛重 中文 40 / 英文 29"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 毛重 29"
+    }
+   }
+  },
+  {
+   "sku": "Y-608-294x196x65",
+   "model": "Y-608",
+   "identity": {
+    "from": {
+     "model": "Y-608",
+     "sku": "Y-608-294x196x65",
+     "lengthCm": 294,
+     "widthCm": 196,
+     "heightCm": 65
+    },
+    "to": {
+     "model": "Y-608",
+     "sku": "Y-608-294x196x35",
+     "lengthCm": 294,
+     "widthCm": 196,
+     "heightCm": 35
+    }
+   },
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "三人位 + 脚踏"
+    }
+   },
+   "packing": {
+    "from": {
+     "packingRaw": "32*32*108 2pc+30*30*108 2pc",
+     "cbm": 0.41,
+     "grossWeightKg": 59
+    },
+    "to": {
+     "packingRaw": "32*32*108 2pc+30*30*108 2pc",
+     "cbm": 0.46,
+     "grossWeightKg": 73,
+     "cartonCount": 4,
+     "cbmComputed": 0.42,
+     "grossWeightRaw": "73",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 32,
+       "widthCm": 32,
+       "heightCm": 108,
+       "cartonCount": 2,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      },
+      {
+       "label": "",
+       "lengthCm": 30,
+       "widthCm": 30,
+       "heightCm": 108,
+       "cartonCount": 2,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 1
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— CBM 中文 0.46 / 英文 0.41；毛重 中文 73 / 英文 59；尺寸 中文 294*196*35 / 英文 294*196*65"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 尺寸 294*196*65；CBM 0.41；毛重 59"
+    }
+   }
+  },
+  {
+   "sku": "Y-608-294x98x65",
+   "model": "Y-608",
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "三人位"
+    }
+   },
+   "packing": {
+    "from": {
+     "packingRaw": "32*32*108 2pc+30*30*108",
+     "cbm": 0.33,
+     "grossWeightKg": 46
+    },
+    "to": {
+     "packingRaw": "32*32*108 2pc+30*30*108",
+     "cbm": 0.32,
+     "grossWeightKg": 58,
+     "cartonCount": 3,
+     "cbmComputed": 0.32,
+     "grossWeightRaw": "58",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 32,
+       "widthCm": 32,
+       "heightCm": 108,
+       "cartonCount": 2,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      },
+      {
+       "label": "",
+       "lengthCm": 30,
+       "widthCm": 30,
+       "heightCm": 108,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 1
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— CBM 中文 0.32 / 英文 0.33；毛重 中文 58 / 英文 46"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— CBM 0.33；毛重 46"
+    }
+   }
+  },
+  {
+   "sku": "Y-609-200x100x66",
+   "model": "Y-609",
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "双人位"
+    }
+   }
+  },
+  {
+   "sku": "Y-609-200x130x76",
+   "model": "Y-609",
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "大双人位"
+    }
+   },
+   "packing": {
+    "from": {
+     "packingRaw": "41*41*150",
+     "cbm": 0.25,
+     "grossWeightKg": 48.7
+    },
+    "to": {
+     "packingRaw": "41*41*150",
+     "cbm": 0.25,
+     "grossWeightKg": 49,
+     "cartonCount": 1,
+     "cbmComputed": 0.25,
+     "grossWeightRaw": "49",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 41,
+       "widthCm": 41,
+       "heightCm": 150,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— 毛重 中文 49 / 英文 48.7"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 毛重 48.7"
+    }
+   }
+  },
+  {
+   "sku": "Y-611-300x106x68",
+   "model": "Y-611",
+   "packing": {
+    "from": {
+     "packingRaw": "39*39*114+39*39*114",
+     "cbm": 0.35,
+     "grossWeightKg": 58
+    },
+    "to": {
+     "packingRaw": "39*39*114 2pc",
+     "cbm": 0.32,
+     "grossWeightKg": 58,
+     "cartonCount": 2,
+     "cbmComputed": 0.35,
+     "grossWeightRaw": "58",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 39,
+       "widthCm": 39,
+       "heightCm": 114,
+       "cartonCount": 2,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— CBM 中文 0.32 / 英文 0.35；包装 中文 39*39*114 2pc / 英文 39*39*114+39*39*114；尺寸 中文 300*16*68 / 英文 300*106*68；[算术] C-04: 报价表尺寸 300*16*68，图册为 300*106*68。应为 300*106*68。"
+    },
+    "to": {
+     "needsReview": true,
+     "reviewNote": "[算术] C-04: 报价表尺寸 300*16*68，图册为 300*106*68。应为 300*106*68。；[来源] 2026 图册标注待确认：尺寸 300×16×68（暂用英文报价表 300×106×68）；[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 包装 39*39*114+39*39*114；CBM 0.35"
+    }
+   }
+  },
+  {
+   "sku": "Y-612-220x100x74",
+   "model": "Y-612",
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "双人位"
+    }
+   }
+  },
+  {
+   "sku": "Y-612-240x100x74",
+   "model": "Y-612",
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "大双人位"
+    }
+   }
+  },
+  {
+   "sku": "Y-612-300x100x74",
+   "model": "Y-612",
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "三人位"
+    }
+   }
+  },
+  {
+   "sku": "Y-613-200x90x66",
+   "model": "Y-613",
+   "packing": {
+    "from": {
+     "packingRaw": "115*45*45",
+     "cbm": 0.23,
+     "grossWeightKg": 37
+    },
+    "to": {
+     "packingRaw": "52*52*108",
+     "cbm": 0.29,
+     "grossWeightKg": 37,
+     "cartonCount": 1,
+     "cbmComputed": 0.29,
+     "grossWeightRaw": "37",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 52,
+       "widthCm": 52,
+       "heightCm": 108,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[资料缺失] 图册缺毛重；[来源] 中英文报价表不一致 —— CBM 中文 0.29 / 英文 0.23；包装 中文 52*52*108 / 英文 115*45*45"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 包装 115*45*45；CBM 0.23"
+    }
+   }
+  },
+  {
+   "sku": "Y-614-150x100x70",
+   "model": "Y-614",
+   "packing": {
+    "from": {
+     "packingRaw": "113*75*35",
+     "cbm": 0.3,
+     "grossWeightKg": 37
+    },
+    "to": {
+     "packingRaw": "64*34*112",
+     "cbm": 0.24,
+     "grossWeightKg": 37,
+     "cartonCount": 1,
+     "cbmComputed": 0.24,
+     "grossWeightRaw": "37",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 64,
+       "widthCm": 34,
+       "heightCm": 112,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— CBM 中文 0.24 / 英文 0.3；包装 中文 64*34*112 / 英文 113*75*35"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 包装 113*75*35；CBM 0.3"
+    }
+   }
+  },
+  {
+   "sku": "Y-614-180x100x70",
+   "model": "Y-614",
+   "packing": {
+    "from": {
+     "packingRaw": "113*75*38",
+     "cbm": 0.32,
+     "grossWeightKg": 43
+    },
+    "to": {
+     "packingRaw": "67*34*112",
+     "cbm": 0.26,
+     "grossWeightKg": 46,
+     "cartonCount": 1,
+     "cbmComputed": 0.26,
+     "grossWeightRaw": "46",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 67,
+       "widthCm": 34,
+       "heightCm": 112,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— CBM 中文 0.26 / 英文 0.32；毛重 中文 46 / 英文 43；包装 中文 67*34*112 / 英文 113*75*38"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 包装 113*75*38；CBM 0.32；毛重 43"
+    }
+   }
+  },
+  {
+   "sku": "Y-614-200x100x70",
+   "model": "Y-614",
+   "packing": {
+    "from": {
+     "packingRaw": "113*75*41",
+     "cbm": 0.35,
+     "grossWeightKg": 47
+    },
+    "to": {
+     "packingRaw": "67*37*112",
+     "cbm": 0.28,
+     "grossWeightKg": 49,
+     "cartonCount": 1,
+     "cbmComputed": 0.28,
+     "grossWeightRaw": "49",
+     "cartons": [
+      {
+       "label": "",
+       "lengthCm": 67,
+       "widthCm": 37,
+       "heightCm": 112,
+       "cartonCount": 1,
+       "piecesPerCarton": 1,
+       "grossWeightKg": null,
+       "sort": 0
+      }
+     ]
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] 中英文报价表不一致 —— CBM 中文 0.28 / 英文 0.35；毛重 中文 49 / 英文 47；包装 中文 67*37*112 / 英文 113*75*41"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 包装 113*75*41；CBM 0.35；毛重 47"
+    }
+   }
+  },
+  {
+   "sku": "Y-615-290x95x85",
+   "model": "Y-615",
+   "identity": {
+    "from": {
+     "model": "Y-615",
+     "sku": "Y-615-290x95x85",
+     "lengthCm": 290,
+     "widthCm": 95,
+     "heightCm": 85
+    },
+    "to": {
+     "model": "Y-616",
+     "sku": "Y-616-290x95x85",
+     "lengthCm": 290,
+     "widthCm": 95,
+     "heightCm": 85
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[来源] CN-10: 两份表的 Y-615 与 Y-616 内容整体对调。未自动套用，需业务确认哪份编号正确。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 编号 Y-615"
+    }
+   },
+   "addPrices": [
+    {
+     "priceListKey": "LVANJU-2026-CN",
+     "currency": "CNY",
+     "unitPrice": 1750,
+     "effectiveFrom": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  },
+  {
+   "sku": "Y-616-105x105x87",
+   "model": "Y-616",
+   "identity": {
+    "from": {
+     "model": "Y-616",
+     "sku": "Y-616-105x105x87",
+     "lengthCm": 105,
+     "widthCm": 105,
+     "heightCm": 87
+    },
+    "to": {
+     "model": "Y-615",
+     "sku": "Y-615-105x105x87",
+     "lengthCm": 105,
+     "widthCm": 105,
+     "heightCm": 87
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。；[来源] CN-10: 两份表的 Y-615 与 Y-616 内容整体对调。未自动套用，需业务确认哪份编号正确。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 编号 Y-616"
+    }
+   },
+   "addPrices": [
+    {
+     "priceListKey": "LVANJU-2026-CN",
+     "currency": "CNY",
+     "unitPrice": 650,
+     "effectiveFrom": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  },
+  {
+   "sku": "Y-616-150x105x87",
+   "model": "Y-616",
+   "identity": {
+    "from": {
+     "model": "Y-616",
+     "sku": "Y-616-150x105x87",
+     "lengthCm": 150,
+     "widthCm": 105,
+     "heightCm": 87
+    },
+    "to": {
+     "model": "Y-615",
+     "sku": "Y-615-150x105x87",
+     "lengthCm": 150,
+     "widthCm": 105,
+     "heightCm": 87
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。；[来源] CN-10: 两份表的 Y-615 与 Y-616 内容整体对调。未自动套用，需业务确认哪份编号正确。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 编号 Y-616"
+    }
+   },
+   "addPrices": [
+    {
+     "priceListKey": "LVANJU-2026-CN",
+     "currency": "CNY",
+     "unitPrice": 950,
+     "effectiveFrom": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  },
+  {
+   "sku": "Y-616-210x105x87",
+   "model": "Y-616",
+   "identity": {
+    "from": {
+     "model": "Y-616",
+     "sku": "Y-616-210x105x87",
+     "lengthCm": 210,
+     "widthCm": 105,
+     "heightCm": 87
+    },
+    "to": {
+     "model": "Y-615",
+     "sku": "Y-615-210x105x87",
+     "lengthCm": 210,
+     "widthCm": 105,
+     "heightCm": 87
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。；[来源] CN-10: 两份表的 Y-615 与 Y-616 内容整体对调。未自动套用，需业务确认哪份编号正确。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": "[已确认] 以 2026 图册为准（2026-10-13），英文报价表原为 —— 编号 Y-616"
+    }
+   },
+   "addPrices": [
+    {
+     "priceListKey": "LVANJU-2026-CN",
+     "currency": "CNY",
+     "unitPrice": 1200,
+     "effectiveFrom": "2026-01-01T00:00:00.000Z"
+    }
+   ]
+  },
+  {
+   "sku": "Y-617-120x113x71",
+   "model": "Y-617",
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "单人位"
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": ""
+    }
+   }
+  },
+  {
+   "sku": "Y-617-190x113x77",
+   "model": "Y-617",
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "双人位"
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": ""
+    }
+   }
+  },
+  {
+   "sku": "Y-617-240x113x80",
+   "model": "Y-617",
+   "label": {
+    "from": {
+     "labelCn": ""
+    },
+    "to": {
+     "labelCn": "三人位"
+    }
+   },
+   "review": {
+    "from": {
+     "needsReview": true,
+     "reviewNote": "[资料缺失] C-09: 这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。"
+    },
+    "to": {
+     "needsReview": false,
+     "reviewNote": ""
+    }
+   }
+  }
+ ],
+ "products": [
+  {
+   "model": "Y-604",
+   "searchText": {
+    "from": "Y-604 | Compressed Sofa Y-604 | 压缩沙发 Y-604 | High-Density Foam | Compression-Resistant Plush Fabric | 高密度海绵 | 抗压毛绒布 | 120x110x66 280x102x66 340x102x66",
+    "to": "Y-604 | Compressed Sofa Y-604 | 压缩沙发 Y-604 | High-Density Foam | Compression-Resistant Plush Fabric | 高密度海绵 | 抗压毛绒布 | 120x110x66 240x102x66 340x102x66"
+   }
+  },
+  {
+   "model": "Y-605",
+   "searchText": {
+    "from": "Y-605 | Compressed Sofa Y-605 | 压缩沙发 Y-605 | 2.75 METER | High-Density Foam | Chenille Fabric | 高密度海绵 | 雪尼尔面料 | 90x96x68 182x96x68 275x96x68 | 2.75 METER",
+    "to": "Y-605 | Compressed Sofa Y-605 | 压缩沙发 Y-605 | 2.75 METER | High-Density Foam | Chenille Fabric | 高密度海绵 | 雪尼尔面料 | 90x96x68 180x96x68 270x96x68 | 2.75 METER"
+   }
+  },
+  {
+   "model": "Y-607",
+   "materials": {
+    "from": [
+     {
+      "role": "FOAM",
+      "nameEn": "High-Density Foam",
+      "nameCn": "高密度海绵",
+      "specEn": "",
+      "sort": 0
+     },
+     {
+      "role": "COVER",
+      "nameEn": "Linen",
+      "nameCn": "抗压毛绒布",
+      "specEn": "",
+      "sort": 1
+     }
+    ],
+    "to": [
+     {
+      "role": "FOAM",
+      "nameEn": "High-Density Foam",
+      "nameCn": "高密度海绵",
+      "specEn": "",
+      "sort": 0
+     },
+     {
+      "role": "COVER",
+      "nameEn": "Compression-Resistant Plush Fabric",
+      "nameCn": "抗压毛绒布",
+      "specEn": "",
+      "sort": 1
+     }
+    ]
+   },
+   "options": {
+    "from": [
+     {
+      "kind": "FABRIC",
+      "code": "",
+      "nameEn": "Linen",
+      "nameCn": "抗压毛绒布",
+      "isDefault": true,
+      "sort": 0
+     }
+    ],
+    "to": [
+     {
+      "kind": "FABRIC",
+      "code": "",
+      "nameEn": "Compression-Resistant Plush Fabric",
+      "nameCn": "抗压毛绒布",
+      "isDefault": true,
+      "sort": 0
+     }
+    ]
+   },
+   "searchText": {
+    "from": "Y-607 | Compressed Sofa Y-607 | 压缩沙发 Y-607 | 2.0 METER | High-Density Foam | Linen | 高密度海绵 | 抗压毛绒布 | 220x100x62 260x100x62 300x100x62 | 2.0 METER",
+    "to": "Y-607 | Compressed Sofa Y-607 | 压缩沙发 Y-607 | 2.0 METER | High-Density Foam | Compression-Resistant Plush Fabric | 高密度海绵 | 抗压毛绒布 | 220x96x68 280x96x68 300x96x68 | 2.0 METER"
+   }
+  },
+  {
+   "model": "Y-608",
+   "searchText": {
+    "from": "Y-608 | Compressed Sofa Y-608 | 压缩沙发 Y-608 | 3.92 METER | Compression Resistant High-Density Compressible Sponge Crushed Sponge Particles Feather Silk Sponge | Flannel | 抗压高密度可压缩海绵 180T有氧绵 羽丝绵 | 196x98x65 294x98x65 294x196x65 | 3.92 METER",
+    "to": "Y-608 | Compressed Sofa Y-608 | 压缩沙发 Y-608 | 3.92 METER | Compression Resistant High-Density Compressible Sponge Crushed Sponge Particles Feather Silk Sponge | Flannel | 抗压高密度可压缩海绵 180T有氧绵 羽丝绵 | 196x98x65 294x98x65 294x196x35 | 3.92 METER"
+   }
+  },
+  {
+   "model": "Y-614",
+   "materials": {
+    "from": [
+     {
+      "role": "FOAM",
+      "nameEn": "High-Density Foam",
+      "nameCn": "高密度海绵",
+      "specEn": "",
+      "sort": 0
+     },
+     {
+      "role": "COVER",
+      "nameEn": "Corduroy",
+      "nameCn": "抗压毛绒布",
+      "specEn": "",
+      "sort": 1
+     }
+    ],
+    "to": [
+     {
+      "role": "FOAM",
+      "nameEn": "High-Density Foam",
+      "nameCn": "高密度海绵",
+      "specEn": "",
+      "sort": 0
+     },
+     {
+      "role": "COVER",
+      "nameEn": "Compression-Resistant Plush Fabric",
+      "nameCn": "抗压毛绒布",
+      "specEn": "",
+      "sort": 1
+     }
+    ]
+   },
+   "options": {
+    "from": [
+     {
+      "kind": "FABRIC",
+      "code": "",
+      "nameEn": "Corduroy",
+      "nameCn": "抗压毛绒布",
+      "isDefault": true,
+      "sort": 0
+     }
+    ],
+    "to": [
+     {
+      "kind": "FABRIC",
+      "code": "",
+      "nameEn": "Compression-Resistant Plush Fabric",
+      "nameCn": "抗压毛绒布",
+      "isDefault": true,
+      "sort": 0
+     }
+    ]
+   },
+   "searchText": {
+    "from": "Y-614 | Compressed Sofa Y-614 | 压缩沙发 Y-614 | 1.5 METER | High-Density Foam | Corduroy | 高密度海绵 | 抗压毛绒布 | 150x100x70 180x100x70 200x100x70 | 1.5 METER",
+    "to": "Y-614 | Compressed Sofa Y-614 | 压缩沙发 Y-614 | 1.5 METER | High-Density Foam | Compression-Resistant Plush Fabric | 高密度海绵 | 抗压毛绒布 | 150x100x70 180x100x70 200x100x70 | 1.5 METER"
+   }
+  },
+  {
+   "model": "Y-615",
+   "materials": {
+    "from": [
+     {
+      "role": "FOAM",
+      "nameEn": "High-Density Foam",
+      "nameCn": "",
+      "specEn": "",
+      "sort": 0
+     },
+     {
+      "role": "COVER",
+      "nameEn": "Flannel",
+      "nameCn": "",
+      "specEn": "",
+      "sort": 1
+     }
+    ],
+    "to": [
+     {
+      "role": "FOAM",
+      "nameEn": "High-Density Foam",
+      "nameCn": "高密度海绵",
+      "specEn": "",
+      "sort": 0
+     },
+     {
+      "role": "COVER",
+      "nameEn": "Compression-Resistant Plush Fabric",
+      "nameCn": "抗压毛绒布",
+      "specEn": "",
+      "sort": 1
+     }
+    ]
+   },
+   "options": {
+    "from": [
+     {
+      "kind": "FABRIC",
+      "code": "",
+      "nameEn": "Flannel",
+      "nameCn": "",
+      "isDefault": true,
+      "sort": 0
+     },
+     {
+      "kind": "COLOUR",
+      "code": "3115-18",
+      "nameEn": "3115-18",
+      "nameCn": "",
+      "isDefault": true,
+      "sort": 1
+     }
+    ],
+    "to": [
+     {
+      "kind": "FABRIC",
+      "code": "",
+      "nameEn": "Compression-Resistant Plush Fabric",
+      "nameCn": "抗压毛绒布",
+      "isDefault": true,
+      "sort": 0
+     },
+     {
+      "kind": "COLOUR",
+      "code": "3115-18",
+      "nameEn": "3115-18",
+      "nameCn": "",
+      "isDefault": true,
+      "sort": 1
+     }
+    ]
+   },
+   "searchText": {
+    "from": "Y-615 | Compressed Sofa Y-615 | 压缩沙发 Y-615 | 1.0 METER | High-Density Foam | Flannel | 高密度海绵 | 抗压毛绒布 | 290x95x85 | 1.0 METER",
+    "to": "Y-615 | Compressed Sofa Y-615 | 压缩沙发 Y-615 | 1.0 METER | High-Density Foam | Compression-Resistant Plush Fabric | 高密度海绵 | 抗压毛绒布 | 105x105x87 150x105x87 210x105x87 | 1.0 METER"
+   }
+  },
+  {
+   "model": "Y-616",
+   "materials": {
+    "from": [
+     {
+      "role": "FOAM",
+      "nameEn": "High-Density Foam",
+      "nameCn": "",
+      "specEn": "",
+      "sort": 0
+     },
+     {
+      "role": "COVER",
+      "nameEn": "Compression-Resistant Plush Fabric",
+      "nameCn": "",
+      "specEn": "",
+      "sort": 1
+     }
+    ],
+    "to": [
+     {
+      "role": "FOAM",
+      "nameEn": "High-Density Foam",
+      "nameCn": "抗压高密度可压缩海绵",
+      "specEn": "",
+      "sort": 0
+     },
+     {
+      "role": "FILLING",
+      "nameEn": "",
+      "nameCn": "180T有氧绵",
+      "specEn": "",
+      "sort": 1
+     },
+     {
+      "role": "FILLING",
+      "nameEn": "",
+      "nameCn": "羽丝绵",
+      "specEn": "",
+      "sort": 2
+     },
+     {
+      "role": "COVER",
+      "nameEn": "Flannel",
+      "nameCn": "",
+      "specEn": "",
+      "sort": 3
+     }
+    ]
+   },
+   "options": {
+    "from": [
+     {
+      "kind": "FABRIC",
+      "code": "",
+      "nameEn": "Compression-Resistant Plush Fabric",
+      "nameCn": "",
+      "isDefault": true,
+      "sort": 0
+     }
+    ],
+    "to": [
+     {
+      "kind": "FABRIC",
+      "code": "",
+      "nameEn": "Flannel",
+      "nameCn": "",
+      "isDefault": true,
+      "sort": 0
+     }
+    ]
+   },
+   "searchText": {
+    "from": "Y-616 | Compressed Sofa Y-616 | 压缩沙发 Y-616 | High-Density Foam | Compression-Resistant Plush Fabric | 抗压高密度可压缩海绵 180T有氧绵 羽丝绵 | 105x105x87 150x105x87 210x105x87",
+    "to": "Y-616 | Compressed Sofa Y-616 | 压缩沙发 Y-616 | High-Density Foam | Flannel | 抗压高密度可压缩海绵 180T有氧绵 羽丝绵 | 290x95x85"
+   }
+  }
+ ]
+}

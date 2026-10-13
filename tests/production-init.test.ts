@@ -64,3 +64,23 @@ test('deployment stops at an unresolved missing migration without falsifying rol
     await db.$executeRaw`DELETE FROM _prisma_migrations WHERE id = ${id} AND migration_name = ${name}`;
   }
 });
+
+test('deployment registers product photos added after the library was seeded, once, without touching existing photos', async () => {
+  assertIsolatedDatabase();
+  const product = await db.product.findFirstOrThrow({ where: { model: 'Y-617' } });
+  const before = await db.productMedia.findMany({ where: { productId: product.id } });
+  const existing = await db.productMedia.findFirstOrThrow({ where: { storageKey: 'products/Y-601.jpg' } });
+  await db.productMedia.deleteMany({ where: { productId: product.id, role: 'HERO' } });
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = bootstrap();
+      assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+      const hero = await db.productMedia.findMany({ where: { productId: product.id, role: 'HERO' } });
+      assert.deepEqual(hero.map(media => media.storageKey), ['products/Y-617.jpg'], 'the photo file is registered exactly once');
+      assert.deepEqual(await db.productMedia.findUniqueOrThrow({ where: { id: existing.id } }), existing, 'existing photo records are not rewritten');
+    }
+  } finally {
+    await db.productMedia.deleteMany({ where: { productId: product.id } });
+    if (before.length) await db.productMedia.createMany({ data: before });
+  }
+});

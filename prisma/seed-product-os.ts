@@ -10,6 +10,10 @@
  *   - MOQ 按渠道分档：线上 10 件 / 线下交谈 20 件
  *   - 规格 / 包装 / CBM / 毛重 / 价格一律以报价表为准
  *
+ * 2026-10-13 补充：压缩沙发（Y 系列）全部以 2026 图册为准（docs/product-os/catalog-2026-sofas.json）。
+ *   图册与中文报价表一致：尺寸、包装、CBM、毛重取中文报价表；美元价格仍取英文报价表，
+ *   其中英文报价表把 Y-615 / Y-616 的编号记反了，按图册编号对调后使用。
+ *
  * 幂等：按 Product.model 与 ProductVariant.sku upsert，可重复执行。
  *
  * 运行：pnpm db:seed:products
@@ -17,6 +21,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { parsePacking, parseGrossWeight, cbmNeedsReview } from '../lib/product-packing';
+import { applyCatalog2026 } from './catalog-2026.mjs';
 
 // 本机开发时读 .env；生产环境（Hostinger 等）没有 .env，环境变量由平台注入。
 // 不要在这里用 `node --env-file=.env`：文件不存在时 node 会直接退出，导致静默失败。
@@ -33,6 +38,7 @@ const PRICE_LIST_KEY_CN = 'LVANJU-2026-CN';
 const PRICE_EFFECTIVE_FROM = new Date('2026-01-01T00:00:00.000Z');
 const SEED_SOURCE = 'docs/product-os/source-extract.json';
 const SEED_SOURCE_CN = 'docs/product-os/source-extract-cn.json';
+const SEED_SOURCE_CATALOG = 'docs/product-os/catalog-2026-sofas.json';
 
 /** 已确认的渠道 MOQ（业务规则，非文档数据）。 */
 /**
@@ -42,6 +48,8 @@ const SEED_SOURCE_CN = 'docs/product-os/source-extract-cn.json';
 export const TAG_MATH = '[算术] ';
 export const TAG_SOURCE = '[来源] ';
 export const TAG_MISSING = '[资料缺失] ';
+/** 已按业务决定处理的来源差异，只留档，不计入待核对。 */
+export const TAG_CONFIRMED = '[已确认] ';
 
 /** 分类 code → 英文名，用于生成产品英文名。 */
 const CATEGORY_EN: Record<string, string> = {
@@ -133,8 +141,28 @@ type RawCnData = {
     empty?: boolean;
   }[];
   modelCategory: Record<string, string>;
-  conflicts?: { id: string; type: string; models: string[]; detail: string }[];
+  conflicts?: { id: string; type: string; models: string[]; detail: string; status?: string }[];
 };
+
+/** 2026 压缩沙发图册（中文版）的逐页转录。 */
+type CatalogSize = { size: number[]; label?: string; inner?: number[] };
+type CatalogModel = {
+  model: string;
+  page: number;
+  main: { size: number[]; label?: string; inner?: number[]; carton: string; weightKg: number; cbm: number };
+  /** 图册自己标注「[待确认]」的字段，例如 main.size、main.cbm。 */
+  unconfirmed?: string[];
+  sizes: CatalogSize[];
+  materials: string[];
+  /** 英文报价表中该型号数据所在的编号（英文表把 Y-615 / Y-616 记反了）。 */
+  priceListModelEn?: string;
+  /** 英文报价表的面料名与图册面料不符时采用的英文名。 */
+  coverEn?: string;
+};
+type CatalogData = { models: CatalogModel[] };
+
+const sameDims = (a: number[] | null | undefined, b: number[] | null | undefined) =>
+  Boolean(a && b && a.length === b.length && a.every((value, i) => value === b[i]));
 
 /** 依据材料名称判定分层角色（支持英文与中文写法）。 */
 function materialRole(name: string): string {
@@ -155,9 +183,20 @@ function dimensionLabel(raw: RawProduct): string {
 
 async function main() {
   const admin = await db.user.findFirstOrThrow({ where: { role: 'ADMIN' }, select: { id: true } });
+  // 旧版种子写入的库先按图册改正（受保护：人工改过的字段不动），下面的 upsert 才能按新 SKU 对上原记录。
+  await applyCatalog2026(db, message => console.log(message));
   const data = JSON.parse(readFileSync(SEED_SOURCE, 'utf8')) as RawData;
   const dataCn = JSON.parse(readFileSync(SEED_SOURCE_CN, 'utf8')) as RawCnData;
+  const catalog = JSON.parse(readFileSync(SEED_SOURCE_CATALOG, 'utf8')) as CatalogData;
   const cnByModel = new Map(dataCn.products.map(p => [p.model, p]));
+  const enByModel = new Map(data.products.map(p => [p.model, p]));
+  const catalogByModel = new Map(catalog.models.map(m => [m.model, m]));
+  for (const entry of catalog.models) {
+    if (!enByModel.has(entry.model) || !cnByModel.has(entry.model)) throw new Error(`图册型号 ${entry.model} 不在报价表中`);
+    if (entry.priceListModelEn && !enByModel.has(entry.priceListModelEn)) {
+      throw new Error(`图册型号 ${entry.model} 指向的英文报价表编号 ${entry.priceListModelEn} 不存在`);
+    }
+  }
 
   const conflictByModel = new Map<string, string[]>();
   for (const conflict of data.conflicts ?? []) {
@@ -174,7 +213,7 @@ async function main() {
   // 其余差异逐变体精确比对，避免把整型号的变体全部标红（那会让标记失去意义）。
   const cnConflictByModel = new Map<string, string[]>();
   for (const conflict of dataCn.conflicts ?? []) {
-    if (conflict.type !== 'MODEL_NUMBER_SWAP') continue;
+    if (conflict.type !== 'MODEL_NUMBER_SWAP' || conflict.status === 'RESOLVED') continue;
     for (const model of conflict.models) {
       cnConflictByModel.set(model, [...(cnConflictByModel.get(model) ?? []), `${TAG_SOURCE}${conflict.id}: ${conflict.detail}`]);
     }
@@ -284,17 +323,21 @@ async function main() {
       },
     });
 
-    // Y-615 / Y-616 在两份报价表中编号整体对调，中文变体与材料数据不可套用。
-    const cnUsable = cn && !cn.swappedWith ? cn : undefined;
+    // 图册收录的型号（Y 系列）：编号以图册为准，英文报价表的变体与材料按图册编号取用；
+    // 中文报价表与图册一致，直接套用。未收录且编号对调的型号，中文数据不可按序号套用。
+    const catalogModel = catalogByModel.get(raw.model);
+    const priceListEn = catalogModel?.priceListModelEn ? (enByModel.get(catalogModel.priceListModelEn) as RawProduct) : raw;
+    const cnUsable = cn && (!cn.swappedWith || catalogModel) ? cn : undefined;
+    const coverEnText = catalogModel?.coverEn ?? priceListEn.materials?.cover ?? '';
 
     // ── 材料（分层：英文取自英文报价表，中文取自中文报价表）────
     await db.productMaterial.deleteMany({ where: { productId: product.id } });
     const cnMaterials = cnUsable?.materialsCn;
     const materialRows: Prisma.ProductMaterialCreateManyInput[] = [];
     let materialSort = 0;
-    const layerCount = Math.max(raw.materials?.layers?.length ?? 0, cnMaterials?.layers?.length ?? 0);
+    const layerCount = Math.max(priceListEn.materials?.layers?.length ?? 0, cnMaterials?.layers?.length ?? 0);
     for (let i = 0; i < layerCount; i += 1) {
-      const en = raw.materials?.layers?.[i] ?? '';
+      const en = priceListEn.materials?.layers?.[i] ?? '';
       const cnText = cnMaterials?.layers?.[i] ?? '';
       if (!en && !cnText) continue;
       materialRows.push({
@@ -306,13 +349,12 @@ async function main() {
         sort: materialSort++,
       });
     }
-    const coverEn = raw.materials?.cover ?? '';
     const coverCn = cnMaterials?.cover ?? '';
-    if (coverEn || coverCn) {
+    if (coverEnText || coverCn) {
       materialRows.push({
         productId: product.id,
         role: 'COVER',
-        nameEn: coverEn,
+        nameEn: coverEnText,
         nameCn: coverCn,
         specEn: '',
         sort: materialSort++,
@@ -323,12 +365,12 @@ async function main() {
     // ── 面料 / 颜色选项 ────────────────────────────────────
     await db.productOption.deleteMany({ where: { productId: product.id } });
     const optionRows: Prisma.ProductOptionCreateManyInput[] = [];
-    if (raw.materials?.cover || cnMaterials?.cover) {
+    if (coverEnText || cnMaterials?.cover) {
       optionRows.push({
         productId: product.id,
         kind: 'FABRIC',
         code: '',
-        nameEn: raw.materials?.cover ?? '',
+        nameEn: coverEnText,
         nameCn: cnMaterials?.cover ?? '',
         isDefault: true,
         sort: 0,
@@ -389,31 +431,58 @@ async function main() {
     // ── 变体 + 包装 + 价格 ─────────────────────────────────
     // 英文报价表为主，中文报价表按序号补充人民币价格与中文差异登记。
     // M 系列只有中文报价表，此时英文侧为空，直接采用中文值。
+    // 图册收录的型号反过来：尺寸 / 包装 / CBM / 毛重取与图册一致的中文报价表，英文报价表只提供美元价与英文名。
     const seen = new Set<string>();
     const dimList: string[] = [];
-    const variantCount = Math.max(raw.variants.length, cnUsable?.variants.length ?? 0);
+    if (catalogModel && cnUsable?.variants.length !== catalogModel.sizes.length) {
+      throw new Error(`${raw.model}：图册 ${catalogModel.sizes.length} 个尺寸，中文报价表 ${cnUsable?.variants.length ?? 0} 个`);
+    }
+    const variantCount = Math.max(priceListEn.variants.length, cnUsable?.variants.length ?? 0);
     for (let index = 0; index < variantCount; index += 1) {
-      const variant = raw.variants[index] ?? null;
+      const variant = priceListEn.variants[index] ?? null;
       const cnVariant = cnUsable?.variants[index] ?? null;
-      const dims = variant?.dimensions ?? cnVariant?.[0] ?? null;
-      const packingRaw = variant?.packingRaw ?? cnVariant?.[1] ?? '';
+      const catalogSize = catalogModel?.sizes[index];
+      // 图册自己标注「待确认」的尺寸不采用，仍用英文报价表（Y-611：图册 300×16×68）
+      const catalogSizeUnconfirmed =
+        Boolean(catalogModel?.unconfirmed?.includes('main.size')) && sameDims(catalogSize?.size, catalogModel?.main.size);
+      if (catalogSize && !sameDims(catalogSize.size, cnVariant?.[0])) {
+        throw new Error(`${raw.model}：图册尺寸 ${catalogSize.size.join('*')} 与中文报价表 ${cnVariant?.[0]?.join('*')} 不一致`);
+      }
+      if (catalogModel && cnVariant && sameDims(catalogModel.main.size, cnVariant[0])) {
+        const { main } = catalogModel;
+        if (main.cbm !== cnVariant[2] || main.weightKg !== cnVariant[3]) {
+          throw new Error(`${raw.model}：图册主推尺寸的 CBM / 毛重与中文报价表不一致`);
+        }
+      }
+      const preferCatalog = Boolean(catalogModel && cnVariant);
+      const dims = preferCatalog && !catalogSizeUnconfirmed ? cnVariant![0] : variant?.dimensions ?? cnVariant?.[0] ?? null;
+      const packingRaw = preferCatalog ? cnVariant![1] : variant?.packingRaw ?? cnVariant?.[1] ?? '';
       const sku = variantSku(raw.model, dims, index);
       if (seen.has(sku)) throw new Error(`SKU 重复：${sku}`);
       seen.add(sku);
 
       const packing = parsePacking(packingRaw);
-      const weight = parseGrossWeight(variant?.grossWeightRaw);
-      const authoritativeCbm = variant?.cbm ?? cnVariant?.[2] ?? 0;
+      const authoritativeCbm = preferCatalog ? cnVariant![2] : variant?.cbm ?? cnVariant?.[2] ?? 0;
       const priceUsd = variant?.unitPriceUsd;
       const priceCny = cnVariant?.[4] ?? undefined;
       // 毛重优先取报价表；报价表缺失时用图册或中文表补充值（并标注来源），不猜测。
-      const grossWeight =
-        variant?.grossWeightKg ?? cnVariant?.[3] ?? weight.total ?? variant?.catalogGrossWeightKg ?? 0;
+      const enWeight = parseGrossWeight(variant?.grossWeightRaw);
+      const grossWeight = (preferCatalog ? cnVariant![3] : null) ??
+        variant?.grossWeightKg ?? cnVariant?.[3] ?? enWeight.total ?? variant?.catalogGrossWeightKg ?? 0;
+      // 英文报价表的分箱毛重（如 23.8*2）只在总毛重与采用值相同时沿用
+      const enWeightKept = !preferCatalog || variant?.grossWeightKg === grossWeight;
+      const weight = enWeightKept ? enWeight : parseGrossWeight(undefined);
+      const grossWeightRaw = enWeightKept
+        ? variant?.grossWeightRaw ?? (variant?.grossWeightKg ? String(variant.grossWeightKg) : '')
+        : String(grossWeight);
 
       const reviewNotes: string[] = [];
+      /** 已由业务决定的来源差异：留档但不计入待核对，放在待核对说明之后。 */
+      const auditNotes: string[] = [];
       if (variant?.grossWeightKgMissing && cnVariant?.[3] == null) reviewNotes.push(`${TAG_MISSING}中英文报价表均缺毛重`);
-      if (variant?.catalogGrossWeightKgMissing) reviewNotes.push(`${TAG_MISSING}图册缺毛重`);
-      if (variant?.grossWeightKg === undefined && cnVariant?.[3] != null) {
+      // 旧英文图册缺的毛重，2026 图册已补齐
+      if (variant?.catalogGrossWeightKgMissing && !catalogModel) reviewNotes.push(`${TAG_MISSING}图册缺毛重`);
+      if (variant?.grossWeightKg === undefined && cnVariant?.[3] != null && !preferCatalog) {
         reviewNotes.push(`${TAG_SOURCE}毛重取自中文报价表（${cnVariant[3]}kg）`);
       }
       if (cbmNeedsReview(authoritativeCbm, packing.computedCbm)) {
@@ -423,8 +492,17 @@ async function main() {
       }
       if (packing.notes.length) reviewNotes.push(...packing.notes.map(n => `${TAG_MATH}${n}`));
 
-      // 逐变体比对中英文报价表：只有该变体本身不一致才标记
-      if (variant && cnVariant) {
+      if (preferCatalog && variant) {
+        // 图册已定：只留档英文报价表原来的值，便于对照美元报价
+        const diffs: string[] = [];
+        if (catalogModel?.priceListModelEn) diffs.push(`编号 ${catalogModel.priceListModelEn}`);
+        if (variant.dimensions && dims && !sameDims(variant.dimensions, dims)) diffs.push(`尺寸 ${variant.dimensions.join('*')}`);
+        if (variant.packingRaw && variant.packingRaw !== packingRaw) diffs.push(`包装 ${variant.packingRaw}`);
+        if (typeof variant.cbm === 'number' && Math.abs(variant.cbm - authoritativeCbm) > 0.005) diffs.push(`CBM ${variant.cbm}`);
+        if (variant.grossWeightKg != null && Math.abs(variant.grossWeightKg - grossWeight) > 0.05) diffs.push(`毛重 ${variant.grossWeightKg}`);
+        if (diffs.length) auditNotes.push(`${TAG_CONFIRMED}以 2026 图册为准（2026-10-13），英文报价表原为 —— ${diffs.join('；')}`);
+      } else if (variant && cnVariant) {
+        // 逐变体比对中英文报价表：只有该变体本身不一致才标记
         const diffs: string[] = [];
         const cnCbm = cnVariant[2];
         const cnWeight = cnVariant[3];
@@ -450,11 +528,22 @@ async function main() {
       for (const conflict of conflictByModel.get(raw.model) ?? []) reviewNotes.push(conflict);
       for (const conflict of cnConflictByModel.get(raw.model) ?? []) reviewNotes.push(conflict);
       if (variant?.note) reviewNotes.push(`${TAG_SOURCE}${variant.note}`);
+      // 图册自己标注「待确认」的主推尺寸数据，提醒向工厂核实
+      if (catalogModel?.unconfirmed?.length && sameDims(catalogModel.main.size, cnVariant?.[0])) {
+        const pending = catalogModel.unconfirmed.map(field =>
+          field === 'main.size'
+            ? `尺寸 ${catalogModel.main.size.join('×')}（暂用英文报价表 ${dims?.join('×')}）`
+            : `CBM ${catalogModel.main.cbm}`,
+        );
+        reviewNotes.push(`${TAG_SOURCE}2026 图册标注待确认：${pending.join('、')}`);
+      }
 
       if (dims && dims.length >= 3) dimList.push(dims.join('x'));
       const secondary = variant?.secondaryDimensions ?? null;
       const bedSize = variant?.bedSizeCm ?? null;
       const needsReview = reviewNotes.length > 0;
+      const reviewNote = [...reviewNotes, ...auditNotes].join('；');
+      const catalogLabelCn = catalogSize?.label;
 
       const savedVariant = await db.productVariant.upsert({
         where: { sku },
@@ -463,7 +552,7 @@ async function main() {
           sku,
           variantType: raw.isModular && variant?.label && /SINGLE|OTTOMAN|FOOTSTOOL|1 SEAT/i.test(variant.label) ? 'MODULE' : 'CONFIGURATION',
           labelEn: variant?.label ?? '',
-          labelCn: variant?.labelCn ?? '',
+          labelCn: catalogLabelCn ?? variant?.labelCn ?? '',
           lengthCm: dims?.[0] ?? null,
           widthCm: dims?.[1] ?? null,
           heightCm: dims?.[2] ?? null,
@@ -478,22 +567,23 @@ async function main() {
           cbm: new Prisma.Decimal(authoritativeCbm),
           cbmComputed: new Prisma.Decimal(packing.computedCbm),
           grossWeightKg: new Prisma.Decimal(grossWeight),
-          grossWeightRaw: variant?.grossWeightRaw ?? (variant?.grossWeightKg ? String(variant.grossWeightKg) : ''),
+          grossWeightRaw,
           needsReview,
-          reviewNote: reviewNotes.join('；'),
+          reviewNote,
           status: 'ACTIVE',
           createdBy: admin.id,
         },
         update: {
           labelEn: variant?.label ?? '',
+          ...(catalogLabelCn ? { labelCn: catalogLabelCn } : {}),
           packingRaw,
           cartonCount: packing.cartonCount,
           cbm: new Prisma.Decimal(authoritativeCbm),
           cbmComputed: new Prisma.Decimal(packing.computedCbm),
           grossWeightKg: new Prisma.Decimal(grossWeight),
-          grossWeightRaw: variant?.grossWeightRaw ?? '',
+          grossWeightRaw,
           needsReview,
-          reviewNote: reviewNotes.join('；'),
+          reviewNote,
         },
       });
       variantTotal += 1;
@@ -559,8 +649,8 @@ async function main() {
       enName,
       cnName,
       dimensionLabel(raw),
-      raw.materials?.layers?.join(' ') ?? '',
-      raw.materials?.cover ?? '',
+      priceListEn.materials?.layers?.join(' ') ?? '',
+      coverEnText,
       cn?.materialsCn?.layers?.join(' ') ?? '',
       cn?.materialsCn?.cover ?? '',
       sizeText,

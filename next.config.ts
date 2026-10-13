@@ -21,8 +21,12 @@ const config = (phase: string): NextConfig => ({
     return moved.map(([source, destination]) => ({ source, destination, permanent: false }));
   },
   // Phones must pick up a new service worker on the next visit, even behind a caching proxy or CDN.
+  // Product photos keep their file names when they are replaced, so they are revalidated the same way.
   async headers() {
-    return [{ source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache' }] }];
+    return [
+      { source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
+      { source: '/products/:file(.+\\.jpg)', headers: [{ key: 'Cache-Control', value: 'no-cache' }] },
+    ];
   },
 });
 export default config;

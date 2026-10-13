@@ -1672,7 +1672,7 @@
       "detail": "报价表包装 113*75*35（CBM 0.3）与图册 64*34*112（CBM 0.24）差异显著，但各自与自身 CBM 算术自洽。属真实包装方案版本差异。",
       "recommendedAuthority": "QUOTATION-2026",
       "status": "RESOLVED",
-      "resolution": "业务确认：Y-614 现行包装为 113*75*35，采用报价表值。"
+      "resolution": "业务确认：Y-614 现行包装为 113*75*35，采用报价表值。2026-10-13 起被取代：压缩沙发全部以 2026 图册为准，Y-614 包装为 64*34*112 / 67*34*112 / 67*37*112（与中文报价表一致）。"
     },
     {
       "id": "C-06",
@@ -1742,8 +1742,8 @@
       "field": "catalogPresence",
       "detail": "这 4 个型号在报价表中存在，但图册 25 页中未出现，故缺少系列归属、实物图与中英文材料名。",
       "recommendedAuthority": "NEEDS_INPUT",
-      "status": "OPEN",
-      "resolution": "待业务补充图片与系列归属；系列字段暂留空并标记数据不完整。"
+      "status": "RESOLVED",
+      "resolution": "2026-10-13：LVANJU 2026 压缩沙发图册（中文版）已收录这 4 个型号，图片、尺寸与中文材料名均以该图册为准（catalog-2026-sofas.json）。"
     },
     {
       "id": "C-10",

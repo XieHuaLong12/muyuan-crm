@@ -66,7 +66,7 @@ export function ProductPicker({ catalog, currency, language, fx, adjustPct, last
               <button type="button" onClick={() => add(variant)} aria-label={`加入 ${variant.names[language]}`}>
                 {variant.image
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={`/${variant.image}`} alt="" width={52} height={40} loading="lazy" />
+                  ? <img src={`/${variant.image}`} alt="" width={52} height={39} loading="lazy" />
                   : <span className="bos-quote-thumb-missing" aria-hidden>—</span>}
                 <span className="bos-quote-catalog-name">
                   <strong>{variant.model}</strong>

@@ -177,7 +177,7 @@ jobs:
 
           # 美元价（英文报价表）与人民币价（中文报价表）并存
           check "SELECT COUNT(*) FROM ProductPrice WHERE currency='USD'" "58"
-          check "SELECT COUNT(*) FROM ProductPrice WHERE currency='CNY'" "62"
+          check "SELECT COUNT(*) FROM ProductPrice WHERE currency='CNY'" "66"
 
           # 渠道 MOQ：线上 10 / 线下 20
           check "SELECT COUNT(*) FROM ProductMoq WHERE channel='ONLINE' AND minQty=10" "30"
@@ -189,14 +189,20 @@ jobs:
           # 待核对原因必须分类：算术疑点应很少（真正需要修的只有个别几处），
           # 大部分是「两份资料不一致」或「图册未收录」，只需业务决定。
           atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[算术]%'" "1"
-          # 回归护栏：英文报价表本身有多处 CBM 与包装算不通，实测 13 处；
+          # 回归护栏：报价表本身有多处 CBM 与包装算不通，实测 10 处；
           # 上限设为 20，既能容纳已知问题，又能在数量失控时报警。
           check "SELECT (SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[算术]%') <= 20" "1"
           atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[来源]%'" "5"
-          atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[资料缺失]%'" "5"
-          # 中英文不一致必须在具体变体上可见，且型号编号对调整型号登记
-          atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '%中英文报价表不一致%'" "5"
-          atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '%CN-10%'" "1"
+          atleast "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '[资料缺失]%'" "1"
+
+          # 压缩沙发以 2026 图册为准（docs/product-os/catalog-2026-sofas.json）：
+          # Y-615 是 105 / 150 / 210 宽的单座，Y-616 是 290 × 95 × 85（英文报价表把两者记反了）
+          check "SELECT GROUP_CONCAT(CONCAT(v.lengthCm,'x',v.widthCm,'x',v.heightCm) ORDER BY v.lengthCm) FROM ProductVariant v JOIN Product p ON p.id=v.productId WHERE p.model='Y-615'" "105x105x87,150x105x87,210x105x87"
+          check "SELECT GROUP_CONCAT(CONCAT(v.lengthCm,'x',v.widthCm,'x',v.heightCm)) FROM ProductVariant v JOIN Product p ON p.id=v.productId WHERE p.model='Y-616'" "290x95x85"
+          check "SELECT CAST(pr.unitPrice AS CHAR) FROM ProductPrice pr JOIN ProductVariant v ON v.id=pr.variantId WHERE v.sku='Y-616-290x95x85' AND pr.currency='CNY'" "1750.00"
+          # 已按图册定下的来源差异只留档，不计入待核对；仍待核对的只剩算不通或图册自己标注待确认的
+          check "SELECT COUNT(*) FROM ProductVariant WHERE reviewNote LIKE '%中英文报价表不一致%'" "0"
+          atleast "SELECT COUNT(*) FROM ProductVariant WHERE needsReview=0 AND reviewNote LIKE '[已确认]%'" "20"
 
           # 成本与毛利：新表 + Setting 汇率列，且默认值为 6.70
           check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='ProductCost'" "1"
@@ -205,8 +211,8 @@ jobs:
           check "SELECT COUNT(*) FROM ProductCost" "0"
           # 成本绝不出现在普通产品列表接口的返回结构里（由 tests/product-cost.test.ts 断言）
 
-          # 产品图：26 张图 + 26 条记录
-          check "SELECT COUNT(*) FROM ProductMedia WHERE role='HERO'" "26"
+          # 产品图：28 张图 + 28 条记录（M-801 / M-802 暂无图）
+          check "SELECT COUNT(*) FROM ProductMedia WHERE role='HERO'" "28"
           check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Product'" "1"
 
       - name: Verify action center and Meta Lead Ads schema
