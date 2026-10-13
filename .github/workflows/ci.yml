@@ -211,8 +211,8 @@ jobs:
           check "SELECT COUNT(*) FROM ProductCost" "0"
           # 成本绝不出现在普通产品列表接口的返回结构里（由 tests/product-cost.test.ts 断言）
 
-          # 产品图：26 张图 + 26 条记录
-          check "SELECT COUNT(*) FROM ProductMedia WHERE role='HERO'" "26"
+          # 产品图：28 张图 + 28 条记录（M-801 / M-802 暂无图）
+          check "SELECT COUNT(*) FROM ProductMedia WHERE role='HERO'" "28"
           check "SELECT COUNT(*) FROM information_schema.tables WHERE TABLE_SCHEMA='muyuan_test' AND TABLE_NAME='Product'" "1"
 
       - name: Verify action center and Meta Lead Ads schema
