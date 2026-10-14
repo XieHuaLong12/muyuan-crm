@@ -263,7 +263,7 @@ Growth Center 广告表现接入 Meta Marketing API（System User Token + ads_re
 
 ## Gupshup CTWA 实时身份链（第一生产里程碑）
 
-Gupshup V2 与 Meta 格式 V3 通过带 `x-webhook-secret` 的回调进入已有 CRM。有效新号码自动建客；同号冲突与软删除客户保持待认领。CTWA referral 存入统一归因账本，`source_type=post` 不冒充广告，已获取的名称保留快照。旧 Lead Form、Cloud API、Local Sync 均保留。
+Gupshup V2 与 Meta 格式 V3 通过带 `x-webhook-secret` 的回调进入已有 CRM。客户发来消息时按号码在客户中心查找（带不带 `+`、空格或横线都算同一号码，回收站里的客户不算）：找到一位就归入，找不到就自动建客，对应多位客户时进入消息中心「未关联」由管理员选择（2026-10-14 起，见 [消息中心](docs/MESSAGE_CENTER.md)）。CTWA referral 存入统一归因账本，`source_type=post` 不冒充广告，已获取的名称保留快照。旧 Lead Form、Cloud API、Local Sync 均保留。
 
 普通发送按当前 provider/business account 的已验证客户入站时间计算 24 小时窗口；历史同步与另一业务号码的聊天不能开放该窗口。缺少时间为 UNKNOWN，过期为 CLOSED。发送 API 接受只记录 ENQUEUED；sent/delivered/read 依真实回执推进。回执可先于发送落库，持久化后补齐，状态不倒退。客户 STOP/UNSUBSCRIBE/不要联系会退订，主动 CTWA 咨询不自动授予营销同意。
 

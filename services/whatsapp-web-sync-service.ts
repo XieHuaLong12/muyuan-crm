@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
-import { lockIdentity, resolveContact } from './contact-identity-service';
+import { lockIdentity, resolveActiveContact } from './contact-identity-service';
 import { ensureConversation, messageFacts } from './conversation-identity-service';
 import { canonicalPhone } from '@/lib/contact-identity';
 import { retryTransaction } from '@/lib/transaction-retry';
@@ -64,7 +64,7 @@ export async function previewWebSync(input:unknown, user:Actor, accountPhone:str
     if(duplicates.has(key)||seen.has(key)){items.push({sourceMessageId:m.sourceMessageId,phone:e164(m.peerPhone),status:'duplicate' as const,reason:'已同步或已入待认领'});continue;}
     seen.add(key);
     const match=matchPhone(m.peerPhone,list);
-    const global=await resolveContact({phones:e164(m.peerPhone)?[e164(m.peerPhone)!]:[]});
+    const global=await resolveActiveContact({phones:e164(m.peerPhone)?[e164(m.peerPhone)!]:[]});
     if(match.status==='matched'&&global.status==='MATCHED'&&await exactCrossSourceMessage(db,{nativeId:m.sourceMessageId,accountPhone,peerPhone:m.peerPhone||'',direction:m.direction,source:'whatsapp_web',customerId:match.customer.id})){
       items.push({sourceMessageId:m.sourceMessageId,phone:match.phone,status:'duplicate' as const,reason:'同一业务号码的原生 WhatsApp ID 已在实时渠道保存'});continue;
     }

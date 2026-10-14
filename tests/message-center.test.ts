@@ -10,9 +10,10 @@ import { parseGupshup } from '../lib/gupshup';
 import { hashPassword } from '../lib/auth';
 import { ingestWhatsAppWebhook } from '../services/whatsapp-webhook-service';
 import { archiveInboundMedia, inboundMediaRef, messageMediaAsset, messageMediaHref, signedMediaUrl } from '../services/whatsapp-media-service';
-import { inboxConversations, inboxThread, linkCandidates, linkUnmatchedNumber, unreadConversationCount } from '../services/inbox-service';
+import { inboxConversations, inboxThread, linkCandidates, linkUnmatchedNumber, retryUnmatchedNumbers, unreadConversationCount } from '../services/inbox-service';
+import { identityKey } from '../lib/contact-identity';
 import { listTemplates, renderTemplate, sendTemplateMessage, templateVariables } from '../services/whatsapp-template-service';
-import { sendWhatsAppMessage } from '../services/whatsapp-message-service';
+import { recipientNumber, sendWhatsAppMessage } from '../services/whatsapp-message-service';
 import { notificationFeed } from '../services/notification-service';
 import { workspaceNavigation } from '../lib/role-workspace';
 import { GET as mediaRoute } from '../app/api/whatsapp/media/[id]/route';
@@ -245,4 +246,50 @@ test('templates: approved list read from Gupshup, variables required, sent by a 
       await deleteTestCustomers({ where: { id: customer.id } });
     }
   });
+});
+
+test('inbound numbers: "+" optional, deleted customers ignored, waiting messages re-matched into new customers', async () => {
+  const digits = () => `86158${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+  const typed = digits(), retired = digits(), waiting = digits();
+  const admin = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } }), actor = actorOf(admin);
+  const ids: string[] = [];
+  const phones = [typed, retired, waiting];
+  try {
+    await withEnv({ GUPSHUP_SOURCE_NUMBER: business, GUPSHUP_APP_NAME: 'INBOX_TEST', GUPSHUP_API_KEY: 'inbox-key' }, async () => {
+      // Typed without "+" and with spaces in the phone field only: the same number, so no duplicate customer.
+      const existing = await db.customer.create({ data: { name: 'Typed without plus', ownerId: admin.id, phone: `${typed.slice(0, 2)} ${typed.slice(2, 5)} ${typed.slice(5)}`, contactKeysAt: new Date() } });
+      ids.push(existing.id);
+      const first = await ingestWhatsAppWebhook(v2(`typed-${typed}`, typed, 'text', { text: 'Hello, same number' }));
+      assert.equal(first.createdCustomers, 0); assert.equal(first.matchedCustomers, 1);
+      assert.equal((await db.whatsAppMessage.findUniqueOrThrow({ where: { waMessageId: `typed-${typed}` } })).customerId, existing.id);
+
+      // A number whose only customer is in the recycle bin is a new customer, not a conflict.
+      const gone = await db.customer.create({ data: { name: 'Deleted earlier', ownerId: admin.id, whatsapp: `+${retired}`, whatsappNormalized: retired, phoneE164: `+${retired}`, contactKeysAt: new Date(), deletedAt: new Date() } });
+      ids.push(gone.id);
+      const second = await ingestWhatsAppWebhook(v2(`retired-${retired}`, retired, 'text', { text: 'Hi again' }));
+      assert.equal(second.createdCustomers, 1);
+      const fresh = await db.whatsAppMessage.findUniqueOrThrow({ where: { waMessageId: `retired-${retired}` } });
+      assert.notEqual(fresh.customerId, gone.id);
+      assert.equal((await db.customer.findUniqueOrThrow({ where: { id: fresh.customerId } })).deletedAt, null);
+      assert.equal(await recipientNumber(await db.customer.findUniqueOrThrow({ where: { id: fresh.customerId } }), 'gupshup', business), retired, 'replies are not blocked by the deleted record');
+
+      // Messages that waited under the old rule are re-matched on request and open the 24-hour window.
+      const old = await db.customer.create({ data: { name: 'Deleted too', ownerId: admin.id, whatsapp: `+${waiting}`, whatsappNormalized: waiting, phoneE164: `+${waiting}`, contactKeysAt: new Date(), deletedAt: new Date() } });
+      ids.push(old.id);
+      const sentAt = new Date(Date.now() - 60_000);
+      await db.whatsAppUnmatchedMessage.create({ data: { sourceKey: identityKey('retry-test', waiting), provider: 'gupshup', providerAccountId: business, userId: admin.id, accountPhone: 'primary',
+        conversationId: waiting, sourceMessageId: `waiting-${waiting}`, peerPhone: `+${waiting}`, peerName: 'Waiting buyer', direction: 'inbound', sentAt, content: 'Price please',
+        attachments: JSON.stringify({ messageType: 'TEXT', raw: { id: `waiting-${waiting}`, type: 'text', payload: { text: 'Price please' } } }), reason: 'AMBIGUOUS' } });
+      const retry = await retryUnmatchedNumbers(actor, {});
+      assert.ok(retry.createdCustomers >= 1); assert.ok(retry.imported >= 1);
+      const moved = await db.whatsAppMessage.findFirstOrThrow({ where: { sourceMessageId: `waiting-${waiting}` }, include: { customer: true, conversation: true } });
+      assert.equal(moved.customer.name, 'Waiting buyer'); assert.equal(moved.customer.deletedAt, null);
+      assert.equal(moved.conversation?.lastCustomerMessageAt?.getTime(), sentAt.getTime());
+      assert.equal(await db.whatsAppUnmatchedMessage.count({ where: { peerPhone: `+${waiting}`, status: 'PENDING' } }), 0);
+      await assert.rejects(retryUnmatchedNumbers({ ...actor, role: 'SALES' }, {}), (e: { status?: number }) => e.status === 403);
+    });
+  } finally {
+    await db.whatsAppUnmatchedMessage.deleteMany({ where: { peerPhone: { in: phones.map(p => `+${p}`) } } });
+    await deleteTestCustomers({ where: { OR: [{ id: { in: ids } }, { whatsappNormalized: { in: phones } }] } });
+  }
 });

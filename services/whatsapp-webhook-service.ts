@@ -124,6 +124,25 @@ function parseTimestamp(value: string | undefined) {
 type Incoming = { id: string; phone: string; name: string; content: string; messageType: string; sentAt: Date; raw: unknown;
   providerOccurredAt?:Date|null; referral?:Record<string,unknown>|null; accountId?: string; source?: 'cloud_api' | 'gupshup'; direction?: 'INBOUND' | 'OUTBOUND'; sender?: string; mediaUrl?: string | null; mimeType?: string | null; fileName?: string | null };
 
+/** A new number writing to the business number: a new customer, owned by the lead assignment rules. Caller holds the identity lock. */
+export async function createInboundCustomer(tx: Prisma.TransactionClient, input: { phone: string; name: string; referral: boolean; at: Date }) {
+  const assignment=await import('./lead-assignment-service');
+  const owner=await assignment.intakeAdmin(tx);
+  const validPhone=canonicalPhone(input.phone,undefined,true);
+  if(!validPhone)throw new HttpError(400,'号码无效，无法建档');
+  const waId=normalizeWhatsApp(validPhone);
+  // WHATSAPP_DEFAULT_OWNER_EMAIL still wins when it names an active account; otherwise the lead assignment rules decide.
+  const intake=await assignment.resolveIntakeOwner(tx,process.env.WHATSAPP_DEFAULT_OWNER_EMAIL);
+  const c=await tx.customer.create({data:{name:input.name.slice(0,191)||validPhone,ownerId:intake.ownerId,
+    ...withPhoneCountry({phone:input.phone,whatsapp:input.phone,waId}),phoneE164:validPhone,whatsappNormalized:waId,
+    source:input.referral?'META_CLICK_TO_WHATSAPP':'WHATSAPP',sourceDetail:input.referral?'Gupshup referral':'Gupshup inbound',
+    inquiryAt:input.at,stage:'NEW',stageSource:'SYSTEM'}});
+  await rememberCustomerContacts(tx,c.id,'GUPSHUP_INBOUND');
+  await tx.stageHistory.create({data:{customerId:c.id,toStage:'NEW',changedBy:owner.id,note:input.referral?'WhatsApp 广告入站':'WhatsApp 入站'}});
+  await assignment.enterIntake(tx,c.id,owner.id,intake,input.referral?'WhatsApp 广告':'WhatsApp 入站');
+  return c.id;
+}
+
 async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
   const waId = normalizeWhatsApp(input.phone);
   const validPhone=canonicalPhone(input.phone,undefined,true);
@@ -148,18 +167,10 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
     const conversationInput={provider:input.source||'cloud_api',accountId:input.accountId||'primary',peerId:validPhone||waId||identityKey(input.phone),
       phone:input.phone,name:input.name,externalId:waId||identityKey(input.phone),sentAt:input.sentAt,direction,sourceMessageId:input.id};
     let linked=await ensureConversation(tx,conversationInput);
-    const assignment=await import('./lead-assignment-service');
-    const owner=await assignment.intakeAdmin(tx);
+    const owner=await (await import('./lead-assignment-service')).intakeAdmin(tx);
+    // A number no customer in the customer center has (deleted customers excluded) becomes a new customer.
     if(!linked.customerId&&linked.status==='UNMATCHED'&&validPhone&&input.source==='gupshup'&&direction==='INBOUND'){
-      // WHATSAPP_DEFAULT_OWNER_EMAIL still wins when it names an active account; otherwise the lead assignment rules decide.
-      const intake=await assignment.resolveIntakeOwner(tx,process.env.WHATSAPP_DEFAULT_OWNER_EMAIL);
-      const c=await tx.customer.create({data:{name:input.name.slice(0,191)||validPhone,ownerId:intake.ownerId,
-        ...withPhoneCountry({phone:input.phone,whatsapp:input.phone,waId}),phoneE164:validPhone,whatsappNormalized:waId,
-        source:input.referral?'META_CLICK_TO_WHATSAPP':'WHATSAPP',sourceDetail:input.referral?'Gupshup referral':'Gupshup inbound',
-        inquiryAt:input.providerOccurredAt||input.sentAt,stage:'NEW',stageSource:'SYSTEM'}});
-      await rememberCustomerContacts(tx,c.id,'GUPSHUP_INBOUND');
-      await tx.stageHistory.create({data:{customerId:c.id,toStage:'NEW',changedBy:owner.id,note:input.referral?'WhatsApp 广告入站':'WhatsApp 入站'}});
-      await assignment.enterIntake(tx,c.id,owner.id,intake,input.referral?'WhatsApp 广告':'WhatsApp 入站');
+      await createInboundCustomer(tx,{phone:input.phone,name:input.name,referral:!!input.referral,at:input.providerOccurredAt||input.sentAt});
       linked=await ensureConversation(tx,conversationInput);delta.createdCustomers++;
     }
     if(linked.customerId&&input.source==='gupshup'&&direction==='INBOUND'){
