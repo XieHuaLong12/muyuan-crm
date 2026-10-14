@@ -5,10 +5,11 @@ import { getReminders } from './workflow-service';
 import { firstContactFocus } from './sales-team-service';
 import { TEST_LEAD_NOTE } from './meta-lead-service';
 import { todayWorkCounts } from './bos-sales-service';
+import { unreadConversationCount, unreadMessagesSince } from './inbox-service';
 
 export type NotificationItem = {
   id: string;
-  kind: 'POOL_LEAD' | 'ASSIGNED' | 'FIRST_CONTACT_OVERDUE' | 'REPEAT_SUBMISSION' | 'TASK_DUE' | 'TASK_OVERDUE' | 'LEAD_NEEDS_HUMAN';
+  kind: 'POOL_LEAD' | 'ASSIGNED' | 'FIRST_CONTACT_OVERDUE' | 'REPEAT_SUBMISSION' | 'TASK_DUE' | 'TASK_OVERDUE' | 'LEAD_NEEDS_HUMAN' | 'NEW_MESSAGE';
   title: string;
   body: string;
   href: string;
@@ -29,7 +30,7 @@ export async function notificationFeed(user: Actor) {
   // Administrators see every reminder in the bell count, but are only interrupted for their own work:
   // other people's tasks are announced to the people who own them.
   const personal: Actor = { ...user, role: 'SALES' };
-  const [settings, reminders, ownReminders, focus, assignments, poolRows, oldestPool, humanEvents, todayWork] = await Promise.all([
+  const [settings, reminders, ownReminders, focus, assignments, poolRows, oldestPool, humanEvents, todayWork, unreadConversations, newMessages] = await Promise.all([
     db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { adLeadFirstContactMinutes: true } }),
     getReminders(user),
     admin ? getReminders(personal) : Promise.resolve(null),
@@ -46,6 +47,9 @@ export async function notificationFeed(user: Actor) {
       orderBy: { createdAt: 'desc' }, take: 10, select: { leadgenId: true, error: true, createdAt: true } }) : Promise.resolve([]),
     // Salespeople see one number for today's work: the same count as the first tab of /sales.
     admin ? Promise.resolve({ today: 0, todayOverdue: 0 }) : todayWorkCounts(user, now),
+    // Customer messages interrupt the customer's owner, administrators included for their own customers.
+    unreadConversationCount(user),
+    unreadMessagesSince(user, since),
   ]);
   const items: NotificationItem[] = [];
   for (const c of poolRows) {
@@ -74,11 +78,17 @@ export async function notificationFeed(user: Actor) {
     items.push({ id: `lead-human:${e.leadgenId}`, kind: 'LEAD_NEEDS_HUMAN', title: testLead ? '收到 Meta 测试线索' : '广告线索需要人工处理', urgent: false, at: e.createdAt.toISOString(),
       href: '/growth/intake', body: testLead ? '接入已打通；测试工具的占位数据没有联系方式，不会建客户' : e.error.includes('AMBIGUOUS') ? '联系方式对应多个客户，请认领到正确的客户' : '线索缺少可确认的手机号或邮箱，请人工认领' });
   }
+  const media: Record<string, string> = { IMAGE: '[图片]', VIDEO: '[视频]', AUDIO: '[语音]', VOICE: '[语音]', DOCUMENT: '[文件]', STICKER: '[贴纸]' };
+  for (const m of newMessages) {
+    const text = /^\[[^\]]*\]$/.test(m.content.trim()) || !m.content.trim() ? media[m.messageType] ?? '[消息]' : m.content;
+    items.push({ id: `message:${m.id}`, kind: 'NEW_MESSAGE', title: `${m.name} 发来新消息`, urgent: false, at: new Date(m.sentAt).toISOString(),
+      href: `/messages?customer=${encodeURIComponent(m.customerId)}`, body: text.length > 120 ? `${text.slice(0, 120)}…` : text });
+  }
   items.sort((a, b) => b.at.localeCompare(a.at));
   return {
     at: now.toISOString(),
     adLeadMinutes: settings.adLeadFirstContactMinutes,
-    counts: { reminders: reminders.length, pendingFirstContact: focus.pending, overdueFirstContact: focus.overdue, pool: focus.pool, poolOldestAt: oldestPool?.createdAt.toISOString() ?? null, ...todayWork },
+    counts: { reminders: reminders.length, pendingFirstContact: focus.pending, overdueFirstContact: focus.overdue, pool: focus.pool, poolOldestAt: oldestPool?.createdAt.toISOString() ?? null, ...todayWork, unreadConversations },
     items,
   };
 }

@@ -26,11 +26,13 @@ export function parseGupshup(input: unknown) {
     const message = inbound.parse(event.payload);
     const phone = message.source || message.sender?.phone || '';
     const payload = message.payload;
+    // V2 files carry their name in `name`; older payloads used `filename`.
+    const fileName = field(payload, 'filename') || field(payload, 'name') || null;
     const content = field(payload, 'text') || field(payload, 'caption') || field(payload, 'title') ||
-      field(payload, 'filename') || `[${message.type.toUpperCase()}]`;
+      fileName || `[${message.type.toUpperCase()}]`;
     return { kind: 'message' as const, id: message.id, phone, name: message.sender?.name || '',
       content, referral: message.referral || null, providerOccurredAt: providerTime(event.timestamp),
-      mediaUrl: field(payload,'url') || null, mimeType: field(payload,'contentType') || null, fileName: field(payload,'filename') || null,
+      mediaUrl: field(payload,'url') || null, mimeType: field(payload,'contentType') || field(payload,'content-type') || null, fileName,
       messageType: message.type === 'file' ? 'DOCUMENT' : message.type.toUpperCase(), sentAt: providerTime(event.timestamp) || new Date(), raw: message };
   }
   if (event.type === 'message-event') {

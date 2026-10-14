@@ -5,6 +5,7 @@ import { gupshupSource } from '@/lib/gupshup';
 import { validateWhatsAppWebhook, ingestWhatsAppWebhook } from './whatsapp-webhook-service';
 import { syncCustomerWorkflow } from './workflow-service';
 import { updateWhatsAppStage } from './whatsapp-stage-service';
+import { archiveInboundMediaQuietly } from './whatsapp-media-service';
 
 type ReceiptKind = 'WHATSAPP' | 'META_LEADS';
 const kindSchema = z.enum(['WHATSAPP', 'META_LEADS']);
@@ -37,6 +38,8 @@ export async function processWebhookReceipt(id: string) {
     }
     const result = await ingestWhatsAppWebhook(detail.payload);
     await db.syncJob.update({ where: { id }, data: { status: 'OK', completedAt: new Date(), processed: result.received + result.outboundEchoes, succeeded: result.matchedCustomers } });
+    // Copy received photos, voice notes and videos before the provider's link expires; a failure is retried on viewing.
+    await archiveInboundMediaQuietly(result.mediaMessageIds);
     for (const customerId of new Set(result.customerIds)) {
       try { await syncCustomerWorkflow(customerId); }
       catch { console.error('[WhatsApp Workflow] RETRY_PENDING'); }

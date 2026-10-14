@@ -109,12 +109,14 @@ tests/                  核心指标与边界单元测试
 | --- | --- | --- |
 | 管理员 | 经营总览 | 经营驾驶舱 `/command-center` · 来源与国家 `/command-center/analysis` · 财务 `/finance` |
 | 管理员 | 客户 | 客户列表与档案 `/customers`（含待分配、回收站、智能导入）· 跟进队列 `/sales` · 销售看板 `/crm` |
+| 管理员 | 消息 | WhatsApp 消息中心 `/messages`（全部客户，可按负责人筛选；处理未关联号码） |
 | 管理员 | 任务 | 团队任务 `/tasks` |
 | 管理员 | 订单 | 订单 `/orders` · 产品库 `/products` · 报价单 `/products/quotes`（含报价设置）· 运费库 `/products/freight` · 利润 `/products/margin` |
 | 管理员 | 广告与线索 | 广告效果 `/analytics/ads` · 会话质量 · 丢单原因 · 数据质量 · 线索接入 `/growth/intake` |
 | 管理员 | 团队 | 销售业绩与账号 `/team` · 目标 `/targets` · 沟通监督 `/communication` |
 | 管理员 | 设置 | 公司设置 `/settings` · 集成与接入 `/settings/integrations`（表单询盘、Meta、WhatsApp 与排查工具） |
 | 销售 | 今日工作 | 今日跟进 `/sales`（待首联、到期跟进与到期待办，按截止时间排序）· 全部待办 `/tasks` |
+| 销售 | 消息 | WhatsApp 消息中心 `/messages`（自己负责的客户） |
 | 销售 | 我的客户 | 客户列表与档案 `/customers` · 销售看板 `/crm` |
 | 销售 | 产品与报价 | 产品库 `/products` · 报价单 `/products/quotes` · 运费库 `/products/freight`（只读） |
 | 销售 | 我的订单 / 我的业绩 | `/orders` · `/sales/performance` |
@@ -269,4 +271,4 @@ Gupshup V2 与 Meta 格式 V3 通过带 `x-webhook-secret` 的回调进入已有
 
 模板中心、营销同意管理、召回队列和召回订单归因按 [实施计划](docs/GUPSHUP_CTWA_IMPLEMENTATION.md) 接续开发：先验收一条真实 CTWA 入站，不能用本地 fixture 宣称已接通生产。升级仅追加 `20261004023000_gupshup_live_identity`；回滚应用时保留新增列和回执表。
 
-销售使用待跟进客户清单，在档案登记跟进、报价与成交；聊天记录仅管理员在“销售沟通监督”按负责人查阅。见 [角色工作空间](docs/ROLE_WORKSPACES.md)。
+销售使用待跟进客户清单，在档案登记跟进、报价与成交；与客户的 WhatsApp 沟通在消息中心 `/messages`，通过公司 Gupshup 业务号收发，销售看自己的客户、管理员看全部。客户发来的图片、语音、视频和文件会保存到 `MEDIA_STORAGE_DIR`。见 [消息中心](docs/MESSAGE_CENTER.md) 与 [角色工作空间](docs/ROLE_WORKSPACES.md)。

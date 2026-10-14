@@ -41,6 +41,7 @@ export function CustomerDetail({ customer: c, boot, backHref, onEdit, onFollow, 
           <button onClick={onAnalyze} disabled={!boot.deepseekConfigured || analyzingAi}>{analyzingAi ? 'AI分析中…' : boot.deepseekConfigured ? 'AI智能分析' : '未配置 DeepSeek'}</button>
           {admin && <button onClick={onAssign}>{c.pendingAssignment ? '分配客户' : '转交'}</button>}
           <button onClick={onEdit}>编辑资料</button>
+          <button onClick={() => { window.location.href = `/messages?customer=${encodeURIComponent(c.id)}`; }}>WhatsApp 聊天</button>
           <button onClick={onFollow}>记录跟进</button>
           <button className="primary" onClick={onDeal}>新增成交订单</button>
         </div>

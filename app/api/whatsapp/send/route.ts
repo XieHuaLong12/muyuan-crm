@@ -5,7 +5,7 @@ import { sendWhatsAppMessage } from '@/services/whatsapp-message-service';
 export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   return handle(async () => {
-    const user = await requireUser(true);
+    const user = await requireUser();
     return ok(await sendWhatsAppMessage(await req.json(), user, req.nextUrl.origin));
   });
 }

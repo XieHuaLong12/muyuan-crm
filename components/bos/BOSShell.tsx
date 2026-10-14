@@ -68,9 +68,10 @@ export function BOSShell({ boot, children }: { boot: Bootstrap; children: React.
   const counts = feed?.counts;
   const poolWait = minutesSince(counts?.poolOldestAt ?? null);
   const poolLate = !!counts?.pool && !!feed && poolWait >= feed.adLeadMinutes;
+  const messages = counts ? { count: counts.unreadConversations, urgent: false } : undefined;
   const badges = admin
-    ? { pool: counts ? { count: counts.pool, urgent: poolLate } : undefined }
-    : { today: counts ? { count: counts.today, urgent: counts.todayOverdue > 0 } : undefined };
+    ? { pool: counts ? { count: counts.pool, urgent: poolLate } : undefined, messages }
+    : { today: counts ? { count: counts.today, urgent: counts.todayOverdue > 0 } : undefined, messages };
   return (
     <div className="bos bos-v2">
       <a className="bos-skip" href="#bos-main">跳到主要内容</a>

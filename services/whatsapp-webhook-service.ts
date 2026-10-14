@@ -11,6 +11,7 @@ import { rememberCustomerContacts } from './contact-identity-service';
 import { recordCtwaAttribution } from './ctwa-attribution-service';
 import { z } from 'zod';
 import { exactCrossSourceMessage } from './whatsapp-dedup-service';
+import { MEDIA_MESSAGE_TYPES } from './whatsapp-media-service';
 
 const externalId=z.string().max(191);
 const cloudMessage=z.object({from:externalId.optional(),to:externalId.optional(),id:externalId.optional(),
@@ -66,6 +67,8 @@ export type WhatsAppWebhookResult = {
   duplicateMessages: number;
   ambiguous: number;
   statusesUpdated: number;
+  /** Newly stored inbound photos, videos, voice notes and documents whose files still need copying. */
+  mediaMessageIds: string[];
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -126,9 +129,9 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
   const validPhone=canonicalPhone(input.phone,undefined,true);
   const direction = input.direction || 'INBOUND';
   if (direction === 'INBOUND') result.received++; else result.outboundEchoes++;
-  let delta:Pick<WhatsAppWebhookResult,'customerIds'|'matchedCustomers'|'duplicateMessages'|'ambiguous'|'createdCustomers'>={customerIds:[],matchedCustomers:0,duplicateMessages:0,ambiguous:0,createdCustomers:0};
+  let delta:Pick<WhatsAppWebhookResult,'customerIds'|'matchedCustomers'|'duplicateMessages'|'ambiguous'|'createdCustomers'|'mediaMessageIds'>={customerIds:[],matchedCustomers:0,duplicateMessages:0,ambiguous:0,createdCustomers:0,mediaMessageIds:[]};
   await retryTransaction(()=>db.$transaction(async tx => {
-    delta={customerIds:[],matchedCustomers:0,duplicateMessages:0,ambiguous:0,createdCustomers:0};
+    delta={customerIds:[],matchedCustomers:0,duplicateMessages:0,ambiguous:0,createdCustomers:0,mediaMessageIds:[]};
     // One short database lock serializes identity resolution across app instances.
     // No provider or AI requests run while holding this lock.
     await tx.$queryRaw(Prisma.sql`SELECT id FROM Setting WHERE id = 'system' FOR UPDATE`);
@@ -188,13 +191,14 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
     const customerId=linked.customerId;
     delta.matchedCustomers++;
     if(direction==='INBOUND')delta.customerIds.push(customerId);
-    await tx.whatsAppMessage.create({ data: { customerId, conversationId:linked.conversation.id, sourceKey:key, waMessageId: existing ? null : input.id,
+    const stored = await tx.whatsAppMessage.create({ data: { customerId, conversationId:linked.conversation.id, sourceKey:key, waMessageId: existing ? null : input.id,
       sourceMessageId:input.id,providerAccountId:input.accountId||'primary',providerOccurredAt:input.providerOccurredAt,
       sourcePhone:direction==='INBOUND'?validPhone:canonicalPhone(input.sender,undefined,true),destinationPhone:direction==='INBOUND'?canonicalPhone(input.accountId,undefined,true):validPhone,
       waId, direction, source:input.source||'cloud_api',
       sender: input.sender || (direction === 'INBOUND' ? waId : 'BUSINESS'), content: input.content,
       messageType: input.messageType, mediaUrl: input.mediaUrl?.startsWith('https://') ? input.mediaUrl : null, mimeType: input.mimeType, fileName: input.fileName, status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT',
-      sentAt: input.sentAt, raw: JSON.stringify(input.raw) } });
+      sentAt: input.sentAt, raw: JSON.stringify(input.raw) }, select: { id: true } });
+    if (direction === 'INBOUND' && MEDIA_MESSAGE_TYPES.has(input.messageType)) delta.mediaMessageIds.push(stored.id);
     await messageFacts(tx,customerId,input.sentAt,direction);
     if(direction==='INBOUND'&&input.providerOccurredAt){
       await tx.whatsAppConversation.updateMany({where:{id:linked.conversation.id,OR:[{lastCustomerMessageAt:null},{lastCustomerMessageAt:{lt:input.providerOccurredAt}}]},data:{lastCustomerMessageAt:input.providerOccurredAt}});
@@ -204,7 +208,7 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
       await tx.identityAudit.create({data:{entityType:'WHATSAPP_CONSENT',entityId:customerId,actorId:'SYSTEM',reason:'客户明确退订',detail:{messageId:input.id,provider:input.source}}});
     }
   }));
-  result.customerIds.push(...delta.customerIds);result.matchedCustomers+=delta.matchedCustomers;result.duplicateMessages+=delta.duplicateMessages;result.ambiguous+=delta.ambiguous;result.createdCustomers+=delta.createdCustomers;
+  result.customerIds.push(...delta.customerIds);result.mediaMessageIds.push(...delta.mediaMessageIds);result.matchedCustomers+=delta.matchedCustomers;result.duplicateMessages+=delta.duplicateMessages;result.ambiguous+=delta.ambiguous;result.createdCustomers+=delta.createdCustomers;
 }
 
 export async function applyWhatsAppStatus(id: string, status: string, gsId?: string,account?:{provider:string;accountId:string}) {
@@ -264,7 +268,7 @@ export function validateWhatsAppWebhook(input: unknown) {
 
 async function ingest(input: unknown): Promise<WhatsAppWebhookResult> {
   const result: WhatsAppWebhookResult = { customerIds: [], received: 0, outboundEchoes: 0, createdCustomers: 0,
-    matchedCustomers: 0, duplicateMessages: 0, ambiguous: 0, statusesUpdated: 0 };
+    matchedCustomers: 0, duplicateMessages: 0, ambiguous: 0, statusesUpdated: 0, mediaMessageIds: [] };
   const root = asObject(input);
   if (!root) throw new HttpError(400, 'Webhook 必须为 JSON 对象');
   if (root.object !== 'whatsapp_business_account') {
@@ -295,9 +299,12 @@ async function ingest(input: unknown): Promise<WhatsAppWebhookResult> {
         const phone = outbound ? message.to : message.from;
         if (!message.id || !phone) continue;
         const name = value.contacts?.find(c => normalizeWhatsApp(c.wa_id) === normalizeWhatsApp(phone))?.profile?.name || '';
+        const media = asObject(message[message.type||'']);
         try{await storeMessage({ id: message.id, phone, name, content: extractWhatsAppMessageText(message),
           messageType: (message.type || 'unknown').toUpperCase(), sentAt: parseTimestamp(message.timestamp), raw: message,
-          mimeType:typeof asObject(message[message.type||''])?.mime_type==='string'?String(asObject(message[message.type||''])!.mime_type):null,
+          mimeType:typeof media?.mime_type==='string'?media.mime_type:null,
+          // Gupshup V3 adds a download link next to Meta's media id; Cloud API only has the id (fetched later with the token).
+          mediaUrl:typeof media?.url==='string'?media.url:null,
           fileName:typeof asObject(message.document)?.filename==='string'?String(asObject(message.document)!.filename):null,
           providerOccurredAt:providerTime(message.timestamp,true),referral:asObject(message.referral),
           source:provider,accountId:accountId!, direction: outbound ? 'OUTBOUND' : 'INBOUND', sender: message.from }, result);}catch{recordFailures++;}
