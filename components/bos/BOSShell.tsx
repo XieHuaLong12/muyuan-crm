@@ -100,7 +100,7 @@ export function BOSShell({ boot, children }: { boot: Bootstrap; children: React.
         {error && <p className="bos-sync-error" role="status">{error}，将在后台重试。</p>}
         <main id="bos-main" className="bos-main"><InstallAppBanner /><SectionTabs path={path} role={boot.user.role} />{children}</main>
       </div>
-      <LiveNotifications userId={boot.user.id} items={feed?.items ?? []} />
+      <LiveNotifications userId={boot.user.id} items={feed?.items} />
     </div>
   );
 }

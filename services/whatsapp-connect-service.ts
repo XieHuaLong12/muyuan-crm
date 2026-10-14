@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { openSecret, sealSecret } from '@/lib/secret';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { HttpError } from '@/lib/auth';
@@ -6,27 +6,7 @@ import { graphVersion } from '@/lib/meta-graph';
 
 const graphBase = () => `https://graph.facebook.com/${graphVersion()}`;
 
-const encryptionKey = () => {
-  if (!process.env.AUTH_SECRET) throw new Error('AUTH_SECRET 未配置');
-  return createHash('sha256').update(process.env.AUTH_SECRET).digest();
-};
-
-function encrypt(value: string) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', encryptionKey(), iv);
-  const data = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
-  return [iv, cipher.getAuthTag(), data].map((part) => part.toString('base64')).join('.');
-}
-
-export function decryptWhatsAppAccessToken(value: string) {
-  if (!value) return '';
-  const parts = value.split('.');
-  if (parts.length !== 3) throw new Error('WhatsApp access token 格式无效');
-  const [iv, tag, data] = parts.map((part) => Buffer.from(part, 'base64'));
-  const decipher = createDecipheriv('aes-256-gcm', encryptionKey(), iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
-}
+export const decryptWhatsAppAccessToken = openSecret;
 
 export type WhatsAppConnectionStatus = {
   configured: boolean;
@@ -211,7 +191,7 @@ export async function completeWhatsAppEmbeddedSignup(input: unknown) {
         phoneNumberId: meta.id,
         displayPhoneNumber: meta.displayPhoneNumber,
         verifiedName: meta.verifiedName,
-        encryptedAccessToken: encrypt(token.accessToken),
+        encryptedAccessToken: sealSecret(token.accessToken),
         tokenExpiresAt: expiresAt,
         subscribedAt: now,
         connectedAt: now,

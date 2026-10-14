@@ -9,6 +9,7 @@ export const dynamic='force-dynamic';
  */
 export async function POST(req:NextRequest){
   if(!cronSecretValid(req.headers.get('x-cron-secret')))return Response.json({success:false,error:'未授权'},{status:401});
-  const [{runLeadIntakeJob},{handle,ok}]=await Promise.all([import('@/services/meta-lead-intake-service'),import('@/lib/http')]);
-  return handle(async()=>ok(await runLeadIntakeJob()));
+  const [{runLeadIntakeJob},{deliverLeadAlerts},{handle,ok}]=await Promise.all([import('@/services/meta-lead-intake-service'),import('@/services/lead-alert-service'),import('@/lib/http')]);
+  // Leads the poll brought in ring the phones too; alerts a webhook run could not deliver are sent here.
+  return handle(async()=>{const intake=await runLeadIntakeJob();return ok({...intake,alerts:await deliverLeadAlerts()});});
 }

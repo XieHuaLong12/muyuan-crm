@@ -34,12 +34,17 @@ export async function processWebhookReceipt(id: string) {
       const result = await handleWebhookPayload(detail.payload);
       if (result.error) throw new Error('META_LEAD_PROCESSING_FAILED');
       await db.syncJob.update({ where: { id }, data: { status: 'OK', completedAt: new Date(), processed: result.accepted, succeeded: result.accepted } });
+      try { await (await import('./lead-alert-service')).deliverLeadAlerts(); }
+      catch { console.error('[Lead alerts] RETRY_PENDING'); }
       return;
     }
     const result = await ingestWhatsAppWebhook(detail.payload);
     await db.syncJob.update({ where: { id }, data: { status: 'OK', completedAt: new Date(), processed: result.received + result.outboundEchoes, succeeded: result.matchedCustomers } });
     // Copy received photos, voice notes and videos before the provider's link expires; a failure is retried on viewing.
     await archiveInboundMediaQuietly(result.mediaMessageIds);
+    // New WhatsApp leads ring the phones like ad forms do.
+    try { await (await import('./lead-alert-service')).deliverLeadAlerts(); }
+    catch { console.error('[Lead alerts] RETRY_PENDING'); }
     for (const customerId of new Set(result.customerIds)) {
       try { await syncCustomerWorkflow(customerId); }
       catch { console.error('[WhatsApp Workflow] RETRY_PENDING'); }

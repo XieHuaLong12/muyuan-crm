@@ -22,6 +22,7 @@ export const customerListQuery = z.object({
   period: z.enum(['', 'WEEK', 'MONTH', 'YEAR']).default(''),
   date: dateKey,
   assign: z.enum(['', 'pending']).default(''),
+  grade: z.enum(['', 'A', 'B', 'C', 'D', 'none']).default(''),
   // productInterest stays accepted so older bookmarked links still open.
   sort: z.enum(['priority', 'name', 'inquiryAt', 'country', 'source', 'whatsapp', 'productInterest', 'stage', 'isQualified', 'estimatedOrderValue', 'lastFollowUpAt', 'nextFollowUpAt', 'owner']).default('priority'),
   dir: z.enum(['asc', 'desc']).default('asc'),
@@ -50,6 +51,7 @@ function listWhere(user: Actor, q: CustomerListQuery, timezone: string): Prisma.
   if (q.source) and.push({ source: q.source });
   if (q.owner) and.push({ ownerId: q.owner });
   if (q.assign === 'pending') and.push({ pendingAssignment: true });
+  if (q.grade) and.push({ leadGrade: q.grade === 'none' ? '' : q.grade });
   if (q.product) and.push({ OR: [{ productInterest: { contains: q.product } }, { productModel: { contains: q.product } }] });
   if (q.q) {
     and.push({ OR: ['name', 'companyName', 'whatsapp', 'email', 'phone'].map(field => ({ [field]: { contains: q.q } })) });

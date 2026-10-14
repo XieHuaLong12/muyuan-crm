@@ -29,3 +29,10 @@
 .customer-card .stage-select:disabled{cursor:progress}
 .customer-card .stage-select option{color:#203b33}
 .stage-error{color:#a44b36;font-size:11px;max-width:180px;white-space:normal}
+/* Ad-form lead grade next to the customer's name. */
+.grade-chip{display:inline-grid;place-items:center;min-width:18px;height:18px;margin-left:6px;padding:0 4px;border-radius:5px;font-size:11px;font-weight:700;line-height:1;vertical-align:1px}
+.grade-a{background:#dff0e6;color:#11603e}
+.grade-b{background:#e6eef8;color:#2c5b8e}
+.grade-c{background:#f0f1f3;color:#66727b}
+.grade-d{background:#f7ebea;color:#a44b36}
+.grade-reason{font-size:12px;margin-top:4px}

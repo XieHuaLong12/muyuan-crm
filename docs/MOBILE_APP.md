@@ -21,11 +21,14 @@ CRM 可以安装到手机桌面：有自己的图标，点开全屏运行，没�
 
 ## 提醒通知
 
-在 App 顶部点「开启桌面通知」并允许后，新线索、新分配和到期任务会以系统通知弹出，点通知直接打开对应的客户或任务。
+在 App 顶部点「开启通知」并允许后，这台手机就登记到服务器。之后**App 关着也能收到**新线索和新分配的系统通知（Web Push），点通知直接打开对应的客户。
 
-- 安卓：Chrome / Edge 中安装的 App 支持。
-- iPhone：需要 iOS 16.4 及以上，并且必须是从桌面图标打开的 App（Safari 网页里没有通知权限）。
-- 提醒由打开着的 App 每 20 秒检查一次（后台每分钟一次）。**App 被完全关掉或被系统冻结后不会收到通知**——要在关闭状态下也推送，需要服务器端 Web Push（新增订阅表和推送服务），目前没有做。
+- 安卓：Chrome / Edge 中安装的 App 支持。A、B 级线索的通知会一直留在通知栏直到点开，并长振动。
+- iPhone：需要 iOS 16.4 及以上，并且必须是从桌面图标打开的 App（Safari 网页里没有通知权限）。iPhone 不允许网页 App 常驻通知或自定义铃声，通知按系统设置响一次。
+- 谁收到：每一条新表单都推给所有管理员（D 级和 24 小时前的旧留资不推）；线索分配给谁，就推给谁的手机；老客户再次留资推给负责人。
+- App 开着时：A、B 级（以及还没评完级的）新线索在页面顶部置顶并持续响铃，直到有人点「去处理」、关掉，或别人已经分配了它；C 级弹一次并响一声；D 级不打扰。
+- 退出登录时这台手机不再接收这个账号的提醒；换人登录会自动改为新账号。
+- 推送服务地址只接受 Google、Apple、Mozilla、Microsoft 的官方推送服务。
 
 ## 没有网络时
 
@@ -37,7 +40,9 @@ CRM 可以安装到手机桌面：有自己的图标，点开全屏运行，没�
 | --- | --- |
 | `app/manifest.ts` | 应用名称、图标、全屏显示、主题色和长按快捷方式（`/manifest.webmanifest`） |
 | `app/icon.png`、`app/apple-icon.png`、`public/icons/` | 浏览器标签图标、iPhone 桌面图标、安卓图标（含可裁剪的 maskable 图标），由 `public/brand/lvanju-logo.jpg` 生成 |
-| `public/sw.js` | Service Worker：断网时返回离线页；点击通知打开对应页面。**不缓存页面和接口数据** |
+| `public/sw.js` | Service Worker：断网时返回离线页；收到服务器推送时显示通知（`push`），点击通知打开对应页面。**不缓存页面和接口数据** |
+| `services/push-service.ts`、`app/api/push`、`components/push-notifications.ts` | Web Push：设备登记 / 注销、VAPID 密钥（未配置环境变量时自动生成并加密保存）、发送与失效设备清理 |
+| `services/lead-alert-service.ts`、`LeadAlert` 表 | 线索提醒发件箱：与建客户 / 分配同一事务写入，响应返回后先评级再推送；定时任务和页面同步兜底补发 |
 | `public/offline.html` | 离线页 |
 | `components/pwa.tsx` | 生产环境注册 Service Worker；触屏设备上的安装提示条（`BOSShell` 页面顶部） |
 | `components/live-notifications.tsx` | 系统通知优先通过 Service Worker 显示（手机只支持这种方式），没有时退回网页通知 |

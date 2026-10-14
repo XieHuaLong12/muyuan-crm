@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { Actor, HttpError, requireAdmin } from '@/lib/auth';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { automatedTask, initializeFirstContact, syncCustomerWorkflow } from './workflow-service';
+import { queueLeadAlert } from './lead-alert-service';
 
 type Tx = Prisma.TransactionClient;
 
@@ -66,8 +67,11 @@ export async function resolveIntakeOwner(tx: Tx, preferredOwnerEmail?: string | 
 
 /** Records how an automatically created customer entered: pooled (no deadline yet) or assigned (deadline starts). */
 export async function enterIntake(tx: Tx, customerId: string, actorId: string, intake: IntakeOwner, channel: string) {
+  // Administrators hear about every new lead; a salesperson hears when one is theirs.
+  await queueLeadAlert(tx, customerId, 'NEW');
   if (!intake.pending) {
     await initializeFirstContact(tx, customerId, actorId, null, `${channel}：${intake.explicit ? '指定负责人' : '自动分配'}`);
+    await queueLeadAlert(tx, customerId, 'ASSIGNED', intake.ownerId);
     return;
   }
   await tx.customer.update({ where: { id: customerId }, data: { pendingAssignment: true, assignedAt: null, firstContactDueAt: null } });
@@ -104,6 +108,7 @@ export async function assignCustomers(input: unknown, user: Actor) {
       await tx.customer.update({ where: { id: customer.id }, data: { ownerId: owner.id } });
       const reason = v.reason || (customer.pendingAssignment ? '管理员从待分配池分配' : '管理员转交客户');
       await initializeFirstContact(tx, customer.id, user.id, customer.ownerId, reason);
+      if (owner.id !== user.id) await queueLeadAlert(tx, customer.id, 'ASSIGNED', owner.id);
       changed.push(customer.id);
     }
     return changed;
@@ -130,6 +135,7 @@ export async function flagRepeatSubmission(tx: Tx, customerId: string, info: { l
     const admin = await intakeAdmin(tx);
     await tx.customer.update({ where: { id: customerId }, data: { ownerId: admin.id, pendingAssignment: true, assignedAt: null, firstContactDueAt: null } });
     await tx.customerAssignment.create({ data: { customerId, fromOwnerId: c.ownerId, toOwnerId: admin.id, actorId, reason: '负责人已停用，客户再次留资后进入待分配池' } });
+    await queueLeadAlert(tx, customerId, 'NEW');
     return;
   }
   const { adLeadFirstContactMinutes: minutes } = await tx.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { adLeadFirstContactMinutes: true } });
@@ -140,4 +146,5 @@ export async function flagRepeatSubmission(tx: Tx, customerId: string, info: { l
     dueDate: new Date(Date.now() + minutes * 60_000),
     automationKey: `resubmit:${customerId}:${info.leadKey}`,
   });
+  await queueLeadAlert(tx, customerId, 'REPEAT', c.ownerId);
 }

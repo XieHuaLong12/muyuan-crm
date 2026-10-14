@@ -6,6 +6,7 @@ import { LayoutDashboard,TrendingUp,Users,Package,CheckSquare,Settings,PanelLeft
 import { PasswordDialog } from '@/components/password-dialog';
 import { api } from '@/lib/client';
 import { workspaceHome,workspaceNavigation,activeWorkspaceLink,type NavIcon,type NavSection } from '@/lib/role-workspace';
+import { forgetPushSubscription } from '@/components/push-notifications';
 
 const icons:Record<NavIcon,typeof Users>={dashboard:LayoutDashboard,customers:Users,messages:MessageCircle,tasks:CheckSquare,orders:Package,growth:Megaphone,team:UserRoundCog,settings:Settings,today:CalendarCheck,products:Armchair,performance:TrendingUp};
 /** Live counts shown next to a sidebar entry (today's work for sales, the assignment pool for admins). */
@@ -17,7 +18,7 @@ export function Sidebar({name,role,badges={}}:{name:string;role:string;badges?:N
  useEffect(()=>{try{setCollapsed(window.localStorage.getItem(STORAGE_KEY)==='1');}catch{/* Storage can be unavailable. */}},[]);
  function toggle(){setCollapsed(value=>{const next=!value;try{window.localStorage.setItem(STORAGE_KEY,next?'1':'0');}catch{}return next;});}
  const [passwordOpen,setPasswordOpen]=useState(false);
- async function logout(){try{await api('auth/logout','POST');router.push('/login');}catch(e){setError((e as Error).message);}}
+ async function logout(){try{await forgetPushSubscription().catch(()=>{});await api('auth/logout','POST');router.push('/login');}catch(e){setError((e as Error).message);}}
  const active=activeWorkspaceLink(path,role),isAdmin=role==='ADMIN';
  return <aside className={`bos-sidebar bos-v2-sidebar${collapsed?' is-collapsed':''}${mobileOpen?' is-mobile-open':''}`}>
   <div className="bos-sidebar-head"><Link href={workspaceHome(role)} className="bos-brand"><span className="bos-brand-mark">L</span><span>LVANJU<small>{isAdmin?'管理工作空间':'销售工作空间'}</small></span></Link><button type="button" className="bos-sidebar-toggle" onClick={toggle} aria-expanded={!collapsed} aria-label={collapsed?'展开侧边栏':'折叠侧边栏'}>{collapsed?<PanelLeftOpen size={16}/>:<PanelLeftClose size={16}/>}</button><button type="button" className="bos-sidebar-mobile-toggle" aria-label={mobileOpen?'关闭导航':'打开导航'} aria-expanded={mobileOpen} aria-controls="bos-primary-nav" onClick={()=>setMobileOpen(value=>!value)}>{mobileOpen?<X size={20}/>:<Menu size={20}/>}</button></div>

@@ -580,3 +580,20 @@
 .bos-install-banner small{display:block;margin-top:2px;color:var(--bos-secondary)}
 .bos .bos-install-close{flex:none;min-width:40px;padding:0;color:var(--bos-secondary)}
 @media print{.bos-install-banner{display:none}}
+
+/* New-lead banner: pinned at the top and ringing until someone opens or dismisses the lead. */
+.bos-lead-banner{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:90;display:grid;gap:8px;width:min(560px,calc(100vw - 24px))}
+.bos-lead-banner-item{display:flex;align-items:center;gap:12px;padding:12px 12px 12px 14px;border:1px solid #f0d9c8;border-left:5px solid #c2410c;border-radius:14px;background:#fffaf6;box-shadow:0 16px 40px rgba(15,23,42,.18);animation:bos-live-in .2s ease-out}
+.bos-lead-banner-item>a:first-of-type{flex:1;min-width:0;display:grid;gap:3px;color:#1d1d1f;text-decoration:none}
+.bos-lead-banner-item strong{font-size:15px}
+.bos-lead-banner-item span{font-size:13px;color:#6e6e73;overflow-wrap:anywhere}
+.bos-lead-banner-bell{flex:none;color:#c2410c;animation:bos-lead-bell 1s ease-in-out infinite}
+.bos-lead-banner .bos-lead-banner-go{flex:none;padding:8px 14px;border-radius:10px;background:#164b3a;color:#fff;font-size:13px;font-weight:600;text-decoration:none}
+.bos-lead-banner .bos-lead-banner-go:hover{background:#0f3a2c}
+.bos-lead-banner-item button{flex:none;border:0;background:transparent;color:#86868b;cursor:pointer;padding:4px}
+.bos-lead-banner-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:#6e6e73}
+.bos-lead-banner-foot button{display:inline-flex;align-items:center;gap:5px;margin-left:auto;border:1px solid #e5e5ea;border-radius:999px;background:#fff;padding:5px 10px;font-size:12px;color:#1d1d1f;cursor:pointer}
+@keyframes bos-lead-bell{0%,100%{transform:rotate(0)}20%{transform:rotate(14deg)}40%{transform:rotate(-12deg)}60%{transform:rotate(8deg)}80%{transform:rotate(-4deg)}}
+@media(prefers-reduced-motion:reduce){.bos-lead-banner-item,.bos-lead-banner-bell{animation:none}}
+@media(max-width:600px){.bos-lead-banner{top:8px;width:calc(100vw - 16px)}.bos-lead-banner-item{gap:8px;padding:10px}.bos-lead-banner .bos-lead-banner-go{padding:7px 10px}}
+@media print{.bos-lead-banner{display:none!important}}

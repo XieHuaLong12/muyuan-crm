@@ -10,6 +10,6 @@ export const dynamic='force-dynamic';
  */
 export async function POST(req:NextRequest){
   if(!cronSecretValid(req.headers.get('x-cron-secret')))return Response.json({success:false,error:'未授权'},{status:401});
-  const [{syncAllWorkflows},{backfillContactKeys},{fillMissingCountries},{handle,ok}]=await Promise.all([import('@/services/workflow-service'),import('@/services/contact-identity-service'),import('@/services/customer-country-service'),import('@/lib/http')]);
-  return handle(async()=>ok({contactKeys:await backfillContactKeys(500),countries:await fillMissingCountries(),workflows:await syncAllWorkflows()}));
+  const [{syncAllWorkflows},{backfillContactKeys},{fillMissingCountries},{gradeUngradedLeads},{deliverLeadAlerts},{handle,ok}]=await Promise.all([import('@/services/workflow-service'),import('@/services/contact-identity-service'),import('@/services/customer-country-service'),import('@/services/lead-grade-service'),import('@/services/lead-alert-service'),import('@/lib/http')]);
+  return handle(async()=>ok({contactKeys:await backfillContactKeys(500),countries:await fillMissingCountries(),grades:await gradeUngradedLeads(),alerts:await deliverLeadAlerts(),workflows:await syncAllWorkflows()}));
 }

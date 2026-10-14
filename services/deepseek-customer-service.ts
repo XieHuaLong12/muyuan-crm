@@ -76,7 +76,9 @@ function deepSeekConfig() {
   };
 }
 
-export async function callDeepSeek<T>(systemPrompt: string, context: unknown, parse: (input: unknown) => T, retry = false): Promise<T> {
+export const deepSeekConfigured = () => !!process.env.DEEPSEEK_API_KEY?.trim();
+
+export async function callDeepSeek<T>(systemPrompt: string, context: unknown, parse: (input: unknown) => T, retry = false, timeoutMs = 45_000): Promise<T> {
   const { apiKey, baseUrl, model } = deepSeekConfig();
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
@@ -100,7 +102,7 @@ export async function callDeepSeek<T>(systemPrompt: string, context: unknown, pa
       temperature: 0.2,
       max_tokens: 1800,
     }),
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   const body = (await response.json().catch(() => ({}))) as {
@@ -117,14 +119,14 @@ export async function callDeepSeek<T>(systemPrompt: string, context: unknown, pa
 
   const content = body.choices?.[0]?.message?.content?.trim();
   if (!content) {
-    if (!retry) return callDeepSeek(systemPrompt, context, parse, true);
+    if (!retry) return callDeepSeek(systemPrompt, context, parse, true, timeoutMs);
     throw new HttpError(502, 'DeepSeek 返回了空内容');
   }
 
   try {
     return parse(JSON.parse(content));
   } catch (error) {
-    if (!retry) return callDeepSeek(systemPrompt, context, parse, true);
+    if (!retry) return callDeepSeek(systemPrompt, context, parse, true, timeoutMs);
     throw new HttpError(
       502,
       `DeepSeek 返回的客户分析格式不正确：${error instanceof Error ? error.message : 'unknown error'}`
