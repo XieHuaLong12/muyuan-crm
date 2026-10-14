@@ -83,8 +83,11 @@ export function LiveNotifications({ userId, items }: { userId: string; items: No
     const announce = fresh.filter(item => Date.now() - Date.parse(item.at) < ANNOUNCE_WINDOW_MS);
     if (!announce.length) return;
     const urgentFirst = [...announce].sort((a, b) => Number(b.urgent) - Number(a.urgent) || b.at.localeCompare(a.at));
-    const shown = urgentFirst.slice(0, MAX_TOASTS - (urgentFirst.length > MAX_TOASTS ? 1 : 0));
-    const rest = urgentFirst.length - shown.length;
+    // The message center already lists new customer messages; there they only chime (and notify while hidden).
+    const onInbox = window.location.pathname === '/messages' && !document.hidden;
+    const toastable = urgentFirst.filter(item => !(onInbox && item.kind === 'NEW_MESSAGE'));
+    const shown = toastable.slice(0, MAX_TOASTS - (toastable.length > MAX_TOASTS ? 1 : 0));
+    const rest = toastable.length - shown.length;
     const summary: NotificationItem[] = rest > 0 ? [{ id: `summary:${Date.now()}`, kind: 'TASK_DUE', title: `还有 ${rest} 条新提醒`, body: '打开任务中心查看全部', href: '/tasks', at: new Date().toISOString(), urgent: false }] : [];
     setToasts(list => [...shown, ...summary, ...list.filter(t => !announce.some(a => a.id === t.id))].slice(0, MAX_TOASTS));
     if (storage<string>(SOUND_KEY, 'on') !== 'off') chime(announce.some(item => item.urgent));

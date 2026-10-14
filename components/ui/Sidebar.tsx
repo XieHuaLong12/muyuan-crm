@@ -2,12 +2,12 @@
 import { useEffect,useState } from 'react';
 import Link from 'next/link';
 import { usePathname,useRouter } from 'next/navigation';
-import { LayoutDashboard,TrendingUp,Users,Package,CheckSquare,Settings,PanelLeftClose,PanelLeftOpen,LogOut,CalendarCheck,UserRoundCog,Menu,X,KeyRound,Megaphone,Armchair } from 'lucide-react';
+import { LayoutDashboard,TrendingUp,Users,Package,CheckSquare,Settings,PanelLeftClose,PanelLeftOpen,LogOut,CalendarCheck,UserRoundCog,Menu,X,KeyRound,Megaphone,Armchair,MessageCircle } from 'lucide-react';
 import { PasswordDialog } from '@/components/password-dialog';
 import { api } from '@/lib/client';
 import { workspaceHome,workspaceNavigation,activeWorkspaceLink,type NavIcon,type NavSection } from '@/lib/role-workspace';
 
-const icons:Record<NavIcon,typeof Users>={dashboard:LayoutDashboard,customers:Users,tasks:CheckSquare,orders:Package,growth:Megaphone,team:UserRoundCog,settings:Settings,today:CalendarCheck,products:Armchair,performance:TrendingUp};
+const icons:Record<NavIcon,typeof Users>={dashboard:LayoutDashboard,customers:Users,messages:MessageCircle,tasks:CheckSquare,orders:Package,growth:Megaphone,team:UserRoundCog,settings:Settings,today:CalendarCheck,products:Armchair,performance:TrendingUp};
 /** Live counts shown next to a sidebar entry (today's work for sales, the assignment pool for admins). */
 export type NavBadges=Partial<Record<NonNullable<NavSection['badge']>,{count:number;urgent:boolean}>>;
 const STORAGE_KEY='bos-sidebar-collapsed';

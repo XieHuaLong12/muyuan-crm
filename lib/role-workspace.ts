@@ -1,13 +1,13 @@
 export const workspaceHome = (role: string) => role === 'ADMIN' ? '/command-center' : '/sales';
 
-export type NavIcon = 'dashboard' | 'customers' | 'tasks' | 'orders' | 'growth' | 'team' | 'settings' | 'today' | 'products' | 'performance';
+export type NavIcon = 'dashboard' | 'customers' | 'messages' | 'tasks' | 'orders' | 'growth' | 'team' | 'settings' | 'today' | 'products' | 'performance';
 /** A page inside a section. `match` lists the path prefixes that belong to it (defaults to `href`). */
 export type NavTab = { href: string; label: string; match?: readonly string[] };
 /**
  * One sidebar entry. Related pages are tabs of the same section, so the sidebar stays short. With `keepPeriod`, the
  * section's pages share the analysis period (range / startDate / endDate), which is kept when switching tabs.
  */
-export type NavSection = { href: string; label: string; icon: NavIcon; tabs?: readonly NavTab[]; badge?: 'today' | 'pool'; keepPeriod?: boolean };
+export type NavSection = { href: string; label: string; icon: NavIcon; tabs?: readonly NavTab[]; badge?: 'today' | 'pool' | 'messages'; keepPeriod?: boolean };
 
 const adminSections: readonly NavSection[] = [
   { href: '/command-center', label: '经营总览', icon: 'dashboard', keepPeriod: true, tabs: [
@@ -20,6 +20,7 @@ const adminSections: readonly NavSection[] = [
     { href: '/sales', label: '跟进队列' },
     { href: '/crm', label: '销售看板' },
   ] },
+  { href: '/messages', label: '消息', icon: 'messages', badge: 'messages' },
   { href: '/tasks', label: '任务', icon: 'tasks' },
   { href: '/orders', label: '订单', icon: 'orders', tabs: [
     { href: '/orders', label: '订单' },
@@ -51,6 +52,7 @@ const salesSections: readonly NavSection[] = [
     { href: '/sales', label: '今日跟进' },
     { href: '/tasks', label: '全部待办' },
   ] },
+  { href: '/messages', label: '消息', icon: 'messages', badge: 'messages' },
   { href: '/customers', label: '我的客户', icon: 'customers', tabs: [
     { href: '/customers', label: '客户列表' },
     { href: '/crm', label: '销售看板' },

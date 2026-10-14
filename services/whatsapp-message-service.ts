@@ -21,7 +21,7 @@ export const sendMessageSchema = z.object({ customerId: z.string().min(1).max(19
 export const messageSelect = { id: true, customerId: true, waMessageId: true, source: true, sourceMessageId: true, attachmentMetadata: true, content: true,
   mediaUrl: true, mimeType: true, fileName: true, sender: true, direction: true, messageType: true, status: true, sentAt: true, createdAt: true, updatedAt: true } as const;
 
-const gupshupReady = () => !!(process.env.GUPSHUP_API_KEY?.trim() && gupshupSource() && process.env.GUPSHUP_APP_NAME?.trim());
+export const gupshupReady = () => !!(process.env.GUPSHUP_API_KEY?.trim() && gupshupSource() && process.env.GUPSHUP_APP_NAME?.trim());
 
 export async function listWhatsAppMessages(customerId: string, user: Actor, before?: string) {
   const customer = await accessible(customerId, user);
@@ -83,12 +83,8 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
     transport = 'GUPSHUP';
   }
 
-  const destination = normalizeWhatsApp(customer.waId || customer.whatsapp || customer.phone);
-  if (!/^[1-9]\d{6,14}$/.test(destination)) throw new HttpError(400, '客户 WhatsApp 号码需要有效国家码');
-  const identity=await resolveContact({phones:[canonicalPhone(destination,undefined,true)!].filter(Boolean)});
   const provider=transport==='META'?'cloud_api':'gupshup', providerAccountId=transport==='META'?phoneNumberId:gupshupSource()!;
-  const manual=await db.whatsAppContact.findFirst({where:{provider,accountId:providerAccountId,phoneE164:canonicalPhone(destination,undefined,true),status:'MANUAL',customerId}});
-  if(!manual&&(identity.status!=='MATCHED'||identity.customerId!==customerId))throw new HttpError(409,'此号码身份不明确，请先人工认领后发送');
+  const destination = await recipientNumber(customer, provider, providerAccountId);
   await requireOpenWindow(customerId,user,{provider,accountId:providerAccountId});
   if(customer.whatsappOptInStatus==='OPTED_OUT')throw new HttpError(409,'客户已明确退订，请先人工核对后续沟通许可');
   const mediaOrigin=process.env.PUBLIC_APP_URL?.replace(/\/$/,'')||origin;
@@ -173,6 +169,23 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
       error: '发送结果未知，请核对 WhatsApp 后再操作；系统不会自动重复发送。' };
   }
 
+  return { message: await recordAcceptedOutbound({ messageId: message.id, customerId, provider, providerAccountId, destination, providerMessageId, user }) };
+}
+
+/** The customer's WhatsApp number, only when it belongs to this customer alone (or was linked by hand). */
+export async function recipientNumber(customer: { id: string; waId: string | null; whatsapp: string; phone: string }, provider: string, providerAccountId: string) {
+  const destination = normalizeWhatsApp(customer.waId || customer.whatsapp || customer.phone);
+  if (!/^[1-9]\d{6,14}$/.test(destination)) throw new HttpError(400, '客户 WhatsApp 号码需要有效国家码');
+  const identity=await resolveContact({phones:[canonicalPhone(destination,undefined,true)!].filter(Boolean)});
+  const manual=await db.whatsAppContact.findFirst({where:{provider,accountId:providerAccountId,phoneE164:canonicalPhone(destination,undefined,true),status:'MANUAL',customerId:customer.id}});
+  if(!manual&&(identity.status!=='MATCHED'||identity.customerId!==customer.id))throw new HttpError(409,'此号码身份不明确，请先人工认领后发送');
+  return destination;
+}
+
+/** After the provider accepted a message: link it to the conversation and record the contact facts. */
+export async function recordAcceptedOutbound(input: { messageId: string; customerId: string; provider: string; providerAccountId: string; destination: string; providerMessageId: string; user: Actor }) {
+  const { customerId, provider, providerAccountId, destination, providerMessageId, user } = input;
+  const message = { id: input.messageId };
   const sentAt = new Date();
   // Keep persistence outside the network catch: a DB failure must not label an accepted message FAILED.
   const saved = await retryTransaction(()=>db.$transaction(async tx => {
@@ -190,5 +203,5 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
   }));
   await replayWhatsAppReceipts(provider,providerAccountId,providerMessageId);
   await syncCustomerWorkflow(customerId);
-  return { message: await db.whatsAppMessage.findUniqueOrThrow({where:{id:saved.id}}) };
+  return db.whatsAppMessage.findUniqueOrThrow({where:{id:saved.id}});
 }
