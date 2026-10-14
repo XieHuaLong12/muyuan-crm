@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { db } from '../lib/db';
 import type { Actor } from '../lib/auth';
-import { salesQueue, todayWorkCounts } from '../services/bos-sales-service';
+import { salesQueue, todayWorkCounts, workPriority } from '../services/bos-sales-service';
 import { notificationFeed } from '../services/notification-service';
 import { financeOverview } from '../services/finance-service';
 import { getReminders } from '../services/workflow-service';
@@ -48,6 +48,29 @@ test('today\'s work is one list with one number, most urgent first', async () =>
     await db.user.delete({ where: { id: owner.id } });
     await db.$disconnect();
   }
+});
+
+test('the work list puts the customer worth the next minute first, and says why', () => {
+  const now = new Date('2026-10-14T08:00:00Z');
+  const at = (n: number) => new Date(now.getTime() + n * 60_000);
+  const none = { deadline: null, firstContactPending: false, leadGrade: '', aiIntent: 'UNKNOWN', aiScore: 0, lastInboundAt: null, lastOutboundAt: null, lastFollowUpAt: null, lastContactAt: null, staleQuoteSentAt: null };
+  const rows = {
+    lateA: workPriority({ ...none, deadline: at(-45), firstContactPending: true, leadGrade: 'A' }, now),
+    soonA: workPriority({ ...none, deadline: at(30), firstContactPending: true, leadGrade: 'A' }, now),
+    waiting: workPriority({ ...none, deadline: at(-20), lastInboundAt: at(-180), lastOutboundAt: at(-300) }, now),
+    slipped: workPriority({ ...none, deadline: at(-5) }, now),
+    later: workPriority({ ...none, deadline: at(300), aiIntent: 'HIGH', lastContactAt: at(-5 * 1440), staleQuoteSentAt: at(-4 * 1440) }, now),
+    junk: workPriority({ ...none, deadline: at(-60), firstContactPending: true, leadGrade: 'D' }, now),
+  };
+  assert.deepEqual(rows.lateA.reasons, ['首联已超时 45 分钟', 'A 级表单']);
+  assert.deepEqual(rows.soonA.reasons, ['30 分钟内首次联系', 'A 级表单']);
+  assert.deepEqual(rows.waiting.reasons, ['跟进已超时 20 分钟', '客户在等回复 3 小时']);
+  assert.deepEqual(rows.later.reasons, ['今天到期', 'AI 判断高意向', '报价 4 天未回复']);
+  assert.deepEqual(rows.junk.reasons, ['首联已超时 1 小时', 'D 级表单']);
+  const order = Object.entries(rows).sort((a, b) => b[1].score - a[1].score).map(([key]) => key);
+  assert.deepEqual(order, ['lateA', 'waiting', 'soonA', 'slipped', 'later', 'junk']);
+  // An answered message is not waiting any more.
+  assert.deepEqual(workPriority({ ...none, lastInboundAt: at(-60), lastFollowUpAt: at(-30) }, now).reasons, []);
 });
 
 test('finance ignores deals of customers in the recycle bin', async () => {
