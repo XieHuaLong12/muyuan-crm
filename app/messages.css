@@ -66,7 +66,8 @@
 .bos-chat-back{display:none}
 .bos-chat-window{display:inline-flex;align-items:center;gap:4px;flex:none;border-radius:7px;padding:2px 8px;font-size:11px;background:#f1f4ef;color:#3a674b;white-space:nowrap}
 .bos-chat-window.is-warning{background:#faf1e6;color:#85521b}.bos-chat-window.is-closed{background:#f1f1f3;color:#6e6e73}
-.bos-chat-log{flex:1;overflow:auto;padding:10px 22px 16px;display:flex;flex-direction:column;gap:6px}
+.bos-chat-log{flex:1;overflow:auto;padding:10px 22px 16px}
+.bos-chat-log-inner{display:flex;flex-direction:column;gap:6px;min-height:100%}
 .bos-chat-day{align-self:center;margin:14px 0 6px;padding:4px 12px;border-radius:8px;background:#fff;color:#6b7d70;font-size:11px;box-shadow:0 1px 1px rgba(27,49,40,.05)}
 .bos-chat-older{align-self:center;margin:6px 0;border:0;border-radius:8px;background:#fff;color:#174b3b;font-size:12px;padding:6px 12px}
 .bos-chat-bubble{max-width:min(72%,560px);border-radius:14px;padding:8px 11px 6px;box-shadow:0 1px 1px rgba(27,49,40,.06);background:#fff;align-self:flex-start;overflow-wrap:anywhere}

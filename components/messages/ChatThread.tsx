@@ -1,7 +1,7 @@
 'use client';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, Check, CheckCheck, CircleAlert, ClipboardList, Clock3, FileText, LayoutTemplate, Loader2, PanelRight, Paperclip, Send, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, CheckCheck, CircleAlert, Clock3, FileText, LayoutTemplate, Loader2, PanelRight, Paperclip, Send, Sparkles, X } from 'lucide-react';
 import { api } from '@/lib/client';
 import { pipeline, purchases, sources, stages } from '@/lib/constants';
 import { formatDateTime, formatDay, formatTime, initial, requestId, toneOf, windowLeft, type ChatMessage, type TemplateList, type Thread } from './types';
@@ -73,7 +73,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [broken, setBroken] = useState<Set<string>>(new Set());
   const [templates, setTemplates] = useState<TemplateList & { open: boolean; chosen: string; params: string[]; error: string }>({ status: 'CONNECTED', templates: [], open: false, chosen: '', params: [], error: '' });
-  const log = useRef<HTMLDivElement>(null), file = useRef<HTMLInputElement>(null), stickToBottom = useRef(true), lastSeen = useRef('');
+  const log = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null), file = useRef<HTMLInputElement>(null), stickToBottom = useRef(true), lastSeen = useRef('');
 
   const load = useCallback(async (quiet = false) => {
     try {
@@ -99,9 +99,15 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
     return () => clearInterval(timer);
   }, [customerId, load]);
 
-  // Photos and videos grow the log after they load; stay on the newest message unless the person scrolled up.
+  // Photos, players and late fonts grow the log after rendering; stay on the newest message unless the person scrolled up.
   const keepAtBottom = useCallback(() => { if (stickToBottom.current && log.current) log.current.scrollTop = log.current.scrollHeight; }, []);
   useEffect(keepAtBottom, [messages, keepAtBottom]);
+  useEffect(() => {
+    if (!content.current || typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(keepAtBottom);
+    observer.observe(content.current);
+    return () => observer.disconnect();
+  }, [keepAtBottom]);
 
   async function older() {
     if (!cursor) return;
@@ -191,7 +197,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
         </div>
       </header>
 
-      <div className="bos-chat-log" ref={log} onScroll={e => { const el = e.currentTarget; stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
+      <div className="bos-chat-log" ref={log} onScroll={e => { const el = e.currentTarget; stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}><div className="bos-chat-log-inner" ref={content}>
         {error && <p className="bos-chat-error" role="alert">{error}</p>}
         {!thread && !error && <p className="bos-chat-day">正在加载聊天记录…</p>}
         {cursor && <button type="button" className="bos-chat-older" onClick={older} disabled={busy === 'older'}>{busy === 'older' ? '加载中…' : '查看更早的消息'}</button>}
@@ -215,7 +221,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
             </article>
           </Fragment>;
         })}
-      </div>
+      </div></div>
 
       {draft && <div className="bos-chat-draft">
         <div className="bos-chat-draft-head"><Sparkles size={16} aria-hidden="true" /><strong>建议回复</strong><small>AI 草稿 · 需人工确认后发送</small></div>
@@ -255,7 +261,6 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
           <button type="button" className="bos-chat-chip" onClick={aiDraft} disabled={busy === 'draft' || !messages.length}>{busy === 'draft' ? <Loader2 size={14} /> : <Sparkles size={14} />}AI 草稿</button>
           {thread.sending.configured && !thread.sending.optedOut && <button type="button" className="bos-chat-chip" onClick={openTemplates}><LayoutTemplate size={14} />模板消息</button>}
           <Link className="bos-chat-chip" href={`/products/quotes/new?customerId=${encodeURIComponent(customerId)}`}><FileText size={14} />报价单</Link>
-          <Link className="bos-chat-chip" href={`/customers/${encodeURIComponent(customerId)}`}><ClipboardList size={14} />跟进任务</Link>
         </div>
         {attachment && <span className="bos-chat-attachment"><Paperclip size={13} aria-hidden="true" /><span>{attachment.fileName}</span><button type="button" className="bos-chat-icon-button" style={{ width: 26, height: 26 }} onClick={() => setAttachment(undefined)} aria-label="移除附件"><X size={14} /></button></span>}
         <div className="bos-chat-input">
