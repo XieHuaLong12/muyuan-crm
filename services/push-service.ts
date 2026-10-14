@@ -62,8 +62,11 @@ export async function removePushSubscription(user: Actor, input: unknown) {
 
 export type PushMessage = { title: string; body: string; href: string; tag: string; urgent: boolean };
 
-/** Sends to every device of these users. Devices the push service reports as gone are deleted; errors never throw. */
-export async function sendPush(userIds: string[], message: PushMessage) {
+/**
+ * Sends to every device of these users. Devices the push service reports as gone are deleted; errors never throw.
+ * `ttlSeconds`: how long the push service keeps it for a phone that is off (an hour by default: alerts are urgent).
+ */
+export async function sendPush(userIds: string[], message: PushMessage, ttlSeconds = 3600) {
   const devices = userIds.length ? await db.pushSubscription.findMany({ where: { userId: { in: [...new Set(userIds)] } } }) : [];
   if (!devices.length) return { sent: 0, failed: 0 };
   const keys = await vapidKeys();
@@ -71,7 +74,7 @@ export async function sendPush(userIds: string[], message: PushMessage) {
   const options = {
     vapidDetails: { subject: process.env.VAPID_SUBJECT?.trim() || `mailto:${admin?.email || 'admin@example.com'}`, publicKey: keys.publicKey, privateKey: keys.privateKey },
     // A lead alert is only useful now: high urgency wakes phones in power saving, and it expires after an hour.
-    TTL: 3600, urgency: 'high' as const, timeout: 10_000,
+    TTL: ttlSeconds, urgency: message.urgent || ttlSeconds <= 3600 ? 'high' as const : 'normal' as const, timeout: 10_000,
   };
   const payload = JSON.stringify({ ...message, at: new Date().toISOString() });
   let sent = 0, failed = 0;
