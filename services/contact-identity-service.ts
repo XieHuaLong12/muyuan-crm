@@ -70,7 +70,12 @@ export async function resolveContact(input: { leadId?: string; phones?: string[]
       where: kind === 'PHONE' ? { OR: [{ phoneE164: { in: values } }, { whatsappNormalized: { in: values.map(v => v.slice(1)) } }, { waId: { in: values.map(v => v.slice(1)) } }] } : { OR: [{ emailNormalized: { in: values } }, { email: { in: values } }] },
       select: { id: true },
     });
-    const ids = [...aliases.map(a => a.customerId), ...indexed.map(c => c.id)];
+    // "+86 158…", "86158…" and "0086 158…" are the same number: compare the full international digits of the
+    // phone and WhatsApp fields exactly (never a suffix, never a guessed country), so numbers typed without "+" match.
+    const digits = kind === 'PHONE' ? values.flatMap(v => [v.slice(1), `00${v.slice(1)}`]) : [];
+    const typed = digits.length ? await tx.$queryRaw<{ id: string }[]>(Prisma.sql`SELECT id FROM Customer
+      WHERE REGEXP_REPLACE(phone, '[^0-9]', '') IN (${Prisma.join(digits)}) OR REGEXP_REPLACE(whatsapp, '[^0-9]', '') IN (${Prisma.join(digits)})`) : [];
+    const ids = [...aliases.map(a => a.customerId), ...indexed.map(c => c.id), ...typed.map(c => c.id)];
     // Transitional, bounded pages for records whose keys were never computed; no query changes history on read.
     let cursor: string | undefined;
     while (true) {
@@ -87,6 +92,19 @@ export async function resolveContact(input: { leadId?: string; phones?: string[]
     if (ids.length) return resolution(ids, kind);
   }
   return { status: 'UNMATCHED', customerIds: [], method: 'NONE' };
+}
+
+/**
+ * Like resolveContact, but only among customers still in the customer center: a number whose only owner was
+ * deleted (moved to the recycle bin) counts as unknown, and one shared with a deleted record still matches.
+ */
+export async function resolveActiveContact(input: { phones?: string[]; email?: string }, tx: Client = db): Promise<ContactResolution> {
+  const resolved = await resolveContact(input, tx);
+  const ids = resolved.status === 'MATCHED' ? [resolved.customerId] : resolved.customerIds;
+  if (!ids.length) return resolved;
+  const active = await tx.customer.findMany({ where: { id: { in: ids }, deletedAt: null }, select: { id: true } });
+  if (!active.length) return { status: 'UNMATCHED', customerIds: [], method: 'NONE' };
+  return resolution(active.map(c => c.id), resolved.method === 'NONE' ? 'PHONE' : resolved.method);
 }
 
 type LeadInput = Omit<Prisma.CustomerLeadAttributionUncheckedCreateInput, 'id' | 'createdAt' | 'updatedAt'>;

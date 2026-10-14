@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope, requireAdmin } from '@/lib/auth';
 import { canonicalEmail, canonicalPhone, metaLeadKey, sourceInstant } from '@/lib/contact-identity';
-import { lockIdentity, rememberCustomerContacts, recordLeadAttribution, resolveContact } from './contact-identity-service';
+import { lockIdentity, rememberCustomerContacts, recordLeadAttribution, resolveActiveContact, resolveContact } from './contact-identity-service';
 import { ensureConversation, messageFacts } from './conversation-identity-service';
 import { freezeOrderAttribution } from './order-attribution-service';
 import { retryTransaction } from '@/lib/transaction-retry';
@@ -116,7 +116,7 @@ export async function reconcilePendingIdentityMessages(input:unknown,user:Actor)
   const pending=await db.whatsAppUnmatchedMessage.findMany({where:{status:'PENDING',peerPhone:{not:null},...(user.role==='ADMIN'?{}:{userId:user.id})},orderBy:{createdAt:'asc'},take:v.limit+1});
   let imported=0,skipped=0,failed=0;
   for(const item of pending.slice(0,v.limit)){
-    const resolved=await resolveContact({phones:item.peerPhone?[item.peerPhone]:[]});
+    const resolved=await resolveActiveContact({phones:item.peerPhone?[item.peerPhone]:[]});
     if(resolved.status!=='MATCHED'){skipped++;continue;}
     const visible=await db.customer.findFirst({where:{id:resolved.customerId,...scope(user)},select:{id:true}});
     if(!visible){skipped++;continue;}

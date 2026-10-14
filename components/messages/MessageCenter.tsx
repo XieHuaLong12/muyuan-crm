@@ -143,6 +143,16 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
   const markRead = useCallback((id: string) => setList(current => ({ ...current, conversations: current.conversations.map(c => c.id === id ? { ...c, unread: 0 } : c) })), []);
   const changed = useCallback(() => { void refresh(); }, [refresh]);
 
+  const [retry, setRetry] = useState<{ busy: boolean; note: string }>({ busy: false, note: '' });
+  async function retryNumbers() {
+    setRetry({ busy: true, note: '' });
+    try {
+      const r = await api<{ createdCustomers: number; imported: number; remaining: number }>('inbox/retry', 'POST', {});
+      setRetry({ busy: false, note: `新建客户 ${r.createdCustomers} 位，归入会话 ${r.imported} 条${r.remaining ? `，还有 ${r.remaining} 条需要人工选择客户` : ''}` });
+      await refresh(1);
+    } catch (e) { setRetry({ busy: false, note: (e as Error).message }); }
+  }
+
   async function more() {
     try {
       const next = await api<InboxList>(listUrl(filter, q.trim(), ownerId, page + 1));
@@ -169,17 +179,21 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
         </div>
         <div className="bos-chat-conversations">
           {error && <p className="bos-chat-error" role="alert" style={{ padding: '0 16px' }}>{error}</p>}
+          {filter === 'unmatched' && !!list.numbers.length && <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f3ef' }}>
+            <div className="bos-chat-actions"><button type="button" className="is-primary" onClick={retryNumbers} disabled={retry.busy}>{retry.busy ? '匹配中…' : '重新匹配'}</button></div>
+            <p className="bos-chat-hint" style={{ display: 'block' }}>{retry.note || '按号码重新查找客户：找不到的新建客户，只对应一位客户的直接归入，对应多位客户的需要点开选择。'}</p>
+          </div>}
           {filter === 'unmatched' ? list.numbers.map(n => <button key={n.key} type="button" className="bos-chat-conversation" onClick={() => setDialog({ kind: 'link', number: n })}>
             <span className="bos-chat-avatar is-unknown" aria-hidden="true"><UserRound size={18} /></span>
             <span className="bos-chat-conversation-body">
               <span className="bos-chat-row"><strong>{n.peerPhone || n.peerName || '号码无效'}</strong><time>{formatListTime(n.lastMessageAt, timezone)}</time></span>
-              <span className="bos-chat-meta"><span className="bos-chat-tag is-warning">{n.reason === 'AMBIGUOUS' ? '号码对应多个客户' : n.reason === 'INVALID_PHONE' ? '号码无效' : '未关联客户'}</span><span>{n.count} 条 · 点击关联</span></span>
+              <span className="bos-chat-meta"><span className="bos-chat-tag is-warning">{n.reason === 'AMBIGUOUS' ? '号码有冲突' : n.reason === 'INVALID_PHONE' ? '号码无效' : '未关联客户'}</span><span>{n.count} 条 · 点击关联</span></span>
               <span className="bos-chat-preview"><span>{n.lastMessage}</span></span>
             </span>
           </button>)
             : list.conversations.map(item => <ConversationItem key={item.id} item={item} admin={admin} timezone={timezone} active={selected === item.id} onOpen={() => open(item.id)} />)}
           {filter !== 'unmatched' && !list.conversations.length && <div className="bos-chat-list-empty"><strong>{q ? '没有找到匹配的会话' : filter === 'unread' ? '没有未读消息' : filter === 'awaiting' ? '没有等待回复的客户' : '还没有 WhatsApp 会话'}</strong>{q ? '换个关键词试试。' : '客户通过公司业务号发来消息后，会出现在这里。'}</div>}
-          {filter === 'unmatched' && !list.numbers.length && <div className="bos-chat-list-empty"><strong>没有待关联的号码</strong>新号码会自动建档；只有号码对应多个客户或号码无效时才需要人工关联。</div>}
+          {filter === 'unmatched' && !list.numbers.length && <div className="bos-chat-list-empty"><strong>没有待关联的号码</strong>新号码会自动建档；只有号码对应多位客户或号码无效时才需要人工关联。</div>}
           {list.hasMore && filter !== 'unmatched' && <button type="button" className="bos-chat-more" onClick={more}>加载更多会话</button>}
         </div>
       </section>

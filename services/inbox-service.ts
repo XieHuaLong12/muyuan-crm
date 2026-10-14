@@ -8,7 +8,10 @@ import { accessible } from './customer-service';
 import { listWhatsAppMessages } from './whatsapp-message-service';
 import { serviceWindow } from './whatsapp-window-service';
 import { messageMediaHref } from './whatsapp-media-service';
-import { claimIdentityMessage } from './identity-chain-service';
+import { claimIdentityMessage, reconcilePendingIdentityMessages } from './identity-chain-service';
+import { lockIdentity, resolveActiveContact } from './contact-identity-service';
+import { createInboundCustomer } from './whatsapp-webhook-service';
+import { retryTransaction } from '@/lib/transaction-retry';
 import { templatesConfigured } from './whatsapp-template-service';
 
 /**
@@ -194,6 +197,39 @@ export async function linkUnmatchedNumber(user: Actor, input: unknown) {
   if (!items.length) throw new HttpError(404, '这个号码没有待关联的消息');
   for (const item of items) await claimIdentityMessage({ itemId: item.id, customerId: v.customerId, reason: '消息中心：管理员确认号码归属' }, user);
   return { linked: items.length, customerId: v.customerId };
+}
+
+/**
+ * Re-runs matching for messages waiting on a number: numbers no customer in the customer center has become new
+ * customers (as live inbound messages now do), numbers with exactly one customer are linked, and numbers shared
+ * by several customers stay for a person to choose.
+ */
+export async function retryUnmatchedNumbers(user: Actor, input: unknown) {
+  requireAdmin(user, '未关联号码由管理员处理');
+  z.object({}).strict().parse(input ?? {});
+  const pending = await db.whatsAppUnmatchedMessage.findMany({ where: { status: 'PENDING', provider: 'gupshup', direction: 'inbound', peerPhone: { not: null } },
+    orderBy: { sentAt: 'asc' }, take: 500, select: { id: true, peerPhone: true, peerName: true, sentAt: true, attachments: true } });
+  const firstByPhone = new Map<string, (typeof pending)[number]>();
+  for (const item of pending) if (!firstByPhone.has(item.peerPhone!)) firstByPhone.set(item.peerPhone!, item);
+  let created = 0;
+  for (const [phone, first] of firstByPhone) {
+    let referral = false;
+    try { referral = !!(JSON.parse(first.attachments) as { raw?: { referral?: unknown } }).raw?.referral; } catch { referral = false; }
+    created += await retryTransaction(() => db.$transaction(async tx => {
+      await lockIdentity(tx);
+      if ((await resolveActiveContact({ phones: [phone] }, tx)).status !== 'UNMATCHED') return 0;
+      await createInboundCustomer(tx, { phone, name: first.peerName, referral, at: first.sentAt });
+      return 1;
+    }));
+  }
+  const result = await reconcilePendingIdentityMessages({ limit: 200 }, user);
+  // Imported live messages are real inbound evidence: they open the 24-hour window like a fresh webhook would.
+  const imported = await db.whatsAppUnmatchedMessage.findMany({ where: { id: { in: pending.map(item => item.id) }, status: 'IMPORTED', canonicalConversationId: { not: null } },
+    select: { canonicalConversationId: true, sentAt: true } });
+  for (const item of imported) await db.whatsAppConversation.updateMany({ where: { id: item.canonicalConversationId!,
+    OR: [{ lastCustomerMessageAt: null }, { lastCustomerMessageAt: { lt: item.sentAt } }] }, data: { lastCustomerMessageAt: item.sentAt } });
+  const left = await db.whatsAppUnmatchedMessage.count({ where: { status: 'PENDING', provider: { in: ['gupshup', 'cloud_api'] } } });
+  return { createdCustomers: created, imported: result.imported, remaining: left };
 }
 
 const threadQuery = z.object({ customerId: z.string().trim().min(1).max(191), before: z.string().trim().min(1).max(191).optional() });

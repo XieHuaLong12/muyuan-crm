@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { canonicalPhone, identityKey } from '@/lib/contact-identity';
-import { resolveContact } from './contact-identity-service';
+import { resolveActiveContact } from './contact-identity-service';
 import { contactedFeedback } from './advertising-feedback-service';
 
 export async function ensureConversation(tx: Prisma.TransactionClient, input: {
@@ -10,11 +10,13 @@ export async function ensureConversation(tx: Prisma.TransactionClient, input: {
   const phone = canonicalPhone(input.phone || input.peerId, undefined, true);
   const key = identityKey(input.provider, input.accountId, input.peerId);
   const existing = await tx.whatsAppContact.findUnique({ where: { identityKey: key } });
-  const resolved = await resolveContact({ phones: phone ? [phone] : [] }, tx);
-  const candidateId = existing?.status === 'MANUAL' ? existing.customerId : resolved.status === 'MATCHED' ? resolved.customerId : null;
-  const active = candidateId ? await tx.customer.findUnique({ where: { id: candidateId }, select: { deletedAt: true } }) : null;
-  const customerId = active && !active.deletedAt ? candidateId : null;
-  const status = customerId ? existing?.status === 'MANUAL' ? 'MANUAL' : 'MATCHED' : resolved.status === 'AMBIGUOUS' || candidateId ? 'AMBIGUOUS' : 'UNMATCHED';
+  // Deleted customers are no longer in the customer center: a manual link to one lapses, and the number is
+  // matched among the remaining customers (none → unknown number, several → needs a person).
+  const resolved = await resolveActiveContact({ phones: phone ? [phone] : [] }, tx);
+  const manual = existing?.status === 'MANUAL' && existing.customerId
+    ? await tx.customer.findFirst({ where: { id: existing.customerId, deletedAt: null }, select: { id: true } }) : null;
+  const customerId = manual ? manual.id : resolved.status === 'MATCHED' ? resolved.customerId : null;
+  const status = customerId ? manual ? 'MANUAL' : 'MATCHED' : resolved.status === 'AMBIGUOUS' ? 'AMBIGUOUS' : 'UNMATCHED';
   const data = { phoneRaw: input.phone, phoneE164: phone, name: input.name || existing?.name || '', customerId, status,
     matchMethod: status === 'MANUAL' ? 'MANUAL' : customerId ? 'PHONE' : 'NONE', confidence: customerId ? 100 : 0 };
   const contact = await tx.whatsAppContact.upsert({ where: { identityKey: key },

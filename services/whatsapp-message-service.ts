@@ -1,5 +1,5 @@
 import { canonicalPhone } from '@/lib/contact-identity';
-import { lockIdentity, resolveContact } from './contact-identity-service';
+import { lockIdentity, resolveActiveContact } from './contact-identity-service';
 import { ensureConversation, messageFacts } from './conversation-identity-service';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { Prisma } from '@prisma/client';
@@ -176,7 +176,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
 export async function recipientNumber(customer: { id: string; waId: string | null; whatsapp: string; phone: string }, provider: string, providerAccountId: string) {
   const destination = normalizeWhatsApp(customer.waId || customer.whatsapp || customer.phone);
   if (!/^[1-9]\d{6,14}$/.test(destination)) throw new HttpError(400, '客户 WhatsApp 号码需要有效国家码');
-  const identity=await resolveContact({phones:[canonicalPhone(destination,undefined,true)!].filter(Boolean)});
+  const identity=await resolveActiveContact({phones:[canonicalPhone(destination,undefined,true)!].filter(Boolean)});
   const manual=await db.whatsAppContact.findFirst({where:{provider,accountId:providerAccountId,phoneE164:canonicalPhone(destination,undefined,true),status:'MANUAL',customerId:customer.id}});
   if(!manual&&(identity.status!=='MATCHED'||identity.customerId!==customer.id))throw new HttpError(409,'此号码身份不明确，请先人工认领后发送');
   return destination;
