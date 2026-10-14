@@ -19,6 +19,13 @@ import { templatesConfigured } from './whatsapp-template-service';
 const LIVE_SOURCES = Prisma.sql`('gupshup','cloud_api')`;
 const EPOCH = Prisma.sql`TIMESTAMP('1970-01-01 00:00:00')`;
 const PAGE_SIZE = 30;
+/** Per customer: newest message and newest reply from the business. */
+const LATEST = Prisma.sql`(SELECT customerId, MAX(sentAt) AS lastMessageAt, MAX(CASE WHEN direction = 'OUTBOUND' THEN sentAt END) AS lastOutboundAt
+  FROM WhatsAppMessage GROUP BY customerId)`;
+/** Live customer messages after both this person's last opening (r) and the business's last reply (t). */
+const unreadJoin = (kind: 'LEFT' | 'INNER') => Prisma.sql`${kind === 'LEFT' ? Prisma.sql`LEFT JOIN` : Prisma.sql`JOIN`} WhatsAppMessage u
+  ON u.customerId = t.customerId AND u.direction = 'INBOUND' AND u.source IN ${LIVE_SOURCES}
+  AND u.sentAt > GREATEST(COALESCE(r.readAt, ${EPOCH}), COALESCE(t.lastOutboundAt, ${EPOCH}))`;
 
 export const inboxQuery = z.object({
   q: z.string().trim().max(100).default(''),
@@ -40,33 +47,31 @@ function conversationRows(user: Actor, query: z.infer<typeof inboxQuery>, page: 
   const like = `%${query.q.replace(/[\\%_]/g, char => `\\${char}`)}%`;
   const search = query.q ? Prisma.sql`AND (c.name LIKE ${like} OR c.companyName LIKE ${like} OR c.country LIKE ${like} OR c.whatsapp LIKE ${like} OR c.phone LIKE ${like})` : Prisma.empty;
   const awaiting = query.filter === 'awaiting' ? Prisma.sql`AND t.lastMessageAt > COALESCE(t.lastOutboundAt, ${EPOCH})` : Prisma.empty;
-  const unread = query.filter === 'unread' ? Prisma.sql`WHERE x.unread > 0` : Prisma.empty;
+  const unread = query.filter === 'unread' ? Prisma.sql`HAVING COUNT(u.id) > 0` : Prisma.empty;
+  // Unread messages are joined and counted rather than looked up in a correlated subquery: MariaDB 11 rejects
+  // subqueries that refer to a derived table's columns (error 1054), MySQL 8 and MariaDB 10 accept both forms.
   return db.$queryRaw<Row[]>(Prisma.sql`
-    SELECT x.* FROM (
-      SELECT t.customerId, t.lastMessageAt, t.lastOutboundAt,
-        (SELECT COUNT(*) FROM WhatsAppMessage u WHERE u.customerId = t.customerId AND u.direction = 'INBOUND' AND u.source IN ${LIVE_SOURCES}
-          AND u.sentAt > GREATEST(COALESCE(r.readAt, ${EPOCH}), COALESCE(t.lastOutboundAt, ${EPOCH}))) AS unread
-      FROM (SELECT customerId, MAX(sentAt) AS lastMessageAt, MAX(CASE WHEN direction = 'OUTBOUND' THEN sentAt END) AS lastOutboundAt
-            FROM WhatsAppMessage GROUP BY customerId) t
-      JOIN Customer c ON c.id = t.customerId
-      LEFT JOIN WhatsAppReadState r ON r.customerId = t.customerId AND r.userId = ${user.id}
-      WHERE c.deletedAt IS NULL ${ownerCondition(user, query.ownerId)} ${search} ${awaiting}
-    ) x ${unread}
-    ORDER BY x.lastMessageAt DESC, x.customerId ASC
+    SELECT t.customerId, t.lastMessageAt, t.lastOutboundAt, COUNT(u.id) AS unread
+    FROM ${LATEST} t
+    JOIN Customer c ON c.id = t.customerId
+    LEFT JOIN WhatsAppReadState r ON r.customerId = t.customerId AND r.userId = ${user.id}
+    ${unreadJoin('LEFT')}
+    WHERE c.deletedAt IS NULL ${ownerCondition(user, query.ownerId)} ${search} ${awaiting}
+    GROUP BY t.customerId, t.lastMessageAt, t.lastOutboundAt
+    ${unread}
+    ORDER BY t.lastMessageAt DESC, t.customerId ASC
     LIMIT ${page.take} OFFSET ${page.skip}`);
 }
 
 /** Conversations with unread customer messages among this person's own customers (the sidebar badge). */
 export async function unreadConversationCount(user: Actor) {
   const rows = await db.$queryRaw<{ total: bigint | number }[]>(Prisma.sql`
-    SELECT COUNT(*) AS total FROM (
-      SELECT t.customerId FROM (SELECT customerId, MAX(CASE WHEN direction = 'OUTBOUND' THEN sentAt END) AS lastOutboundAt FROM WhatsAppMessage GROUP BY customerId) t
-      JOIN Customer c ON c.id = t.customerId
-      LEFT JOIN WhatsAppReadState r ON r.customerId = t.customerId AND r.userId = ${user.id}
-      WHERE c.deletedAt IS NULL AND c.ownerId = ${user.id} AND EXISTS (
-        SELECT 1 FROM WhatsAppMessage u WHERE u.customerId = t.customerId AND u.direction = 'INBOUND' AND u.source IN ${LIVE_SOURCES}
-          AND u.sentAt > GREATEST(COALESCE(r.readAt, ${EPOCH}), COALESCE(t.lastOutboundAt, ${EPOCH})))
-    ) x`);
+    SELECT COUNT(DISTINCT t.customerId) AS total
+    FROM ${LATEST} t
+    JOIN Customer c ON c.id = t.customerId
+    LEFT JOIN WhatsAppReadState r ON r.customerId = t.customerId AND r.userId = ${user.id}
+    ${unreadJoin('INNER')}
+    WHERE c.deletedAt IS NULL AND c.ownerId = ${user.id}`);
   return Number(rows[0]?.total ?? 0);
 }
 
