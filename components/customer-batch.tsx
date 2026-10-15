@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Bootstrap, Customer } from '@/lib/types';
 import { api } from '@/lib/client';
+import type { CustomerColumnKey } from '@/lib/customer-columns';
 import { CustomerTable } from './customer-table';
 import { Dialog } from './ui/dialog';
 import { AssignDialog } from './forms';
@@ -16,9 +17,13 @@ export function SelectionBox({ checked, mixed = false, onChange, label, disabled
 
 const won = (c: Customer) => c.deals.length > 0 || c.stage === 'WON';
 
-/** Customer table with cross-page selection for administrators: assign / transfer, move to the recycle bin. */
-export function BatchCustomerTable({ rows, tz, boot, onFollow, onSort, onChanged }: {
-  rows: Customer[]; tz: string; boot: Bootstrap; onFollow: (c: Customer) => void; onSort: (key: string) => void; onChanged: (message: string) => void;
+/**
+ * Customer table with cross-page selection for administrators: assign / transfer, move to the recycle bin.
+ * `tools` (the 「定制列」 button) sits at the end of the toolbar for everyone; sales get a toolbar with just that.
+ */
+export function BatchCustomerTable({ rows, tz, boot, columns, previewId, tools, onFollow, onSort, onChanged, onPreview }: {
+  rows: Customer[]; tz: string; boot: Bootstrap; columns: readonly CustomerColumnKey[]; previewId?: string; tools?: ReactNode;
+  onFollow: (c: Customer) => void; onSort: (key: string) => void; onChanged: (message: string) => void; onPreview: (c: Customer, fromKeyboard?: boolean) => void;
 }) {
   const admin = boot.user.role === 'ADMIN';
   const [selected, setSelected] = useState<Customer[]>([]);
@@ -42,10 +47,15 @@ export function BatchCustomerTable({ rows, tz, boot, onFollow, onSort, onChanged
             onClick={() => { setError(''); setDialog('delete'); }}>移入回收站</button>
           <button disabled={!selected.length || busy} onClick={() => setSelected([])}>取消选择</button>
           <button onClick={() => setDialog('trash')}>回收站 / 恢复</button>
-          <small className="muted">{protectedCount ? `已选中 ${protectedCount} 位已成交客户：可以分配，不能删除。` : '更换筛选条件会清空选择。'}</small>
+          <div className="batch-toolbar-note">
+            <small className="muted">{protectedCount ? `已选中 ${protectedCount} 位已成交客户：可以分配，不能删除。` : '更换筛选条件会清空选择。'}</small>
+            {tools}
+          </div>
         </div>
       )}
-      <CustomerTable rows={rows} tz={tz} onFollow={onFollow} onSort={onSort} onChanged={onChanged} selection={admin ? {
+      {!admin && tools && <div className="batch-toolbar table-tools">{tools}</div>}
+      <CustomerTable rows={rows} tz={tz} columns={columns} previewId={previewId} onPreview={onPreview}
+        onFollow={onFollow} onSort={onSort} onChanged={onChanged} selection={admin ? {
         header: <SelectionBox label="全选当前页客户" checked={rows.length > 0 && rows.every(c => selectedIds.has(c.id))}
           mixed={rows.some(c => selectedIds.has(c.id)) && !rows.every(c => selectedIds.has(c.id))} disabled={!rows.length} onChange={selectPage} />,
         cell: c => <SelectionBox label={`选择客户 ${c.name}`} checked={selectedIds.has(c.id)} onChange={value => toggle(c, value)} />,

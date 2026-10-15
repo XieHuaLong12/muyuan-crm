@@ -1,9 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { Actor, scope } from '@/lib/auth';
+import { Actor, HttpError, scope } from '@/lib/auth';
 import { dayKey, localDate, periodRange, type Period } from '@/lib/time';
 import { contactNumber } from '@/lib/phone-country';
+import { CUSTOMER_SORT_KEYS } from '@/lib/customer-columns';
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).or(z.literal('')).default('');
 export const customerListQuery = z.object({
@@ -23,8 +24,8 @@ export const customerListQuery = z.object({
   date: dateKey,
   assign: z.enum(['', 'pending']).default(''),
   grade: z.enum(['', 'A', 'B', 'C', 'D', 'none']).default(''),
-  // productInterest stays accepted so older bookmarked links still open.
-  sort: z.enum(['priority', 'name', 'inquiryAt', 'country', 'source', 'whatsapp', 'productInterest', 'stage', 'isQualified', 'estimatedOrderValue', 'lastFollowUpAt', 'nextFollowUpAt', 'owner']).default('priority'),
+  // Every sortable column a user can add in 「定制列」 (lib/customer-columns.ts); productInterest is one of them, so older bookmarked links still open.
+  sort: z.enum(['priority', ...CUSTOMER_SORT_KEYS]).default('priority'),
   dir: z.enum(['asc', 'desc']).default('asc'),
   page: z.coerce.number().int().min(1).max(100000).default(1),
   pageSize: z.coerce.number().int().refine(v => [10, 50, 100].includes(v), '每页数量只能是 10、50 或 100').default(10),
@@ -111,8 +112,30 @@ export async function customerList(user: Actor, input: unknown) {
     const page = await db.customer.findMany({ where: { id: { in: ids } }, include });
     rows = ids.map(id => page.find(c => c.id === id)!).filter(Boolean);
   } else {
-    const orderBy: Prisma.CustomerOrderByWithRelationInput = q.sort === 'owner' ? { owner: { name: q.dir } } : { [q.sort]: q.dir };
+    const orderBy: Prisma.CustomerOrderByWithRelationInput = q.sort === 'owner' ? { owner: { name: q.dir } }
+      : q.sort === 'deals' ? { deals: { _count: q.dir } }
+        : { [q.sort]: q.dir };
     rows = await db.customer.findMany({ where, include, orderBy: [orderBy, { id: 'asc' }], skip, take: q.pageSize });
   }
   return { rows: rows.map(c => ({ ...c, contact: contactNumber(c) })), total, page: q.page, pageSize: q.pageSize, countries: countries.map(c => c.country), pool };
+}
+
+/**
+ * What the list's side preview shows: the customer, the latest follow-ups and a deal summary — without the WhatsApp
+ * history and lead payloads the full profile loads. Same visibility as the list: sales only see their own customers.
+ */
+export async function customerPreview(id: unknown, user: Actor) {
+  const customerId = z.string().trim().min(1).max(191).parse(id);
+  const c = await db.customer.findFirst({
+    where: { id: customerId, ...scope(user) },
+    include: {
+      owner: { select: { name: true } },
+      deals: { select: { id: true, dealAmount: true, currency: true, dealDate: true }, orderBy: { dealDate: 'desc' } },
+      followUps: { select: { id: true, type: true, content: true, followUpAt: true, nextFollowUpAt: true }, orderBy: { followUpAt: 'desc' }, take: 3 },
+      _count: { select: { followUps: true, submissions: true } },
+    },
+  });
+  if (!c) throw new HttpError(404, '客户不存在或无访问权限');
+  const { _count, ...customer } = c;
+  return { ...customer, contact: contactNumber(c), followUpCount: _count.followUps, submissionCount: _count.submissions };
 }

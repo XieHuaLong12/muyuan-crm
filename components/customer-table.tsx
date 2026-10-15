@@ -1,15 +1,16 @@
 'use client';
-import { useEffect,useState } from 'react';
+import { useEffect,useState,type ReactNode } from 'react';
 import Link from 'next/link';
-import { ArrowUpDown,Check,ChevronDown,Copy,MessageCircle,MessageSquare } from 'lucide-react';
+import { ArrowUpDown,Check,ChevronDown,Copy,MessageCircle,MessageSquare,PanelRightOpen } from 'lucide-react';
 import { Customer } from '@/lib/types';
-import { stages,sources } from '@/lib/constants';
+import { stages,sources,purchases } from '@/lib/constants';
 import { KANBAN_REASON_STAGES,KANBAN_STAGES,type KanbanStage } from '@/lib/bos-kanban';
-import { api,money,dateText } from '@/lib/client';
+import { api,money,dateText,dateTimeText } from '@/lib/client';
 import { dayKey } from '@/lib/time';
 import { inquiryDate } from '@/lib/customer-date';
 import { ReasonDialog } from './forms';
 import { LEAD_GRADES,isLeadGrade } from '@/lib/lead-grade';
+import { CUSTOMER_COLUMNS,DEFAULT_CUSTOMER_COLUMNS,type CustomerColumnKey } from '@/lib/customer-columns';
 /** The ad-form grade, with what it was based on as a tooltip. */
 export function GradeChip({grade,reason,source}:{grade?:string;reason?:string;source?:string}){if(!grade||!isLeadGrade(grade))return null;return <span className={`grade-chip grade-${grade.toLowerCase()}`} title={`${LEAD_GRADES[grade].label}${reason?`：${reason}`:''}${source==='AI'?'（AI 评级）':source==='RULE'?'（按表单规则）':''}`} aria-label={`表单等级 ${LEAD_GRADES[grade].label}`}>{grade}</span>;}
 export function Badge({stage}:{stage:string}){return <span className={`badge badge-${stage.toLowerCase()}`}>{stages[stage as keyof typeof stages]??stage}</span>;}
@@ -74,4 +75,79 @@ function StageCell({c,onChanged}:{c:Customer;onChanged?:(message:string)=>void})
  </span>;
 }
 
-export function CustomerTable({rows,tz,onFollow,onSort,onChanged,selection}:{rows:Customer[];tz:string;onFollow:(c:Customer)=>void;onSort?:(key:string)=>void;onChanged?:(message:string)=>void;selection?:{header:React.ReactNode;cell:(c:Customer)=>React.ReactNode}}){const headers=[['name','客户 / 公司'],['inquiryAt','询盘日期'],['country','国家'],['source','来源'],['whatsapp','WhatsApp'],['stage','阶段'],['isQualified','有效性'],['estimatedOrderValue','预计金额'],['lastFollowUpAt','最后跟进'],['nextFollowUpAt','下次跟进'],['owner','负责人']];return <div className="table-scroll"><table><thead><tr>{selection&&<th className="selection-cell">{selection.header}</th>}{headers.map(([k,l])=><th key={k}>{onSort?<button className="sort" onClick={()=>onSort(k)}>{l}<ArrowUpDown size={12}/></button>:l}</th>)}<th>操作</th></tr></thead><tbody>{rows.map(c=><tr key={c.id}>{selection&&<td className="selection-cell">{selection.cell(c)}</td>}<td><Link className="customer-link" href={`/customers/${c.id}`}><span className="avatar">{c.name.slice(0,1)}</span><span><strong>{c.name}<GradeChip grade={c.leadGrade} reason={c.leadGradeReason} source={c.leadGradeSource}/></strong><small>{c.companyName||'未填写公司'}</small></span></Link></td><td>{new Date(inquiryDate(c)).toLocaleDateString('zh-CN',{timeZone:tz})}</td><td>{c.country||'—'}</td><td>{sources[c.source as keyof typeof sources]}</td><td><ContactCell c={c}/></td><td><StageCell c={c} onChanged={onChanged}/></td><td><span className={c.isQualified?'qualified':'muted'}>{c.isQualified===null?'待判断':c.isQualified?'有效':'无效'}</span></td><td>{money(c.estimatedOrderValue,c.currency)}</td><td>{dateText(c.lastFollowUpAt,tz)}</td><td><Due date={c.nextFollowUpAt} tz={tz}/></td><td>{c.pendingAssignment?<span className="badge" title="进入待分配池的时间起算">待分配 · 已等 {waited(c.createdAt)}</span>:c.owner?.name}</td><td><button className="text-button" onClick={()=>onFollow(c)}><MessageSquare size={14}/>跟进</button></td></tr>)}</tbody></table>{!rows.length&&<div className="empty">暂无数据，试试调整筛选或新建客户。</div>}</div>;}
+/** Full date for facts that may be from another year (inquiry, first contact…). */
+const fullDate=(value:string|null|undefined,tz:string)=>value?new Date(value).toLocaleDateString('zh-CN',{timeZone:tz}):'—';
+const text=(value:string|number|null|undefined)=>value===null||value===undefined||value===''?'—':value;
+/** Unset amounts stay unknown instead of showing ¥0. */
+const amount=(value:string,currency:string)=>Number(value)?money(value,currency):'—';
+/** Long free text stays on one line; the whole text is in the tooltip. */
+function Clamp({value}:{value:string}){return value?<span className="cell-clamp" title={value}>{value}</span>:<span className="muted">—</span>;}
+
+type CellContext={tz:string;onChanged?:(message:string)=>void};
+/** How each column the user can pick in 「定制列」 renders; labels, groups and sorting live in lib/customer-columns.ts. */
+const CELLS:Record<Exclude<CustomerColumnKey,'name'>,(c:Customer,ctx:CellContext)=>ReactNode>={
+ companyName:c=><Clamp value={c.companyName}/>,
+ country:c=>text(c.country),
+ city:c=>text(c.city),
+ language:c=>text(c.language),
+ purchaseType:c=>purchases[c.purchaseType as keyof typeof purchases]??text(c.purchaseType),
+ productInterest:c=><Clamp value={c.productInterest}/>,
+ productModel:c=><Clamp value={c.productModel}/>,
+ quantity:c=>c.quantity||'—',
+ purchaseTimeline:c=><Clamp value={c.purchaseTimeline}/>,
+ notes:c=><Clamp value={c.notes}/>,
+ whatsapp:c=><ContactCell c={c}/>,
+ phone:c=>text(c.phone),
+ email:c=>text(c.email),
+ stage:(c,{onChanged})=><StageCell c={c} onChanged={onChanged}/>,
+ isQualified:c=><span className={c.isQualified?'qualified':'muted'}>{c.isQualified===null?'待判断':c.isQualified?'有效':'无效'}</span>,
+ leadGrade:c=>isLeadGrade(c.leadGrade??'')?<GradeChip grade={c.leadGrade} reason={c.leadGradeReason} source={c.leadGradeSource}/>:<span className="muted">未评级</span>,
+ estimatedOrderValue:c=>money(c.estimatedOrderValue,c.currency),
+ budget:c=>amount(c.budget,c.currency),
+ quotedAmount:c=>amount(c.quotedAmount,c.currency),
+ deals:c=>c.deals.length?`${c.deals.length} 笔`:'—',
+ aiScore:c=>c.aiLastAnalyzedAt?`${c.aiScore??0} / 100`:'—',
+ inquiryAt:(c,{tz})=>fullDate(inquiryDate(c),tz),
+ createdAt:(c,{tz})=>fullDate(c.createdAt,tz),
+ contactedAt:(c,{tz})=>fullDate(c.contactedAt,tz),
+ firstReplyAt:(c,{tz})=>fullDate(c.firstReplyAt,tz),
+ quotedAt:(c,{tz})=>fullDate(c.quotedAt,tz),
+ lastFollowUpAt:(c,{tz})=>dateText(c.lastFollowUpAt,tz),
+ nextFollowUpAt:(c,{tz})=><Due date={c.nextFollowUpAt} tz={tz}/>,
+ lastWhatsAppAt:(c,{tz})=>dateTimeText(c.lastWhatsAppAt,tz),
+ source:c=>sources[c.source as keyof typeof sources]??text(c.source),
+ sourceDetail:c=><Clamp value={c.sourceDetail}/>,
+ owner:c=>c.pendingAssignment?<span className="badge" title="进入待分配池的时间起算">待分配 · 已等 {waited(c.createdAt)}</span>:c.owner?.name,
+};
+
+/** The name opens the customer's profile; anywhere else in this cell (or the preview button) opens the side preview. */
+function CustomerCell({c,onPreview}:{c:Customer;onPreview?:(c:Customer,fromKeyboard?:boolean)=>void}){
+ return <div className="customer-link">
+  <span className="avatar" aria-hidden>{c.name.slice(0,1)}</span>
+  <span><strong><Link className="customer-name" href={`/customers/${c.id}`}>{c.name}</Link><GradeChip grade={c.leadGrade} reason={c.leadGradeReason} source={c.leadGradeSource}/></strong><small>{c.companyName||'未填写公司'}</small></span>
+  {onPreview&&<button type="button" className="customer-preview-button" title="预览" aria-label={`预览 ${c.name}`} onClick={e=>onPreview(c,e.detail===0)}><PanelRightOpen size={14} aria-hidden/></button>}
+ </div>;
+}
+
+export function CustomerTable({rows,tz,columns=DEFAULT_CUSTOMER_COLUMNS,onFollow,onSort,onChanged,onPreview,previewId,selection}:{
+ rows:Customer[];tz:string;columns?:readonly CustomerColumnKey[];onFollow:(c:Customer)=>void;onSort?:(key:string)=>void;onChanged?:(message:string)=>void;
+ onPreview?:(c:Customer,fromKeyboard?:boolean)=>void;previewId?:string;selection?:{header:ReactNode;cell:(c:Customer)=>ReactNode};
+}){
+ const ctx:CellContext={tz,onChanged};
+ // Clicks on the name link, the preview button or the checkbox keep their own meaning.
+ const previewFromCell=(c:Customer)=>(e:React.MouseEvent)=>{if(!(e.target as HTMLElement).closest('a,button,input,select,label'))onPreview?.(c);};
+ return <div className="table-scroll"><table>
+  <thead><tr>
+   {selection&&<th className="selection-cell">{selection.header}</th>}
+   {columns.map(key=>{const {label,sortable}=CUSTOMER_COLUMNS[key];return <th key={key} scope="col">{onSort&&sortable?<button className="sort" onClick={()=>onSort(key)}>{label}<ArrowUpDown size={12}/></button>:label}</th>;})}
+   <th scope="col">操作</th>
+  </tr></thead>
+  <tbody>{rows.map(c=><tr key={c.id} className={previewId===c.id?'is-previewing':undefined}>
+   {selection&&<td className="selection-cell">{selection.cell(c)}</td>}
+   {columns.map(key=>key==='name'
+    ?<td key={key} className={onPreview?'customer-cell':undefined} onClick={onPreview?previewFromCell(c):undefined}><CustomerCell c={c} onPreview={onPreview}/></td>
+    :<td key={key}>{CELLS[key](c,ctx)}</td>)}
+   <td><button className="text-button" onClick={()=>onFollow(c)}><MessageSquare size={14}/>跟进</button></td>
+  </tr>)}</tbody>
+ </table>{!rows.length&&<div className="empty">暂无数据，试试调整筛选或新建客户。</div>}</div>;
+}

@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { api } from '@/lib/client';
 import { Bootstrap, Customer, Deal, Target as TargetType } from '@/lib/types';
+import type { CustomerColumnKey } from '@/lib/customer-columns';
 import type { TargetProgress } from '@/services/target-service';
 import { CustomerForm, FollowForm, DealForm, AssignDialog, ReasonDialog } from './forms';
 import { CustomerList, rememberedListUrl } from './customer-list';
@@ -17,7 +18,7 @@ import { SmartImport } from './smart-import';
 type Page = 'customers' | 'targets' | 'settings' | 'integrations' | 'lead-intake';
 
 /** Older-generation pages inside the BOS shell: customers, company targets, settings, integrations and lead intake. */
-export function Workspace({ initialBoot, pageOverride: page }: { initialBoot: Bootstrap; pageOverride: Page }) {
+export function Workspace({ initialBoot, pageOverride: page, customerColumns }: { initialBoot: Bootstrap; pageOverride: Page; customerColumns?: CustomerColumnKey[] }) {
   const pathname = usePathname(), router = useRouter();
   const customerId = page === 'customers' ? pathname.split('/')[2] : undefined;
   const [boot, setBoot] = useState<Bootstrap>(initialBoot);
@@ -91,7 +92,7 @@ export function Workspace({ initialBoot, pageOverride: page }: { initialBoot: Bo
           )} />
         )}
         {error && <div role="alert" className="error-banner">{error}<button onClick={() => setRevision(v => v + 1)}>重试</button></div>}
-        {page === 'customers' && !customerId && <CustomerList boot={boot} revision={revision} onFollow={setFollow} onChanged={saved} />}
+        {page === 'customers' && !customerId && <CustomerList boot={boot} revision={revision} initialColumns={customerColumns} onFollow={setFollow} onChanged={saved} />}
         {loading && (customerId || page === 'targets') ? <div className="loading">正在加载数据…</div> : (
           <>
             {customerId && detail && (

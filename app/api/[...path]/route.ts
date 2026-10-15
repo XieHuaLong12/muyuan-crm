@@ -7,7 +7,7 @@ import { loginAllowed, recordLoginFailure, recordLoginSuccess, clientAddress } f
 import {
   accessible, saveCustomer, addFollowUp, updateFollowUp, deleteFollowUp, addDeal, updateDeal, voidDeal, deleteCustomer,
 } from '@/services/customer-service';
-import { customerList } from '@/services/customer-list-service';
+import { customerList, customerPreview } from '@/services/customer-list-service';
 import { assignCustomers, saveLeadAssignMode } from '@/services/lead-assignment-service';
 import { deliverLeadAlertsAfterResponse } from '@/lib/after-response';
 import { createUserAccount, changeOwnPassword } from '@/services/sales-account-service';
@@ -85,6 +85,7 @@ async function customers(req: NextRequest, user: Actor, path: string[]) {
     if (method === 'PUT') return ok(await saveCustomer(await body(), user, id));
     if (method === 'DELETE') return ok(await deleteCustomer(id, user));
   }
+  if (action === 'preview' && method === 'GET') return ok(await customerPreview(id, user));
   if (action === 'analyze' && method === 'POST') return ok(await analyzeCustomerWithDeepSeek(id, user));
   if (action === 'followups') {
     if (!subId && method === 'POST') return ok(await addFollowUp(id, await body(), user), 201);
