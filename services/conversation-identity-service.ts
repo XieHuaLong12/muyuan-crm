@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client';
 import { canonicalPhone, identityKey } from '@/lib/contact-identity';
 import { resolveActiveContact } from './contact-identity-service';
-import { contactedFeedback } from './advertising-feedback-service';
+import { contactedFeedback, qualifiedFeedback } from './advertising-feedback-service';
+import { stageQualifies } from '@/lib/constants';
 
 export async function ensureConversation(tx: Prisma.TransactionClient, input: {
   provider: string; accountId: string; peerId: string; phone?: string | null; name?: string;
@@ -46,11 +47,13 @@ export async function messageFacts(tx: Prisma.TransactionClient, customerId: str
   const inbound = direction.toUpperCase() === 'INBOUND';
   const stage=c.stageSource!=='HUMAN'&&['NEW','CONTACTED'].includes(c.stage)?inbound?'REPLIED':c.stage==='NEW'?'CONTACTED':c.stage:null;
   await tx.customer.update({ where: { id: customerId }, data: {
-    ...(stage&&stage!==c.stage?{stage,stageSource:'SYSTEM'}:{}),
+    ...(stage&&stage!==c.stage?{stage,stageSource:'SYSTEM',...(stageQualifies(stage)?{isQualified:true}:{})}:{}),
     lastContactAt: last(c.lastContactAt), lastWhatsAppAt: last(c.lastWhatsAppAt),
     ...(inbound ? { firstReplyAt: first(c.firstReplyAt), lastInboundAt: last(c.lastInboundAt) } : { contactedAt: first(c.contactedAt), lastOutboundAt: last(c.lastOutboundAt) }),
   } });
   if(stage&&stage!==c.stage)await tx.stageHistory.create({data:{customerId,fromStage:c.stage,toStage:stage,changedBy:c.ownerId,note:'SYSTEM: 已入库 WhatsApp 消息事实'}});
+  // A customer who writes back is valid from now on (已回复 and later stages).
+  if(stage&&stage!==c.stage&&stageQualifies(stage)&&c.isQualified!==true)await qualifiedFeedback(tx,customerId,at);
   if(!inbound)await contactedFeedback(tx,customerId,at);
   await tx.customerIntelligence.upsert({ where: { customerId }, create: { customerId, productsJson: '[]', analysisPending: true }, update: { analysisPending: true } });
 }

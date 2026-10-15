@@ -3,7 +3,7 @@ import { useEffect,useState,type ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowUpDown,Check,ChevronDown,Copy,MessageCircle,MessageSquare,PanelRightOpen } from 'lucide-react';
 import { Customer } from '@/lib/types';
-import { stages,sources,purchases,invalidReasons } from '@/lib/constants';
+import { stages,sources,purchases,invalidReasons,stageQualifies } from '@/lib/constants';
 import { KANBAN_REASON_STAGES,KANBAN_STAGES,type KanbanStage } from '@/lib/bos-kanban';
 import { api,money,dateText,dateTimeText } from '@/lib/client';
 import { dayKey } from '@/lib/time';
@@ -86,7 +86,9 @@ function QualificationCell({c,onChanged}:{c:Customer;onChanged?:(message:string)
  const [chosen,setChosen]=useState<{value:boolean|null}>();
  useEffect(()=>{setChosen(undefined);},[c.isQualified]);
  const shown=chosen?chosen.value:c.isQualified;
- const plain=(title?:string)=><span className={shown?'qualified':'muted'} title={title}>{qualificationLabel(shown)}</span>;
+ const plain=(title?:string,value=shown)=><span className={value?'qualified':'muted'} title={title}>{qualificationLabel(value)}</span>;
+ // 已回复 to 确认采购: valid by stage, set by the system (lib/constants QUALIFYING_STAGES), nothing to click.
+ if(stageQualifies(c.stage))return plain(`「${stages[c.stage as keyof typeof stages]}」阶段自动算有效客户；确实无效请把阶段改为「无效客户」`,true);
  if(!onChanged)return plain();
  if(c.stage==='WON'||c.deals?.length)return plain('成交客户一定是有效客户');
  if(c.stage==='INVALID')return plain('阶段是「无效客户」：先把阶段改回其他阶段，才能修改有效性');

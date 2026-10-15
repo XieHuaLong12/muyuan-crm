@@ -10,6 +10,7 @@ import { inquiryDate, parseInquiryDate } from '@/lib/customer-date';
 import { normalizeWhatsApp } from '@/lib/whatsapp';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { qualifiedFeedback } from './advertising-feedback-service';
+import { stageQualifies, stages } from '@/lib/constants';
 import { ensureOrderForDeal, syncOrderForDeal, cancelOrderInTx } from './order-service';
 import { lockCustomer, lockIdentity, rememberCustomerContacts } from './contact-identity-service';
 
@@ -160,7 +161,7 @@ export async function saveCustomer(input: unknown, user: Actor, id?: string, opt
     whatsappNormalized: normalizeWhatsApp(v.whatsapp),
     inquiryAt: effectiveInquiry,
     email: v.email.trim().toLowerCase(),
-    isQualified: v.stage === 'INVALID' ? false : v.isQualified,
+    isQualified: v.stage === 'INVALID' ? false : stageQualifies(v.stage) ? true : v.isQualified,
     nextFollowUpAt: nextFollowUpAt ? localDate(nextFollowUpAt, settings.timezone) : null,
   };
   const stamp = { CONTACTED: 'contactedAt', REPLIED: 'firstReplyAt', NEEDS_CONFIRMED: 'needsConfirmedAt', QUOTED: 'quotedAt', LOST: 'lostAt' } as const;
@@ -224,6 +225,7 @@ export async function setQualification(id: string, input: unknown, user: Actor) 
     if (c.isQualified !== v.from) throw new HttpError(409, '有效性已被其他人修改，请刷新后再改');
     if (c.deals.length || c.stage === 'WON') throw new HttpError(400, '已成交客户一定是有效客户，不能修改有效性');
     if (c.stage === 'INVALID') throw new HttpError(400, '客户阶段是「无效客户」，请先把阶段改回其他阶段');
+    if (stageQualifies(c.stage) && v.to !== true) throw new HttpError(400, `客户在「${stages[c.stage as keyof typeof stages]}」阶段，自动算有效客户；如果确实无效，请把阶段改为「无效客户」`);
     const updated = await tx.customer.updateMany({
       where: { id, ...scope(user), isQualified: v.from },
       data: { isQualified: v.to, ...(v.to === false ? { invalidReason: v.reason } : {}) },
