@@ -137,16 +137,18 @@ FROM MetaLeadEvent ORDER BY createdAt DESC LIMIT 10;
 | Full name | `name` |
 | Email | `email` |
 | WhatsApp number | `whatsapp`（并写入 `whatsappNormalized`） |
-| What best describes your business? | `purchaseType`（归一到批发商/进口商/经销商…） |
+| 客户类型：What best describes your business? / What type of business are you? / Vous êtes ? / 客户类型… | `purchaseType`（归一到批发商/进口商/经销商…） |
 | Which market or country… | `country` |
-| Estimated order quantity per model? | `quantity`（区间取上限） |
+| 数量：Estimated order quantity per model? / How many pieces for your first order? / Quantité… | `quantity`（只记明确的件数；区间、「200+」、整柜不填，原答案进 `notes`） |
+| 下单时间：When do you plan to place your order? / Purchase timeline… | `purchaseTimeline`（采购计划） |
 | Are you interested in compressed / roll-packed sofas? | `productInterest` |
 | Do you currently import furniture from China? | `notes` |
 | What is your main concern when sourcing sofas? | `notes` |
 | **未识别的问题** | `notes`，并保留**完整 JSON 原文** |
 
-> 匹配按**关键词**而非写死的字段名，所以你在 Meta 里改问题措辞也不会失效。
-> 一个答案命中多个类别时（如「Importer / wholesale」），按**最早出现**的关键词归类。
+> 匹配按**问题的意思**而非写死的字段名（`lib/lead-answers.ts`），所以你在 Meta 里改问题措辞、新建不同问法的表单也能识别；英文、法文、西班牙文、阿拉伯文、中文的常见问法都认得。
+> 客户类型的答案按关键词归类：wholesaler / grossiste / mayorista → 批发商，importer → 进口商，distributor → 经销商，retailer / store / showroom → 家具零售，brand → 品牌，online / e-commerce → 电商；一个答案命中多个类别时（如「Importer / wholesale」「furniture_/_mattress_wholesaler_or_distributor」），按**最早出现**的关键词归类。设计师、工程、酒店客户记为「其他」，但评级时算企业买家。
+> 智能导入用同一套规则识别客户类型和数量。
 
 ## 安全设计
 
@@ -212,9 +214,9 @@ curl -i "https://avenee.online/api/leads/webhook?hub.mode=subscribe&hub.verify_t
 
 | 等级 | 含义 | 提醒方式 |
 |---|---|---|
-| A 优质 | 企业买家 + 每款 ≥ 20 件（线下起订量）+ 已从中国进口或有明确采购计划 | 手机推送常驻通知栏；CRM 页面顶部置顶并持续响铃 |
-| B 良好 | 企业买家但信息不全，或数量可观但身份不明 | 同 A |
-| C 一般 | 身份不明、像个人买家、需求模糊 | 推送一次；页面弹出并响一声 |
+| A 优质 | 企业买家 + ≥ 20 件（线下起订量）或整柜 + 已从中国进口或 1 个月内下单 | 手机推送常驻通知栏；CRM 页面顶部置顶并持续响铃 |
+| B 良好 | 企业买家并且满足其中一项（≥ 10 件、已从中国进口、1 个月内下单），或 ≥ 20 件 / 整柜但身份不明 | 同 A |
+| C 一般 | 身份不明、个人自用、需求模糊 | 推送一次；页面弹出并响一声 |
 | D 无效 | 测试数据、乱填、没有可联系方式 | 不推送、不响铃，只记录 |
 
 - **谁来评**：配置了 `DEEPSEEK_API_KEY` 时由 DeepSeek 读整张表单判断（能看懂"两个货柜""我有三家店"这类自由填写），最多等 12 秒；没配置、失败或超时时按上表规则评。发给 AI 的只有表单答案，**不包括姓名、电话和邮箱**。
@@ -233,3 +235,9 @@ curl -i "https://avenee.online/api/leads/webhook?hub.mode=subscribe&hub.verify_t
 4. Hostinger Cron 每 5 分钟调用一次 `/api/cron/meta-leads`（见上文「部署后配置」），Webhook 漏掉的会被补回。
 5. 用 Meta 的 Lead Ads 测试工具提交一条，几秒内应在「待分配」看到并响铃（测试工具的占位数据会显示为「收到 Meta 测试线索」，不建客户）。
 
+### 修订：不同表单的问法（2026-10-15）
+
+- **问题**：第一版规则只认「What best describes your business?」「Estimated order quantity」这类固定问法。床垫表单问的是「What type of business are you?」「How many pieces for your first order?」（答案 `50–200_pcs`），客户类型和数量都没识别出来，没有配置 DeepSeek 时几乎全部评成 C，档案里的采购类型也显示「其他」。
+- **现在**：客户类型、数量、下单时间按问题的意思识别（见上面的字段映射），评级规则直接读表单答案，不依赖映射是否成功：数量是区间时按下限算（`50–200_pcs` 算 50 件），「1 个月内下单」与「已从中国进口」同样算作明确的采购计划。上面那张床垫表单（批发商 + 50–200 件 + 1 个月内下单）评为 A。
+- **已有线索**：上线后第一次定时任务或管理员打开 CRM 时开始，按规则评过级的表单线索逐批（每次 100 位）重新评级，同时把档案里空着的采购类型、数量、采购计划按表单答案补上（已填写的不改）。每位只重评一次，不重复推送提醒。AI 评过的不动。
+- **留资历史**：不再显示 `extras: [object Object]` 和英文的 `purchaseType`（客户类型以档案为准，表单原答案在「补充回答」里）；补充回答里不再重复整段 JSON（原文仍在下方「原始 CSV 回答」里）。

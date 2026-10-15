@@ -7,6 +7,7 @@ import { parseGupshup, statusPredecessors } from '../lib/gupshup';
 import { ingestWhatsAppWebhook } from '../services/whatsapp-webhook-service';
 import { sendWhatsAppMessage, listWhatsAppMessages } from '../services/whatsapp-message-service';
 import { generateWhatsAppReply, ConversationAnalysis } from '../services/whatsapp-ai-service';
+import { translateForCustomer } from '../services/sales-copilot-service';
 import { shouldApplyStage, updateWhatsAppStage } from '../services/whatsapp-stage-service';
 
 const event = (id: string, phone = '15557770001', text = 'Please quote compressed sofa FOB price', timestamp = Date.now()) => ({
@@ -161,21 +162,40 @@ test('WhatsApp V2 integration: ingestion, Meta sends, receipts, scoped history a
     assert.ok(page2.messages.length > 0);
     assert.ok(!page2.messages.some(m => page1.messages.some(n => n.id === m.id)));
 
+    // The draft may cite the catalog and propose a quotation, but only for real catalog models.
+    const model = (await db.product.findFirst({ where: { deletedAt: null, status: 'ACTIVE' }, select: { model: true } }))?.model;
+    const drafted = { ...analysis, replyZh: '请确认型号和数量', nextStep: '发报价', quoteItems: [...(model ? [{ model: model.toLowerCase(), quantity: 50 }] : []), { model: 'NOT-A-MODEL-9', quantity: 3 }] };
     fetchMock.mock.mockImplementation(async (_url, options) => {
       const request = JSON.parse(String(options?.body));
       const context = JSON.parse(request.messages[1].content);
       if(context.messages)assert.equal(context.messages.length, 20);
       assert.equal('phone' in context.customer, false);
-      return Response.json({ choices: [{ message: { content: JSON.stringify(context.newMessages?{score:88,intent:'HIGH',customerType:'WHOLESALE',products:['Y-601'],quantity:20,summary:'Wholesale buyer',quality:'A',confidence:95,nextAction:'确认目的港',suggestedStage:'QUOTED'}:analysis) } }] });
+      if(!context.newMessages)assert.ok(Array.isArray(context.catalog), 'the draft sees the catalog');
+      return Response.json({ choices: [{ message: { content: JSON.stringify(context.newMessages?{score:88,intent:'HIGH',customerType:'WHOLESALE',products:['Y-601'],quantity:20,summary:'Wholesale buyer',quality:'A',confidence:95,nextAction:'确认目的港',suggestedStage:'QUOTED'}:drafted) } }] });
     });
     const reply = await generateWhatsAppReply(customerId, actor);
     assert.equal(reply.reply, analysis.reply);
+    assert.deepEqual([reply.replyZh, reply.nextStep], ['请确认型号和数量', '发报价']);
+    assert.deepEqual(reply.quoteItems, model ? [{ model, quantity: 50 }] : [], 'invented models never reach a quotation');
+    assert.equal(reply.quoteHref, model ? `/products/quotes/new?customerId=${encodeURIComponent(customerId)}&items=${encodeURIComponent(`${model}:50`)}` : null);
     await updateWhatsAppStage(customerId);
     assert.equal((await db.customer.findUniqueOrThrow({ where: { id: customerId } })).stage, 'NEW');
     assert.equal(await db.stageHistory.count({ where: { customerId, changedBy: 'AI:DeepSeek' } }), 0);
     await updateWhatsAppStage(customerId);
     assert.equal(await db.task.count({where:{customerId,source:'AI',type:'FOLLOW_UP'}}),1);
     assert.equal(await db.stageHistory.count({ where: { customerId, changedBy: 'AI:DeepSeek' } }), 0);
+    // The salesperson's Chinese goes out in the customer's language, judged from what the customer writes.
+    fetchMock.mock.mockImplementation(async (_url, options) => {
+      const context = JSON.parse(JSON.parse(String(options?.body)).messages[1].content);
+      assert.equal(context.text, '你好，请确认数量');
+      assert.ok(context.recentCustomerMessages.length > 0 && context.recentCustomerMessages.length <= 5);
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ translation: 'Hello, please confirm the quantity', language: '英语' }) } }] });
+    });
+    assert.deepEqual(await translateForCustomer(actor, { customerId, text: '你好，请确认数量' }), { text: 'Hello, please confirm the quantity', language: '英语' });
+    const deepSeekKey = process.env.DEEPSEEK_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
+    await assert.rejects(translateForCustomer(actor, { customerId, text: '你好' }), (error: { status?: number }) => error.status === 503);
+    process.env.DEEPSEEK_API_KEY = deepSeekKey;
   } finally {
     for (const key of ['AUTH_SECRET', 'META_GRAPH_VERSION', 'GUPSHUP_API_KEY', 'GUPSHUP_SOURCE', 'GUPSHUP_APP_NAME', 'DEEPSEEK_API_KEY']) {
       if (environment[key] === undefined) delete process.env[key]; else process.env[key] = environment[key];

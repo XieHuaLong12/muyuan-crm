@@ -122,7 +122,8 @@ export function QuoteBuilder({ data }: { data: QuoteBuilderData }) {
   const [mobileView, setMobileView] = useState<'edit' | 'preview'>('edit');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(() => !draft && (data.prefill.length || data.prefillMissing.length)
+    ? `已按聊天带入 ${data.prefill.length} 个产品：请核对尺寸、数量和单价${data.prefillMissing.length ? `；产品库里没有 ${data.prefillMissing.join('、')}，需要手动添加` : ''}` : '');
 
   const lastQuotes = useMemo(() => lastQuoteMap(history), [history]);
 
@@ -138,7 +139,10 @@ export function QuoteBuilder({ data }: { data: QuoteBuilderData }) {
     };
   };
 
-  const [lines, setLines] = useState<Line[]>(() => (draft?.items ?? []).map(item => ({
+  const [lines, setLines] = useState<Line[]>(() => !draft && data.prefill.length ? data.prefill.flatMap(item => {
+    const variant = catalogById.get(item.variantId);
+    return variant ? [lineFromVariant(variant, initialLanguage, item.quantity)] : [];
+  }) : (draft?.items ?? []).map(item => ({
     key: item.key, variantId: item.variantId ?? null, name: item.name, dimensions: item.dimensions ?? '', material: item.material ?? '',
     packing: item.packing ?? '', unit: item.unit ?? '', note: item.note ?? '', quantity: Number(item.quantity), cbm: Number(item.cbm ?? 0),
     grossWeightKg: Number(item.grossWeightKg ?? 0), unitPrice: Number(item.unitPrice), priceSource: (item.priceSource ?? 'MANUAL') as PriceSource,

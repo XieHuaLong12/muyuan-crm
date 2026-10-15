@@ -1,3 +1,5 @@
+import { buysSoon, readAnswers } from './lead-answers';
+
 /**
  * Ad-form lead grades. A form arrives, gets a grade within seconds, and the grade decides how loudly the CRM and
  * the phones announce it. DeepSeek grades from the whole form; these rules are the fallback (no key, AI failure,
@@ -18,14 +20,16 @@ export const ringFor = (grade: string): RingMode => isLeadGrade(grade) ? LEAD_GR
 /** Minimum order per model: 10 online, 20 when negotiated offline (ProductMoq). */
 export const GRADE_A_MIN_QUANTITY = 20;
 export const GRADE_B_MIN_QUANTITY = 10;
-const BUSINESS_BUYERS = new Set(['WHOLESALE', 'IMPORTER', 'DISTRIBUTOR', 'RETAILER', 'BRAND', 'ECOMMERCE']);
-const BUYER_LABELS: Record<string, string> = { WHOLESALE: '批发商', IMPORTER: '进口商', DISTRIBUTOR: '经销商', RETAILER: '家具零售店', BRAND: '品牌客户', ECOMMERCE: '电商客户' };
+const BUSINESS_BUYERS = new Set(['WHOLESALE', 'IMPORTER', 'DISTRIBUTOR', 'RETAILER', 'BRAND', 'ECOMMERCE', 'PROJECT']);
+const BUYER_LABELS: Record<string, string> = { WHOLESALE: '批发商', IMPORTER: '进口商', DISTRIBUTOR: '经销商', RETAILER: '家具零售店', BRAND: '品牌客户', ECOMMERCE: '电商客户', PROJECT: '设计 / 工程客户' };
 
 export type FormAnswer = { question: string; answer: string };
 export type GradeInput = {
   answers: FormAnswer[];
   purchaseType: string;
   quantity: number | null;
+  /** The profile's purchase timeline, for forms whose answers do not say. */
+  purchaseTimeline?: string;
   productInterest: string;
   country: string;
   hasPhone: boolean;
@@ -70,21 +74,33 @@ export function importsFromChina(answers: FormAnswer[]): boolean | null {
   return null;
 }
 
-/** The fallback grade: buyer type, import experience, quantity per model and a reachable contact. */
+/**
+ * The fallback grade, from what the answers say (lib/lead-answers.ts) and the profile where they say nothing:
+ *   A: a business buyer, at least 20 pieces (or a container), and either imports from China or orders within a month;
+ *   B: a business buyer with one of those, or 20+ pieces from a buyer of unknown type;
+ *   C: everything else, including people buying for themselves; D: test leads and leads nobody can contact.
+ */
 export function ruleGrade(input: GradeInput): GradeResult {
-  const result = (grade: LeadGrade, reasons: string[]): GradeResult => ({ grade, reason: reasons.join('；').slice(0, 500), source: 'RULE' });
+  const result = (grade: LeadGrade, reasons: string[]): GradeResult => ({ grade, reason: reasons.filter(Boolean).join('；').slice(0, 500), source: 'RULE' });
   if (input.testLead) return result('D', ['Meta 测试线索']);
   if (!input.hasPhone && !input.hasEmail) return result('D', ['没有可联系的号码或邮箱']);
-  const business = BUSINESS_BUYERS.has(input.purchaseType);
+  const said = readAnswers(input.answers);
+  const buyer = BUSINESS_BUYERS.has(input.purchaseType) ? input.purchaseType : said.buyer;
+  const business = BUSINESS_BUYERS.has(buyer);
+  const quantity = said.quantity ?? (input.quantity ? { min: input.quantity, container: false, label: `${input.quantity} 件`, exact: true, perModel: false } : null);
   const imports = importsFromChina(input.answers);
-  const quantity = input.quantity;
+  const soon = said.timeline ? said.soon : input.purchaseTimeline ? buysSoon(input.purchaseTimeline) : null;
+  const big = !!quantity && (quantity.container || (quantity.min ?? 0) >= GRADE_A_MIN_QUANTITY);
+  const some = !!quantity && (quantity.container || (quantity.min ?? 0) >= GRADE_B_MIN_QUANTITY);
   const facts = [
-    business ? BUYER_LABELS[input.purchaseType] : '买家类型不明',
-    quantity === null ? '未填写数量' : `每款 ${quantity} 件`,
+    business ? BUYER_LABELS[buyer] : said.personal ? '个人自用' : '买家类型不明',
+    quantity ? `${quantity.perModel ? '每款' : '采购'} ${quantity.label}` : '未填写数量',
     imports === true ? '已从中国进口' : imports === false ? '未从中国进口过' : '',
+    soon === true ? '1 个月内下单' : soon === false ? '暂不急着下单' : '',
     input.country,
-  ].filter(Boolean);
-  if (business && imports === true && quantity !== null && quantity >= GRADE_A_MIN_QUANTITY) return result('A', facts);
-  if ((business && (imports === true || (quantity !== null && quantity >= GRADE_B_MIN_QUANTITY))) || (quantity !== null && quantity >= GRADE_A_MIN_QUANTITY)) return result('B', facts);
+  ];
+  if (said.personal && !business) return result('C', facts);
+  if (business && big && (imports === true || soon === true)) return result('A', facts);
+  if ((business && (imports === true || some || soon === true)) || big) return result('B', facts);
   return result('C', facts);
 }
