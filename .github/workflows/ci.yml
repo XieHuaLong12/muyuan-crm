@@ -107,12 +107,13 @@ jobs:
           mv prisma/migrations/20261011090000_quotation_builder /tmp/identity-ci-migrations/
           mv prisma/migrations/20261014143255_lead_grade_and_push_alerts /tmp/identity-ci-migrations/
           mv prisma/migrations/20261015120000_customer_list_column_preference /tmp/identity-ci-migrations/
+          mv prisma/migrations/20261015170000_qualify_replied_stages /tmp/identity-ci-migrations/
           pnpm exec prisma migrate deploy
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "13"
           mysql -h127.0.0.1 -uroot -proot muyuan_reuse -e "INSERT INTO User (id,name,email,passwordHash) VALUES ('reuse-sentinel','Existing user','existing@example.com','preserve-me')"
           mv /tmp/identity-ci-migrations/* prisma/migrations/
           pnpm exec prisma migrate deploy
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "23"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "24"
           # 分配池、联系方式规范键、任务执行人与线索分配方式（20261009024647_assignment_pool_and_corrections）
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND ((table_name='Customer' AND column_name IN ('pendingAssignment','contactKeysAt')) OR (table_name='Task' AND column_name='assigneeId') OR (table_name='Setting' AND column_name='leadAssignMode'))")" = "4"
           # 广告线索实时入库：来源、提交时间、重试退避、表单补拉水位与广告线索首联分钟数（20261009035838_meta_lead_realtime_intake）

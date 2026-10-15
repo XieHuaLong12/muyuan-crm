@@ -12,3 +12,9 @@ export const TERMINAL_STAGES = ['WON', 'LOST', 'INVALID', 'PAUSED'] as const;
 export const isTerminalStage = (stage: string) => (TERMINAL_STAGES as readonly string[]).includes(stage);
 /** Stages that only a real buyer reaches: from a quotation onwards. */
 export const ADVANCED_STAGES = ['QUOTED', 'FOLLOW_UP', 'ORDER', 'WON'] as const;
+/**
+ * From 已回复 to 确认采购 a customer is valid (有效) without anyone ticking it: every stage change into one of these
+ * marks the customer valid. 已成交 is always valid on its own; leaving these stages keeps the judgement.
+ */
+export const QUALIFYING_STAGES = ['REPLIED', 'CATALOG_SENT', 'NEEDS_CONFIRMED', 'PRODUCT_CONFIRMED', 'QUOTED', 'FOLLOW_UP', 'ORDER'] as const;
+export const stageQualifies = (stage: string) => (QUALIFYING_STAGES as readonly string[]).includes(stage);

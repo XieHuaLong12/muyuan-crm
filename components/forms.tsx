@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { formatInTimeZone } from 'date-fns-tz';
 import { customerSchema, followSchema, dealSchema } from '@/lib/validation';
-import { sources, stages, purchases, followTypes, invalidReasons } from '@/lib/constants';
+import { sources, stages, purchases, followTypes, invalidReasons, stageQualifies } from '@/lib/constants';
 import { api, ApiError, type ApiErrorDetails } from '@/lib/client';
 import { Bootstrap, Customer, Deal } from '@/lib/types';
 import { Dialog } from './ui/dialog';
@@ -28,7 +28,7 @@ export function CustomerForm({ customer, boot, onClose, onSaved, inline = false 
   // Salespeople keep where and when a lead came from; administrators may correct it.
   const lockedOrigin = !!customer && !admin;
   const tz = boot.settings.timezone;
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<z.input<typeof customerSchema>>({
+  const { register, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } = useForm<z.input<typeof customerSchema>>({
     resolver: zodResolver(customerSchema),
     defaultValues: customer ? {
       ...customer,
@@ -93,9 +93,12 @@ export function CustomerForm({ customer, boot, onClose, onSaved, inline = false 
             </select>
           </Field>
           <Field label="有效性">
-            <select defaultValue={customer?.isQualified === true ? 'true' : customer?.isQualified === false ? 'false' : ''} onChange={e => setValue('isQualified', e.target.value === '' ? null : e.target.value === 'true')}>
-              <Options items={{ '': '待判断', true: '有效', false: '无效' }} />
-            </select>
+            {/* 已回复 to 确认采购 are valid by stage; the server sets it, so there is nothing to choose. */}
+            {stageQualifies(watch('stage') ?? '')
+              ? <select value="true" disabled title="已回复到确认采购的阶段自动算有效客户"><option value="true">有效（按阶段自动）</option></select>
+              : <select defaultValue={customer?.isQualified === true ? 'true' : customer?.isQualified === false ? 'false' : ''} onChange={e => setValue('isQualified', e.target.value === '' ? null : e.target.value === 'true')}>
+                <Options items={{ '': '待判断', true: '有效', false: '无效' }} />
+              </select>}
           </Field>
           <Field label="原因（无效 / 暂不需要 / 已流失时必填）">
             <input list="invalid-reasons" {...register('invalidReason')} />

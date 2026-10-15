@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { AD_LEAD_FRESH_HOURS, isTerminalStage } from '@/lib/constants';
+import { qualifiedFeedback } from './advertising-feedback-service';
 import { accessible } from './customer-service';
 import { taskReminders, taskScope, taskInclude } from './task-service';
 
@@ -147,7 +148,7 @@ export async function recordWorkflowEvent(input: unknown, user: Actor) {
       await add('出货前质检与包装确认', 'PRODUCTION', new Date(Math.max(now.getTime(),expectedAt!.getTime()-2*86400000)), 'inspection');
       await add('确认发货与物流追踪', 'SHIPPING', expectedAt!, 'shipping');
     }
-    if(['CATALOG_SENT','PRODUCT_CONFIRMED'].includes(v.kind)){const current=await tx.customer.findUniqueOrThrow({where:{id:c.id}});const allowed=v.kind==='CATALOG_SENT'?['NEW','CONTACTED','REPLIED']:['NEW','CONTACTED','REPLIED','CATALOG_SENT','NEEDS_CONFIRMED'];if(allowed.includes(current.stage)){await tx.customer.update({where:{id:c.id},data:{stage:v.kind,stageSource:'HUMAN'}});await tx.stageHistory.create({data:{customerId:c.id,fromStage:current.stage,toStage:v.kind,changedBy:user.id,note:'人工登记业务事实'}});}}
+    if(['CATALOG_SENT','PRODUCT_CONFIRMED'].includes(v.kind)){const current=await tx.customer.findUniqueOrThrow({where:{id:c.id}});const allowed=v.kind==='CATALOG_SENT'?['NEW','CONTACTED','REPLIED']:['NEW','CONTACTED','REPLIED','CATALOG_SENT','NEEDS_CONFIRMED'];if(allowed.includes(current.stage)){await tx.customer.update({where:{id:c.id},data:{stage:v.kind,stageSource:'HUMAN',isQualified:true}});if(current.isQualified!==true)await qualifiedFeedback(tx,c.id,new Date());await tx.stageHistory.create({data:{customerId:c.id,fromStage:current.stage,toStage:v.kind,changedBy:user.id,note:'人工登记业务事实'}});}}
     return event;
   }));
 }
