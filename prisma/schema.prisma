@@ -1300,7 +1300,7 @@ model LeadAlert {
  id String @id @default(cuid())
  customerId String
  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
- // NEW 新线索（推给管理员）| ASSIGNED 分配给销售 | REPEAT 老客户再次留资（推给负责人）
+ // NEW 新线索（推给管理员）| ASSIGNED 分配给销售 | REPEAT 老客户再次留资（推给负责人）| OVERDUE A/B 线索首联超时（已提醒的记录）
  kind String @db.VarChar(16)
  recipientId String?
  createdAt DateTime @default(now())

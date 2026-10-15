@@ -28,7 +28,7 @@ test('form answers decide the fallback grade', () => {
   assert.equal(ruleGrade({ ...base, quantity: 3 }).grade, 'C');
   assert.equal(ruleGrade({ ...base, hasPhone: false }).grade, 'D', 'nobody can be contacted');
   assert.equal(ruleGrade({ ...base, testLead: true, purchaseType: 'WHOLESALE', quantity: 99 }).grade, 'D');
-  assert.match(ruleGrade({ ...base, purchaseType: 'WHOLESALE', quantity: 50, answers: imports, country: '法国' }).reason, /批发商；每款 50 件；已从中国进口；法国/);
+  assert.match(ruleGrade({ ...base, purchaseType: 'WHOLESALE', quantity: 50, answers: imports, country: '法国' }).reason, /批发商；采购 50 件；已从中国进口；法国/);
   for (const [value, expected] of [['oui', true], ['Sí, ya importamos', true], ['not_yet', false], ['Non', false], ['نعم', true], ['maybe later', null]] as const)
     assert.equal(importsFromChina([answer('Importez-vous des meubles de Chine ?', value)]), expected, value);
   assert.deepEqual([ringFor('A'), ringFor('B'), ringFor('C'), ringFor('D'), ringFor('')], ['loop', 'loop', 'once', 'none', 'loop'], 'an ungraded lead rings like a good one');

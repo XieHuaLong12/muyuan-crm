@@ -5,6 +5,8 @@ import type { BusinessCockpit } from '@/services/business-cockpit-service';
 import { greeting } from '@/lib/bos';
 import { PeriodPicker } from '@/components/period-picker';
 import { Header } from '@/components/ui/bos';
+import type { DailyBrief } from '@/services/boss-brief-service';
+import { DailyBriefCard } from './DailyBriefCard';
 
 const money = (value: number, currency: string) => new Intl.NumberFormat('zh-CN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value);
 const number = (value: number) => new Intl.NumberFormat('zh-CN').format(value);
@@ -29,7 +31,7 @@ function TrendChart({ trend, currency }: { trend: BusinessCockpit['trend']; curr
  </svg><div className="cockpit-chart-legend"><span><i className="is-revenue"/>销售额 · {currency}</span><span><i className="is-orders"/>订单数 · 独立比例</span></div><details className="cockpit-chart-data"><summary>查看图表数据</summary><table><thead><tr><th>期间</th><th>销售额</th><th>订单数</th></tr></thead><tbody>{trend.points.map(point => <tr key={point.label}><td>{point.label}</td><td>{money(point.revenue, currency)}</td><td>{point.orders}</td></tr>)}</tbody></table></details></div>;
 }
 
-export function Dashboard({ data, name }: { data: BusinessCockpit; name: string }) {
+export function Dashboard({ data, name, brief }: { data: BusinessCockpit; name: string; brief?: DailyBrief | null }) {
  const { kpis, goal, selected, currency } = data;
  const goalAvailable = goal.periodGoal !== null;
  const actionFirst = selected.range === 'today' || selected.range === 'week';
@@ -54,6 +56,7 @@ export function Dashboard({ data, name }: { data: BusinessCockpit; name: string 
  const assistantSection = <section className="cockpit-card cockpit-assistant"><SectionHead title="经营提醒" detail="根据现有业务数据，提示现在最该处理的事"/><div className="cockpit-assistant-greeting"><Sparkles size={19}/><span>{greeting(new Date(data.generatedAt), data.timezone)}，{name}</span></div><div className="cockpit-suggestions">{data.suggestions.map((suggestion, index) => <Link href={suggestion.href} key={`${suggestion.title}-${index}`}><span className={suggestion.kind === 'warning' ? 'is-warning' : 'is-insight'}>{suggestion.kind === 'warning' ? <CircleAlert size={17}/> : <TrendingUp size={17}/>}</span><div><strong>{suggestion.title}</strong><p>{suggestion.detail}</p></div><ArrowRight size={16}/></Link>)}</div><p className="cockpit-note">逾期任务与报价跟进按当前时点提醒；漏斗和渠道分析按所选区间统计。建议来自规则，尚未调用生成式 AI。</p></section>;
  return <div className="business-cockpit">
   <Header title="经营驾驶舱" description={`${data.scope}视图 · 统计区间 ${selected.startKey} — ${selected.endKey}，截至当前`} actions={<PeriodPicker basePath="/command-center" selected={selected}/>}/>
+  {brief && <DailyBriefCard brief={brief}/>}
   <section className="cockpit-kpis" aria-label="核心经营指标">{cards.map(card => <Link href={card.href} key={card.label} className={`cockpit-kpi ${card.tone ? `is-${card.tone}` : ''}`}><span className="cockpit-kpi-label">{card.label}<ArrowUpRight size={15}/></span><strong>{card.value === null ? '—' : <CountUp value={card.value} duration={750} decimals={card.value % 1 ? 1 : 0}/>}<small>{card.value === null ? '' : card.unit}</small></strong><span className="cockpit-kpi-detail">{card.trend === null ? card.detail : <><em className={card.trend >= 0 ? 'is-up' : 'is-down'}>{card.trend >= 0 ? '↑' : '↓'}{Math.abs(card.trend)}%</em> {card.compare}</>}</span></Link>)}</section>
   {data.excludedCurrencies.length > 0 && <p className="cockpit-currency-note">金额仅展示 {currency}；本期另有 {data.excludedCurrencies.join('、')} 成交或报价记录，未混合换算。</p>}
   <div className="cockpit-primary-grid">

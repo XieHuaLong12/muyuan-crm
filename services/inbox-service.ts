@@ -242,7 +242,8 @@ export async function inboxThread(user: Actor, input: unknown) {
     listWhatsAppMessages(customerId, user, before),
     db.customer.findUniqueOrThrow({ where: { id: customerId }, select: { id: true, name: true, companyName: true, country: true, countryCode: true, city: true,
       whatsapp: true, phone: true, phoneE164: true, language: true, stage: true, source: true, purchaseType: true, productInterest: true, productModel: true,
-      quantity: true, inquiryAt: true, whatsappOptInStatus: true, owner: { select: { id: true, name: true } } } }),
+      quantity: true, inquiryAt: true, whatsappOptInStatus: true, owner: { select: { id: true, name: true } },
+      aiSummary: true, aiNextAction: true, aiLastAnalyzedAt: true, leadGrade: true, leadGradeReason: true } }),
     db.task.findFirst({ where: { customerId, deletedAt: null, status: { not: 'DONE' } }, orderBy: { dueDate: 'asc' }, select: { id: true, title: true, dueDate: true } }),
     db.stageHistory.findMany({ where: { customerId }, orderBy: { changedAt: 'desc' }, take: 4, select: { id: true, fromStage: true, toStage: true, changedAt: true, note: true } }),
   ]);
@@ -251,7 +252,9 @@ export async function inboxThread(user: Actor, input: unknown) {
     attachmentMetadata: message.attachmentMetadata, mediaHref: messageMediaHref(message) }));
   return { customer, nextTask: task, stageEvents: events, messages, nextCursor: chat.nextCursor,
     window: { status: chat.conversationWindowStatus, expiresAt: chat.conversationWindowExpiresAt, lastCustomerMessageAt: chat.lastCustomerMessageAt },
-    sending: { configured: chat.configured, businessNumber: gupshupSource(), templates: templatesConfigured(), optedOut: customer.whatsappOptInStatus === 'OPTED_OUT' } };
+    sending: { configured: chat.configured, businessNumber: gupshupSource(), templates: templatesConfigured(), optedOut: customer.whatsappOptInStatus === 'OPTED_OUT' },
+    // AI drafts, translation and summaries need DeepSeek; the chat shows why when it is missing.
+    ai: { configured: !!process.env.DEEPSEEK_API_KEY?.trim() } };
 }
 
 /** On-demand Chinese translation of one customer message, through the translation service configured for lead imports. */
@@ -263,6 +266,10 @@ export async function translateMessage(user: Actor, input: unknown) {
   if (!message.content.trim() || /^\[[^\]]*\]$/.test(message.content.trim())) throw new HttpError(400, '这条消息没有可翻译的文字');
   const { translator } = await import('./meta-translation-service');
   const result = await (await translator()).translate(message.content.slice(0, 4000));
-  if (result.pending) throw new HttpError(503, '翻译服务未配置或暂时不可用（管理员可在线索导入的「翻译服务配置」中设置）');
-  return { text: result.text };
+  if (!result.pending) return { text: result.text };
+  // No translation service set up (or it failed): DeepSeek translates when configured.
+  const { translateToChinese } = await import('./sales-copilot-service');
+  const text = await translateToChinese(message.content).catch(() => null);
+  if (!text) throw new HttpError(503, '翻译暂不可用：需要配置 DeepSeek，或在线索导入的「翻译服务配置」中设置翻译服务');
+  return { text };
 }

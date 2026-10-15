@@ -597,3 +597,9 @@
 @media(prefers-reduced-motion:reduce){.bos-lead-banner-item,.bos-lead-banner-bell{animation:none}}
 @media(max-width:600px){.bos-lead-banner{top:8px;width:calc(100vw - 16px)}.bos-lead-banner-item{gap:8px;padding:10px}.bos-lead-banner .bos-lead-banner-go{padding:7px 10px}}
 @media print{.bos-lead-banner{display:none!important}}
+
+/* Why a customer is where it is in today's work. */
+.bos-sales-reasons{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.bos-sales-reasons span{padding:1px 7px;border-radius:999px;background:#f0f1f3;color:#5f6b72;font-size:11px;line-height:1.7}
+.bos-sales-reasons .is-hot{background:#fbeee6;color:#a2461b}
+.bos-sales-reasons .is-good{background:#dff0e6;color:#11603e}

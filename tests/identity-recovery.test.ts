@@ -70,7 +70,7 @@ test('upgrade order backfills wait for historical lead reconciliation and never 
   const admin=await db.user.findUniqueOrThrow({where:{email:'admin@example.com'}});let customerId='';const marker=randomUUID();
   try{
     const c=await saveCustomer({name:'Legacy order reconciliation',ownerId:admin.id,whatsapp:'+442079460029'},admin);customerId=c.id;
-    const deal=await addDeal(customerId,{dealAmount:1800,productCost:1200,currency:'USD',dealDate:new Date(Date.now()-3600000).toISOString()},admin);
+    const deal=await addDeal(customerId,{dealAmount:1800,productCost:1200,currency:'USD',dealDate:new Date().toISOString()},admin);
     await deleteTestOrders({where:{dealId:deal.id}}); // Reproduce an old registered Deal that predates the Order module.
     const leadId=`upgrade-${marker}`;
     await db.leadSubmission.create({data:{customerId,eventKey:`meta:${leadId}`,leadId,ordinal:1,occurredAt:new Date(Date.now()-86400000),values:JSON.stringify({whatsapp:c.whatsapp}),raw:JSON.stringify({ad_id:`legacy-ad-${marker}`,ad_name:'Original legacy ad'}),filename:'Legacy order.csv',fileHash:marker,translationPending:'[]'}});

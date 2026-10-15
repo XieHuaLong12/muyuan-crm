@@ -153,6 +153,12 @@ test('报价单：服务端重算、按月编号、运费自动计算、权限�
     assert.equal(salesBuilder.customer?.id, customer.id);
     assert.equal(JSON.stringify(salesBuilder.catalog).includes('costCny'), false, '销售的目录里不能出现成本字段');
     assert.ok((await quoteBuilderData(admin, {})).catalog.every(v => 'costCny' in v));
+    // 从聊天生成报价：目录里有的型号带入最小尺寸和数量，AI 编出来的型号只提示，不加行
+    const fromChat = await quoteBuilderData(sales, { customerId: customer.id, items: `${v1.product.model.toLowerCase()}:40,NOT-A-MODEL-9:2` });
+    assert.equal(fromChat.prefill.length, 1);
+    assert.equal(fromChat.prefill[0].quantity, 40);
+    assert.equal(fromChat.catalog.find(v => v.variantId === fromChat.prefill[0].variantId)?.model, v1.product.model);
+    assert.deepEqual(fromChat.prefillMissing, ['NOT-A-MODEL-9']);
     assert.equal((await quoteBuilderData(other, { customerId: customer.id })).customer, null, '其他销售看不到这个客户');
     assert.ok((await searchQuoteCustomers(sales, { q: tag })).some(c => c.id === customer.id));
     assert.equal((await searchQuoteCustomers(other, { q: tag })).length, 0);

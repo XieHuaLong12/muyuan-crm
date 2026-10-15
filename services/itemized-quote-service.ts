@@ -93,7 +93,21 @@ const builderQuery = z.object({
   from: z.string().trim().max(40).default(''),
   edit: z.string().trim().max(40).default(''),
   product: z.string().trim().max(40).default(''),
+  // From a chat: "Y-615:50,Y-601:20" (model:quantity), as the AI draft found them in the conversation.
+  items: z.string().trim().max(500).default(''),
 });
+
+/** Catalog lines for "model:quantity" pairs: the first (smallest) size of each model; unknown models are reported. */
+function prefillFrom(items: string, catalog: CatalogVariant[]) {
+  const prefill: { variantId: string; quantity: number }[] = [], missing: string[] = [];
+  for (const pair of items.split(',').map(p => p.trim()).filter(Boolean).slice(0, 10)) {
+    const [model, qty] = pair.split(':');
+    const quantity = Math.min(1_000_000, Math.max(1, Math.round(Number(qty)) || 1));
+    const variant = catalog.find(v => v.model.toLowerCase() === model.trim().toLowerCase());
+    if (variant) prefill.push({ variantId: variant.variantId, quantity }); else missing.push(model.trim());
+  }
+  return { prefill, prefillMissing: missing };
+}
 
 // ───────────────────────── 单据快照 ─────────────────────────
 
@@ -408,6 +422,7 @@ export async function quoteBuilderData(user: Actor, input: unknown = {}) {
     draft,
     editing,
     initialProduct,
+    ...(draft ? { prefill: [], prefillMissing: [] } : prefillFrom(query.items, catalog)),
   };
 }
 

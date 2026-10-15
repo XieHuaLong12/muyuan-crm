@@ -266,7 +266,7 @@ export async function handleLeadgenEvent(event: LeadgenEvent, payload: unknown, 
         const customer=await tx.customer.create({data:{name:mapped.name,companyName:mapped.companyName,...withPhoneCountry({country:mapped.country,phone:mapped.phone,whatsapp:mapped.whatsapp}),
           whatsappNormalized:phoneE164?.slice(1)||'',email:emailNormalized||'',
           source:['ig','instagram'].includes(lead.lead.platform?.toLowerCase()??'')?'INSTAGRAM':'FACEBOOK',sourceDetail:lead.lead.ad_name||'Facebook Ads',purchaseType:mapped.purchaseType,productInterest:mapped.productInterest,
-          quantity:mapped.quantity,notes:mapped.notes,stage:'NEW',stageSource:'SYSTEM',ownerId:intake.ownerId,currency:settings.currency,inquiryAt:occurredAt}});
+          quantity:mapped.quantity,purchaseTimeline:mapped.purchaseTimeline,notes:mapped.notes,stage:'NEW',stageSource:'SYSTEM',ownerId:intake.ownerId,currency:settings.currency,inquiryAt:occurredAt}});
         customerId=customer.id;status='CREATED';
         await tx.stageHistory.create({data:{customerId,toStage:'NEW',changedBy:actor.id,note:'Meta Lead webhook'}});
       }

@@ -1,7 +1,7 @@
 'use client';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, Check, CheckCheck, CircleAlert, Clock3, FileText, LayoutTemplate, Loader2, PanelRight, Paperclip, Send, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, CheckCheck, CircleAlert, Clock3, FileText, Languages, LayoutTemplate, Loader2, PanelRight, Paperclip, RefreshCw, Send, Sparkles, Undo2, X } from 'lucide-react';
 import { api } from '@/lib/client';
 import { pipeline, purchases, sources, stages } from '@/lib/constants';
 import { formatDateTime, formatDay, formatTime, initial, requestId, toneOf, windowLeft, type ChatMessage, type TemplateList, type Thread } from './types';
@@ -67,9 +67,11 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
   const [error, setError] = useState('');
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<{ id: string; fileName: string; mimeType: string }>();
-  const [busy, setBusy] = useState<'' | 'send' | 'upload' | 'draft' | 'older' | 'template'>('');
+  const [busy, setBusy] = useState<'' | 'send' | 'upload' | 'draft' | 'older' | 'template' | 'translate' | 'summary'>('');
   const [sendError, setSendError] = useState('');
-  const [draft, setDraft] = useState<{ reply: string; reason: string }>();
+  const [draft, setDraft] = useState<{ reply: string; reason: string; replyZh?: string; nextStep?: string; quoteHref?: string | null }>();
+  // The Chinese the salesperson typed before "译成客户语言", so the translation can be undone.
+  const [original, setOriginal] = useState<{ text: string; language: string }>();
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [broken, setBroken] = useState<Set<string>>(new Set());
   const [templates, setTemplates] = useState<TemplateList & { open: boolean; chosen: string; params: string[]; error: string }>({ status: 'CONNECTED', templates: [], open: false, chosen: '', params: [], error: '' });
@@ -127,7 +129,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
     setBusy('send'); setSendError('');
     try {
       const result = await api<{ error?: string }>('whatsapp/send', 'POST', { customerId, content: text.trim(), requestId: requestId(), ...(attachment ? { mediaAssetId: attachment.id } : {}) });
-      if (result.error) setSendError(result.error); else { setText(''); setAttachment(undefined); setDraft(undefined); }
+      if (result.error) setSendError(result.error); else { setText(''); setAttachment(undefined); setDraft(undefined); setOriginal(undefined); }
       stickToBottom.current = true; await load(true); onChanged();
     } catch (e) { setSendError((e as Error).message); } finally { setBusy(''); }
   }
@@ -146,7 +148,22 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
 
   async function aiDraft() {
     setBusy('draft'); setSendError('');
-    try { const r = await api<{ reply: string; reason: string }>('whatsapp/ai-reply', 'POST', { customerId }); setDraft({ reply: r.reply, reason: r.reason }); }
+    try { setDraft(await api<{ reply: string; reason: string; replyZh: string; nextStep: string; quoteHref: string | null }>('whatsapp/ai-reply', 'POST', { customerId })); }
+    catch (e) { setSendError((e as Error).message); } finally { setBusy(''); }
+  }
+
+  async function translateOut() {
+    if (!text.trim()) return;
+    setBusy('translate'); setSendError('');
+    try {
+      const r = await api<{ text: string; language: string }>('inbox/translate-out', 'POST', { customerId, text });
+      setOriginal({ text, language: r.language }); setText(r.text);
+    } catch (e) { setSendError((e as Error).message); } finally { setBusy(''); }
+  }
+
+  async function refreshSummary() {
+    setBusy('summary'); setSendError('');
+    try { await api(`customers/${encodeURIComponent(customerId)}/analyze`, 'POST'); await load(true); }
     catch (e) { setSendError((e as Error).message); } finally { setBusy(''); }
   }
 
@@ -226,8 +243,11 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
       {draft && <div className="bos-chat-draft">
         <div className="bos-chat-draft-head"><Sparkles size={16} aria-hidden="true" /><strong>建议回复</strong><small>AI 草稿 · 需人工确认后发送</small></div>
         <p>{draft.reply}</p>
+        {draft.replyZh && <p className="bos-chat-draft-zh"><span>中文意思</span>{draft.replyZh}</p>}
+        {draft.nextStep && <p className="bos-chat-draft-next"><span>建议下一步</span>{draft.nextStep}</p>}
         <div className="bos-chat-actions">
-          <button type="button" className="is-primary" onClick={() => { setText(draft.reply); setDraft(undefined); }} disabled={!canChat}>填入输入框</button>
+          <button type="button" className="is-primary" onClick={() => { setText(draft.reply); setOriginal(undefined); setDraft(undefined); }} disabled={!canChat}>填入输入框</button>
+          {draft.quoteHref && <Link className="bos-chat-quote-link" href={draft.quoteHref}><FileText size={14} aria-hidden="true" />按对话生成报价单</Link>}
           <button type="button" onClick={aiDraft} disabled={busy === 'draft'}>换一种说法</button>
           <button type="button" onClick={() => setDraft(undefined)}>忽略</button>
         </div>
@@ -258,7 +278,8 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
         <div className="bos-chat-tools">
           <input ref={file} type="file" accept={ACCEPT} hidden onChange={e => upload(e.target.files?.[0])} />
           <button type="button" className="bos-chat-chip" onClick={() => file.current?.click()} disabled={!canChat || busy === 'upload'}>{busy === 'upload' ? <Loader2 size={14} /> : <Paperclip size={14} />}图片 / 文件</button>
-          <button type="button" className="bos-chat-chip" onClick={aiDraft} disabled={busy === 'draft' || !messages.length}>{busy === 'draft' ? <Loader2 size={14} /> : <Sparkles size={14} />}AI 草稿</button>
+          <button type="button" className="bos-chat-chip" onClick={aiDraft} disabled={busy === 'draft' || !messages.length || !thread.ai.configured} title={thread.ai.configured ? '按聊天记录和产品库写一条回复，确认后再发' : '需要在服务器配置 DeepSeek'}>{busy === 'draft' ? <Loader2 size={14} /> : <Sparkles size={14} />}AI 草稿</button>
+          <button type="button" className="bos-chat-chip" onClick={translateOut} disabled={busy === 'translate' || !text.trim() || !thread.ai.configured} title={thread.ai.configured ? '把输入框里的中文译成客户使用的语言' : '需要在服务器配置 DeepSeek'}>{busy === 'translate' ? <Loader2 size={14} /> : <Languages size={14} />}译成客户语言</button>
           {thread.sending.configured && !thread.sending.optedOut && <button type="button" className="bos-chat-chip" onClick={openTemplates}><LayoutTemplate size={14} />模板消息</button>}
           <Link className="bos-chat-chip" href={`/products/quotes/new?customerId=${encodeURIComponent(customerId)}`}><FileText size={14} />报价单</Link>
         </div>
@@ -270,6 +291,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} />
           <button type="button" className="bos-chat-icon-button is-primary bos-chat-send" onClick={send} disabled={!canChat || busy === 'send' || (!text.trim() && !attachment)} aria-label="发送">{busy === 'send' ? <Loader2 size={19} /> : <Send size={19} />}</button>
         </div>
+        {original && <p className="bos-chat-original"><span>已译成{original.language} · 原文：{original.text}</span><button type="button" onClick={() => { setText(original.text); setOriginal(undefined); }}><Undo2 size={13} aria-hidden="true" />还原</button></p>}
         {sendError && <p className="bos-chat-error" role="alert">{sendError}</p>}
         <p className="bos-chat-hint">Enter 发送 · Shift + Enter 换行 · 通过公司业务号{thread.sending.businessNumber ? ` ${thread.sending.businessNumber}` : ''}发出，记录自动存入客户档案</p>
       </footer>}
@@ -297,6 +319,16 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
           {thread.nextTask ? <div className={`bos-chat-task${Date.parse(thread.nextTask.dueDate) > Date.now() + 86400000 ? ' is-calm' : ''}`} style={{ marginTop: 8 }}><strong>{thread.nextTask.title}</strong><span><Clock3 size={13} aria-hidden="true" />{Date.parse(thread.nextTask.dueDate) < Date.now() ? '已到期 · ' : ''}{formatDateTime(thread.nextTask.dueDate, timezone)}</span></div>
             : <p className="bos-chat-hint" style={{ display: 'block' }}>暂无待办，可在客户档案中安排下一次跟进。</p>}
         </div>
+        {(customer.aiSummary || customer.leadGrade || thread.ai.configured) && <div className="bos-chat-ai">
+          <div className="bos-chat-section-title"><strong style={{ color: '#1c3226' }}>AI 摘要</strong>
+            {thread.ai.configured && <button type="button" className="bos-chat-link" onClick={refreshSummary} disabled={busy === 'summary'}>{busy === 'summary' ? <Loader2 size={13} /> : <RefreshCw size={13} />}{customer.aiSummary ? '更新' : '生成'}</button>}</div>
+          {customer.leadGrade && <p className="bos-chat-ai-grade">表单 {customer.leadGrade} 级{customer.leadGradeReason ? `：${customer.leadGradeReason}` : ''}</p>}
+          {customer.aiSummary ? <>
+            <p>{customer.aiSummary}</p>
+            {customer.aiNextAction && <p className="bos-chat-draft-next"><span>建议下一步</span>{customer.aiNextAction}</p>}
+            {customer.aiLastAnalyzedAt && <small>更新于 {formatDateTime(customer.aiLastAnalyzedAt, timezone)}</small>}
+          </> : <p className="bos-chat-hint" style={{ display: 'block' }}>{thread.ai.configured ? '点「生成」，AI 读一遍聊天记录，总结客户要什么、卡在哪里。' : '配置 DeepSeek 后可自动总结聊天。'}</p>}
+        </div>}
         {!!thread.stageEvents.length && <div>
           <div className="bos-chat-section-title" style={{ marginBottom: 10 }}><strong style={{ color: '#1c3226' }}>阶段变化</strong></div>
           <ol className="bos-chat-events">{thread.stageEvents.map(e => <li key={e.id}><i aria-hidden="true" /><span>{e.fromStage ? `${label(stages, e.fromStage)} → ` : ''}{label(stages, e.toStage)}<small>{formatDateTime(e.changedAt, timezone)}</small></span></li>)}</ol>
