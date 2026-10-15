@@ -81,6 +81,8 @@ function listWhere(user: Actor, q: CustomerListQuery, timezone: string): Prisma.
 }
 
 const include = { owner: { select: { name: true } }, deals: { select: { id: true, dealDate: true } } } as const;
+/** Grades with their own tab in the list; D (无效) stays in the grade filter. */
+export const GRADE_TABS = ['A', 'B', 'C'] as const;
 
 /** Paged customer list. Filtering and sorting happen in the database; only the requested page is loaded. */
 export async function customerList(user: Actor, input: unknown) {
@@ -88,10 +90,12 @@ export async function customerList(user: Actor, input: unknown) {
   const { timezone } = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { timezone: true } });
   const where = listWhere(user, q, timezone);
   const skip = (q.page - 1) * q.pageSize;
-  const [total, countries, pool] = await Promise.all([
+  const [total, countries, pool, grades] = await Promise.all([
     db.customer.count({ where }),
     db.customer.groupBy({ by: ['country'], where: { ...scope(user), country: { not: '' } }, orderBy: { country: 'asc' } }),
     user.role === 'ADMIN' ? db.customer.count({ where: { deletedAt: null, pendingAssignment: true } }) : Promise.resolve(0),
+    // A / B / C tabs: how many of the user's customers each automatic form grade holds, whatever the other filters.
+    db.customer.groupBy({ by: ['leadGrade'], where: { ...scope(user), leadGrade: { in: [...GRADE_TABS] } }, _count: { _all: true } }),
   ]);
   let rows;
   if (q.sort === 'priority' || q.sort === 'inquiryAt') {
@@ -117,7 +121,10 @@ export async function customerList(user: Actor, input: unknown) {
         : { [q.sort]: q.dir };
     rows = await db.customer.findMany({ where, include, orderBy: [orderBy, { id: 'asc' }], skip, take: q.pageSize });
   }
-  return { rows: rows.map(c => ({ ...c, contact: contactNumber(c) })), total, page: q.page, pageSize: q.pageSize, countries: countries.map(c => c.country), pool };
+  return {
+    rows: rows.map(c => ({ ...c, contact: contactNumber(c) })), total, page: q.page, pageSize: q.pageSize, countries: countries.map(c => c.country), pool,
+    grades: Object.fromEntries(GRADE_TABS.map(grade => [grade, grades.find(g => g.leadGrade === grade)?._count._all ?? 0])) as Record<(typeof GRADE_TABS)[number], number>,
+  };
 }
 
 /**

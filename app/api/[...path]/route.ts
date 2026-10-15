@@ -5,7 +5,7 @@ import { handle, ok } from '@/lib/http';
 import { requireUser, verifyPassword, token, HttpError, type Actor } from '@/lib/auth';
 import { loginAllowed, recordLoginFailure, recordLoginSuccess, clientAddress } from '@/lib/login-throttle';
 import {
-  accessible, saveCustomer, addFollowUp, updateFollowUp, deleteFollowUp, addDeal, updateDeal, voidDeal, deleteCustomer,
+  accessible, saveCustomer, addFollowUp, updateFollowUp, deleteFollowUp, addDeal, updateDeal, voidDeal, deleteCustomer, setQualification,
 } from '@/services/customer-service';
 import { customerList, customerPreview } from '@/services/customer-list-service';
 import { assignCustomers, saveLeadAssignMode } from '@/services/lead-assignment-service';
@@ -86,6 +86,7 @@ async function customers(req: NextRequest, user: Actor, path: string[]) {
     if (method === 'DELETE') return ok(await deleteCustomer(id, user));
   }
   if (action === 'preview' && method === 'GET') return ok(await customerPreview(id, user));
+  if (action === 'qualification' && method === 'PATCH') return ok(await setQualification(id, await body(), user));
   if (action === 'analyze' && method === 'POST') return ok(await analyzeCustomerWithDeepSeek(id, user));
   if (action === 'followups') {
     if (!subId && method === 'POST') return ok(await addFollowUp(id, await body(), user), 201);

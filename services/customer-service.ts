@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope, requireAdmin } from '@/lib/auth';
 import { canonicalPhone, canonicalEmail } from '@/lib/contact-identity';
@@ -200,6 +201,37 @@ export async function saveCustomer(input: unknown, user: Actor, id?: string, opt
   }));
   await (await workflow()).syncCustomerWorkflow(saved.id);
   return saved;
+}
+
+const qualificationPatch = z.object({
+  from: z.boolean({ invalid_type_error: '有效性格式不正确' }).nullable(),
+  to: z.boolean({ invalid_type_error: '有效性格式不正确' }).nullable(),
+  reason: z.string().trim().max(190, '原因最多 190 个字').default(''),
+});
+
+/**
+ * 有效 / 无效 / 待判断 changed straight from the customer list, with the customer form's rules: 无效 needs a reason, a won
+ * customer is always valid, and an 「无效客户」 stage keeps the customer invalid. Compare-and-swap on the value the list
+ * showed, so a stale page never overwrites a newer judgement.
+ */
+export async function setQualification(id: string, input: unknown, user: Actor) {
+  const v = qualificationPatch.parse(input);
+  if (v.to === false && v.reason.length < 2) throw new HttpError(400, '标记为无效客户时，请填写原因');
+  if (v.from === v.to) return { isQualified: v.to };
+  return retryTransaction(() => db.$transaction(async tx => {
+    const c = await tx.customer.findFirst({ where: { id, ...scope(user) }, select: { stage: true, isQualified: true, deals: { select: { id: true }, take: 1 } } });
+    if (!c) throw new HttpError(404, '客户不存在或无访问权限');
+    if (c.isQualified !== v.from) throw new HttpError(409, '有效性已被其他人修改，请刷新后再改');
+    if (c.deals.length || c.stage === 'WON') throw new HttpError(400, '已成交客户一定是有效客户，不能修改有效性');
+    if (c.stage === 'INVALID') throw new HttpError(400, '客户阶段是「无效客户」，请先把阶段改回其他阶段');
+    const updated = await tx.customer.updateMany({
+      where: { id, ...scope(user), isQualified: v.from },
+      data: { isQualified: v.to, ...(v.to === false ? { invalidReason: v.reason } : {}) },
+    });
+    if (updated.count !== 1) throw new HttpError(409, '有效性已被其他人修改，请刷新后再改');
+    if (v.to === true) await qualifiedFeedback(tx, id, new Date());
+    return { isQualified: v.to };
+  }));
 }
 
 /** Soft delete. Customers with deals stay: their revenue would silently disappear from every statistic. */
