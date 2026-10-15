@@ -6,7 +6,7 @@ import { buyerTypeOf, buysForThemselves, buysSoon, quantityOf } from '../lib/lea
 import { formAnswers, ruleGrade, type GradeInput } from '../lib/lead-grade';
 import { mapLeadFields, type LeadField } from '../lib/meta-lead-fields';
 import { normalizeCustomerType } from '../services/meta-import-service';
-import { gradeUngradedLeads } from '../services/lead-grade-service';
+import { gradeUngradedLeads, reviewGradesWithAi } from '../services/lead-grade-service';
 import { deleteTestCustomers } from './identity-test-cleanup';
 
 // A mattress form as Meta returns it: field names as questions, choice keys as answers (contact details made up).
@@ -75,14 +75,20 @@ test('a form that words its questions differently still fills the profile and ge
   // Wholesaler, 50–200 pieces, ordering within a month: A, even before the profile was filled (purchase type OTHER).
   assert.deepEqual(grade(mattressForm, { country: '沙特' }), { grade: 'A', reason: '批发商；采购 50–200 件；1 个月内下单；沙特', source: 'RULE' });
   const researching = mattressForm.map(([q, a]): [string, string] => q.startsWith('when_') ? [q, 'just_researching'] : [q, a]);
-  assert.equal(grade(researching).grade, 'B', 'a business buyer with volume, no plan yet');
+  assert.equal(grade(researching).grade, 'A', 'identity and volume make A, whatever the timeline');
+  // Identity first: a business identity alone is B ("B + 身份"); nothing promising and no identity is C.
+  assert.deepEqual(grade([['what_type_of_business_are_you?', 'furniture_retailer']], { country: '印度' }), { grade: 'B', reason: '家具零售店；未填写数量；印度', source: 'RULE' });
+  assert.equal(grade([['what_type_of_business_are_you?', 'wholesaler'], ['how_many_pieces?', '5–10_pcs']]).grade, 'B', 'a small first order from a wholesaler');
+  assert.equal(grade([['do_you_import_furniture_from_china?', 'yes,_regularly']]).grade, 'B', 'no identity, but already imports');
+  assert.equal(grade([['when_do_you_plan_to_order?', 'within_1_month']]).grade, 'C', 'a timeline alone is not an identity');
+  assert.equal(grade([['what_type_of_business_are_you?', 'i_am_buying_for_personal_use'], ['how_many_pieces?', '60']]).grade, 'C', 'personal use stays C');
   assert.deepEqual(grade([['what_type_of_business_are_you?', 'i_am_buying_for_personal_use'], ['how_many_pieces_for_your_first_order?', '1–5_pcs']]),
     { grade: 'C', reason: '个人自用；采购 1–5 件', source: 'RULE' });
   assert.deepEqual(grade([['Vous êtes ?', 'Grossiste'], ['Quantité par modèle', '30'], ['Importez-vous des meubles de Chine ?', 'Oui']]),
     { grade: 'A', reason: '批发商；每款 30 件；已从中国进口', source: 'RULE' });
   assert.equal(grade([['how_many_containers_per_order?', '2']]).grade, 'B', 'two containers from an unknown buyer');
   assert.equal(grade([['what_type_of_business_are_you?', 'interior_designer_/_project_business'], ['how_many_pieces?', '60'], ['when_will_you_order?', 'immediately']]).grade, 'A');
-  assert.equal(grade([['what_type_of_business_are_you?', 'other_business']]).grade, 'C');
+  assert.equal(grade([['what_type_of_business_are_you?', 'other_business']]).grade, 'C', '其他 with nothing promising');
 });
 
 test('leads graded by the first rules are read again once: profile filled, grade made again', async () => {
@@ -104,10 +110,61 @@ test('leads graded by the first rules are read again once: profile filled, grade
     assert.deepEqual([after.leadGrade, after.leadGradeSource, after.leadGradeReason], ['A', 'RULE', '批发商；采购 50–200 件；1 个月内下单；沙特']);
     assert.deepEqual([after.purchaseType, after.quantity, after.purchaseTimeline], ['WHOLESALE', null, 'within 1 month'], 'the profile shows what the form said');
     assert.equal(after.updatedAt.getTime(), longAgo.getTime(), 'a re-grade is not an edit');
-    assert.equal((await db.customer.findUniqueOrThrow({ where: { id: byAi.id } })).leadGrade, 'C', 'AI grades are left alone');
+    assert.equal((await db.customer.findUniqueOrThrow({ where: { id: byAi.id } })).leadGrade, 'C', 'AI grades wait for the AI to read them again');
+    assert.deepEqual(await reviewGradesWithAi(), { reviewed: 0 }, 'nothing without DeepSeek');
     await gradeUngradedLeads();
     assert.equal((await db.customer.findUniqueOrThrow({ where: { id: old.id } })).leadGradedAt?.getTime(), after.leadGradedAt?.getTime(), 'only once');
   } finally {
+    await deleteTestCustomers({ where: { name: { endsWith: ` ${tag}` } } });
+    await db.$disconnect();
+  }
+});
+
+test('DeepSeek reads every rule-graded lead: it may raise a grade, never push a buyer with an identity below B', async () => {
+  const env = process.env.DEEPSEEK_API_KEY, original = globalThis.fetch;
+  const tag = randomUUID().slice(0, 8);
+  const admin = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } });
+  const longAgo = new Date('2026-10-01T00:00:00Z');
+  const lead = async (name: string, pairs: [string, string][], grade: string, source: string) => {
+    const c = await db.customer.create({ data: { name: `${name} ${tag}`, ownerId: admin.id, whatsapp: '+966500000002', source: 'FACEBOOK',
+      leadGrade: grade, leadGradeReason: 'old', leadGradeSource: source, leadGradedAt: longAgo } });
+    await db.leadSubmission.create({ data: { customerId: c.id, eventKey: `review-${tag}-${name}`, ordinal: 1, occurredAt: longAgo, values: '{}', raw: graph(pairs),
+      filename: 'Meta webhook', fileHash: '', translationPending: '[]' } });
+    return c.id;
+  };
+  // The fake AI is strict with wholesalers (C) and generous with a shop owner who wrote free text (A).
+  let aiDown = false;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (aiDown) return Response.json({ error: { message: 'overloaded' } }, { status: 503 });
+    const body = String(init?.body);
+    const answer = body.includes('wholesaler') ? { grade: 'C', reasons: ['批发商', '信息太少'] } : body.includes('three shops') ? { grade: 'A', reasons: ['家具店老板', '三家门店'] } : { grade: 'C', reasons: ['身份不明'] };
+    return Response.json({ choices: [{ message: { content: JSON.stringify(answer) } }] });
+  }) as typeof fetch;
+  process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
+  try {
+    await gradeUngradedLeads(); // the marker exists before the leads below
+    const wholesaler = await lead('Wholesaler', [['what_type_of_business_are_you?', 'wholesaler']], 'B', 'RULE');
+    const shops = await lead('Shops', [['tell_us_about_your_business', 'I own three shops in Riyadh']], 'C', 'RULE');
+    const oldAi = await lead('OldAI', mattressForm, 'C', 'AI');
+    await reviewGradesWithAi();
+    const read = async (id: string) => db.customer.findUniqueOrThrow({ where: { id }, select: { leadGrade: true, leadGradeSource: true, leadGradeReason: true } });
+    const w = await read(wholesaler);
+    assert.deepEqual([w.leadGrade, w.leadGradeSource], ['B', 'AI'], 'the AI read it, the identity keeps it at B');
+    assert.match(w.leadGradeReason, /^批发商；未填写数量（AI 判 C：批发商；信息太少；按采购身份保留 B）$/);
+    assert.deepEqual(await read(shops), { leadGrade: 'A', leadGradeSource: 'AI', leadGradeReason: '家具店老板；三家门店' }, 'the AI raises what the rules missed');
+    assert.equal((await read(oldAi)).leadGrade, 'A', 'old AI grades are made again under the current rules');
+    const gradedAt = async (id: string) => (await db.customer.findUniqueOrThrow({ where: { id }, select: { leadGradedAt: true } })).leadGradedAt?.getTime();
+    const firstRead = await Promise.all([wholesaler, shops, oldAi].map(gradedAt));
+    await reviewGradesWithAi();
+    assert.deepEqual(await Promise.all([wholesaler, shops, oldAi].map(gradedAt)), firstRead, 'each lead is read once');
+    // When the AI is down the rules stand and the lead is tried again later; the run stops at the first failure.
+    const later = await lead('Later', [['what_type_of_business_are_you?', 'importer']], 'B', 'RULE');
+    aiDown = true;
+    await reviewGradesWithAi();
+    assert.deepEqual((await read(later)).leadGradeSource, 'RULE');
+  } finally {
+    globalThis.fetch = original;
+    if (env === undefined) delete process.env.DEEPSEEK_API_KEY; else process.env.DEEPSEEK_API_KEY = env;
     await deleteTestCustomers({ where: { name: { endsWith: ` ${tag}` } } });
     await db.$disconnect();
   }

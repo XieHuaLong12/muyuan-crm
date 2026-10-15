@@ -74,11 +74,18 @@ export function importsFromChina(answers: FormAnswer[]): boolean | null {
   return null;
 }
 
+/** Business buyers: anyone who buys to resell or for projects. Their purchase identity alone makes a lead B. */
+export const isBusinessBuyer = (purchaseType: string) => BUSINESS_BUYERS.has(purchaseType);
+export const buyerLabel = (purchaseType: string) => BUYER_LABELS[purchaseType] ?? '';
+
 /**
- * The fallback grade, from what the answers say (lib/lead-answers.ts) and the profile where they say nothing:
- *   A: a business buyer, at least 20 pieces (or a container), and either imports from China or orders within a month;
- *   B: a business buyer with one of those, or 20+ pieces from a buyer of unknown type;
- *   C: everything else, including people buying for themselves; D: test leads and leads nobody can contact.
+ * The rule grade. Identity first, then volume, so no buyer with a business identity is lost:
+ *   A: a business identity and volume (20+ pieces, a range from 20, or a container);
+ *   B: a business identity ("B + 身份"); after them, leads without a stated identity that still show promise
+ *      (20+ pieces, or they already import from China);
+ *   C: buying for themselves, "other" and unknown buyers with nothing promising; D: test leads and leads nobody can
+ *      contact. DeepSeek, when configured, may raise any grade and lower only C (lead-grade-service).
+ * Reasons start with what decided the grade: the identity, or 身份不明.
  */
 export function ruleGrade(input: GradeInput): GradeResult {
   const result = (grade: LeadGrade, reasons: string[]): GradeResult => ({ grade, reason: reasons.filter(Boolean).join('；').slice(0, 500), source: 'RULE' });
@@ -90,17 +97,15 @@ export function ruleGrade(input: GradeInput): GradeResult {
   const quantity = said.quantity ?? (input.quantity ? { min: input.quantity, container: false, label: `${input.quantity} 件`, exact: true, perModel: false } : null);
   const imports = importsFromChina(input.answers);
   const soon = said.timeline ? said.soon : input.purchaseTimeline ? buysSoon(input.purchaseTimeline) : null;
-  const big = !!quantity && (quantity.container || (quantity.min ?? 0) >= GRADE_A_MIN_QUANTITY);
-  const some = !!quantity && (quantity.container || (quantity.min ?? 0) >= GRADE_B_MIN_QUANTITY);
+  const volume = !!quantity && (quantity.container || (quantity.min ?? 0) >= GRADE_A_MIN_QUANTITY);
   const facts = [
-    business ? BUYER_LABELS[buyer] : said.personal ? '个人自用' : '买家类型不明',
+    business ? BUYER_LABELS[buyer] : said.personal ? '个人自用' : '身份不明',
     quantity ? `${quantity.perModel ? '每款' : '采购'} ${quantity.label}` : '未填写数量',
     imports === true ? '已从中国进口' : imports === false ? '未从中国进口过' : '',
     soon === true ? '1 个月内下单' : soon === false ? '暂不急着下单' : '',
     input.country,
   ];
-  if (said.personal && !business) return result('C', facts);
-  if (business && big && (imports === true || soon === true)) return result('A', facts);
-  if ((business && (imports === true || some || soon === true)) || big) return result('B', facts);
+  if (business) return result(volume ? 'A' : 'B', facts);
+  if (!said.personal && (volume || imports === true)) return result('B', facts);
   return result('C', facts);
 }

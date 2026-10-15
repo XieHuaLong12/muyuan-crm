@@ -69,6 +69,12 @@ test('the work list puts the customer worth the next minute first, and says why'
   assert.deepEqual(rows.junk.reasons, ['首联已超时 1 小时', 'D 级表单']);
   const order = Object.entries(rows).sort((a, b) => b[1].score - a[1].score).map(([key]) => key);
   assert.deepEqual(order, ['lateA', 'waiting', 'soonA', 'slipped', 'later', 'junk']);
+  // Identity first within B: "B + 身份" goes before a B lead without one, and the chip says which identity.
+  const bIdentity = workPriority({ ...none, deadline: at(60), leadGrade: 'B', purchaseType: 'WHOLESALE' }, now);
+  const bPlain = workPriority({ ...none, deadline: at(60), leadGrade: 'B', purchaseType: 'OTHER' }, now);
+  assert.deepEqual([bIdentity.reasons, bPlain.reasons], [['今天到期', 'B 级 · 批发商'], ['今天到期', 'B 级表单']]);
+  assert.ok(bIdentity.score > bPlain.score);
+  assert.deepEqual(workPriority({ ...none, leadGrade: 'A', purchaseType: 'IMPORTER' }, now).reasons, ['A 级 · 进口商']);
   // An answered message is not waiting any more.
   assert.deepEqual(workPriority({ ...none, lastInboundAt: at(-60), lastFollowUpAt: at(-30) }, now).reasons, []);
 });
