@@ -33,6 +33,35 @@ self.addEventListener('fetch', event => {
   })());
 });
 
+// A lead pushed by the server (services/push-service.ts) while the app may be closed. Good leads stay on screen
+// until tapped and vibrate longer; the same tag replaces the page's own notification instead of doubling it.
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch { data = { title: '新提醒', body: event.data ? event.data.text() : '' }; }
+  const options = {
+    body: data.body || '',
+    tag: data.tag || undefined,
+    renotify: Boolean(data.tag),
+    requireInteraction: Boolean(data.urgent),
+    vibrate: data.urgent ? [500, 250, 500, 250, 500, 250, 500] : [200],
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    timestamp: data.at ? Date.parse(data.at) : Date.now(),
+    data: { href: data.href || '/' },
+  };
+  event.waitUntil(self.registration.showNotification(data.title || '新提醒', options));
+});
+
+// The browser renewed this device's push address: register the new one (the CRM also re-registers on every visit).
+self.addEventListener('pushsubscriptionchange', event => {
+  event.waitUntil((async () => {
+    const options = event.oldSubscription && event.oldSubscription.options;
+    if (!options) return;
+    const subscription = await self.registration.pushManager.subscribe(options);
+    await fetch('/api/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(subscription) });
+  })());
+});
+
 // Notifications carry the page to open in data.href (components/live-notifications.tsx).
 self.addEventListener('notificationclick', event => {
   event.notification.close();

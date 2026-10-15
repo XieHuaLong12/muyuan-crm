@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { withPhoneCountry } from '@/lib/phone-country';
+import { gradeUngradedLeads } from './lead-grade-service';
 import { Actor,HttpError,requireAdmin } from '@/lib/auth';
 import { dayKey } from '@/lib/time';
 import { parseInquiryDate } from '@/lib/customer-date';
@@ -200,7 +201,7 @@ async function executeCommitMeta(input:unknown,user:Actor){
  // 导入时可直接指定负责人；留空则按线索分配规则（待分配池或轮流分配）。
  if(v.ownerId&&!await db.user.findFirst({where:{id:v.ownerId,isActive:true}}))throw new HttpError(400,'负责人不存在或账号已停用');
  const assignment=await import('./lead-assignment-service');
- return retryTransaction(() => db.$transaction(async tx=>{
+ const result=await retryTransaction(() => db.$transaction(async tx=>{
   await lockIdentity(tx);
   const done=await tx.metaImportRun.findUnique({where:{id:v.token}});if(done)return done.resultPayload??JSON.parse(done.result);
   const fresh=await classify(structuredClone(draft.preview.rows),draft.decisions,tx);
@@ -233,4 +234,8 @@ async function executeCommitMeta(input:unknown,user:Actor){
   await tx.metaImportRun.create({data:{id:v.token,userId:user.id,result:JSON.stringify(result).length<=191?JSON.stringify(result):JSON.stringify({...result,customerIds:[]}),resultPayload:result}});
   return result;
  },{timeout:30000}));
+ // Imported leads get a grade right away from the form answers (rules; no AI cost for bulk history).
+ const ids=(result as {customerIds?:string[]}).customerIds??[];
+ if(ids.length)await gradeUngradedLeads({id:{in:ids}},ids.length);
+ return result;
 }

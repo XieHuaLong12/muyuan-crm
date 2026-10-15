@@ -9,6 +9,7 @@ import {
 } from '@/services/customer-service';
 import { customerList } from '@/services/customer-list-service';
 import { assignCustomers, saveLeadAssignMode } from '@/services/lead-assignment-service';
+import { deliverLeadAlertsAfterResponse } from '@/lib/after-response';
 import { createUserAccount, changeOwnPassword } from '@/services/sales-account-service';
 import { allocateTargets, targetProgress } from '@/services/target-service';
 import { workspaceBootstrap } from '@/services/sales-workspace-service';
@@ -74,7 +75,7 @@ async function customers(req: NextRequest, user: Actor, path: string[]) {
     return ok(await batchCustomers(await body(), user, id === 'batch-restore'));
   }
   if (id === 'batch-purge' && method === 'POST') { await requireUser(true); return ok(await purgeCustomers(await body(), user)); }
-  if (id === 'assign' && method === 'POST') return ok(await assignCustomers(await body(), user));
+  if (id === 'assign' && method === 'POST') { const assigned = await assignCustomers(await body(), user); deliverLeadAlertsAfterResponse(); return ok(assigned); }
   if (!id) {
     if (method === 'GET') return ok(await customerList(user, Object.fromEntries(req.nextUrl.searchParams)));
     if (method === 'POST') return ok(await saveCustomer(await body(), user), 201);
@@ -143,7 +144,7 @@ async function route(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     if (resource === 'meta-import') {
       await requireUser(true);
       if (id === 'preview' && method === 'POST') return ok(await previewMeta(await req.json(), user));
-      if (id === 'commit' && method === 'POST') return ok(await commitMeta(await req.json(), user));
+      if (id === 'commit' && method === 'POST') { const committed = await commitMeta(await req.json(), user); deliverLeadAlertsAfterResponse(); return ok(committed); }
       if (id === 'translation' && method === 'GET') return ok(await translationSettings());
       if (id === 'translation' && method === 'PUT') return ok(await saveTranslationSettings(await req.json()));
     }

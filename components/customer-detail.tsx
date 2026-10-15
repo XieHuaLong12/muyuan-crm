@@ -6,7 +6,7 @@ import { QuotationPanel } from './workspace/QuotationPanel';
 import { inquiryDate } from '@/lib/customer-date';
 import { LeadHistory } from './lead-history';
 import { Customer, Bootstrap, Deal } from '@/lib/types';
-import { Badge, Due } from './customer-table';
+import { Badge, Due, GradeChip } from './customer-table';
 import { api, money, dateText } from '@/lib/client';
 import { stages, sources, followTypes, purchases } from '@/lib/constants';
 import { Dialog } from './ui/dialog';
@@ -33,7 +33,8 @@ export function CustomerDetail({ customer: c, boot, backHref, onEdit, onFollow, 
         <div className="customer-link">
           <span className="avatar large">{c.name[0]}</span>
           <div>
-            <h1>{c.name} <Badge stage={c.stage} />{c.pendingAssignment && <span className="badge">待分配</span>}</h1>
+            <h1>{c.name} <GradeChip grade={c.leadGrade} reason={c.leadGradeReason} source={c.leadGradeSource} /><Badge stage={c.stage} />{c.pendingAssignment && <span className="badge">待分配</span>}</h1>
+            {c.leadGrade && c.leadGradeReason && <p className="muted grade-reason">表单评级 {c.leadGrade}：{c.leadGradeReason}{c.leadGradeSource === 'AI' ? '（AI）' : ''}</p>}
             <p className="muted">{c.companyName} · {c.country} · {c.pendingAssignment ? '待分配（暂由管理员保管）' : `负责人 ${c.owner.name}`}</p>
           </div>
         </div>

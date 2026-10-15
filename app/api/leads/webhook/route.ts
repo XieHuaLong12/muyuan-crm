@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { safeEqual } from '@/lib/secret';
+import { deliverLeadAlertsAfterResponse } from '@/lib/after-response';
 
 /**
  * /api/leads/webhook
@@ -73,7 +74,9 @@ export async function POST(req: NextRequest) {
       return Response.json({ success: false, error: '请求体不是合法 JSON' }, { status: 400 });
     }
     const { importLead } = await import('@/services/lead-import-service');
-    return Response.json({ success: true, data: await importLead(body) });
+    const imported = await importLead(body);
+    deliverLeadAlertsAfterResponse();
+    return Response.json({ success: true, data: imported });
   }
 
   // ── ② Meta Lead Ads 通道 ─────────────────────────────────────────
@@ -109,6 +112,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await handleWebhookPayload(body, requestId);
+    // Grade the new leads and ring the phones once Meta has its answer.
+    if (result.results.some(item => item.status === 'CREATED' || item.status === 'LINKED')) deliverLeadAlertsAfterResponse();
     console.info('[meta-lead] processing summary', {
       requestId,
       accepted: result.accepted,

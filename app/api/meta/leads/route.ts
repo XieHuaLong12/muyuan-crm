@@ -4,6 +4,7 @@ import { requireUser } from '@/lib/auth';
 import { handle, ok } from '@/lib/http';
 import { metaLeadHealth, pollMetaLeads, subscribePageToLeadgen } from '@/services/meta-lead-intake-service';
 import { retryPendingMetaLeads } from '@/services/meta-lead-service';
+import { deliverLeadAlertsAfterResponse } from '@/lib/after-response';
 export const dynamic = 'force-dynamic';
 
 /** Ad lead intake status for administrators; ?live=1 also checks the Page token and leadgen subscription with Meta. */
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     const user = await requireUser(true);
     const v = action.parse(await req.json());
     if (v.action === 'poll') return ok(await pollMetaLeads({ days: v.days }));
-    if (v.action === 'retry') return ok(await retryPendingMetaLeads({ limit: 50 }, user));
+    if (v.action === 'retry') { const retried = await retryPendingMetaLeads({ limit: 50 }, user); deliverLeadAlertsAfterResponse(); return ok(retried); }
     return ok(await subscribePageToLeadgen(user));
   });
 }

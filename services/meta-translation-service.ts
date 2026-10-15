@@ -1,13 +1,11 @@
-import { createCipheriv,createDecipheriv,createHash,randomBytes } from 'node:crypto';
+import { sealSecret,openSecret } from '@/lib/secret';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { HttpError } from '@/lib/auth';
 import { normHeader } from '@/lib/meta-import';
 
 const words:Record<string,string>={wholesaler:'批发商',wholesale:'批发商',grossiste:'批发商',importer:'进口商',importateur:'进口商',distributor:'经销商',distributeur:'经销商',retailer:'家具零售',retail:'家具零售',detaillant:'家具零售',brand:'品牌客户',marque:'品牌客户','e commerce':'电商客户',ecommerce:'电商客户',sofa:'沙发',sofas:'沙发',canape:'沙发',canapes:'沙发','compressed sofa':'压缩沙发','canape compresse':'压缩沙发','dining chair':'餐椅','dining table':'餐桌',chair:'椅子',chairs:'椅子',table:'桌子',bed:'床',lit:'床',france:'法国',china:'中国',usa:'美国','united states':'美国','etats unis':'美国',canada:'加拿大',germany:'德国',allemagne:'德国',spain:'西班牙',espagne:'西班牙',italy:'意大利',italie:'意大利',europe:'欧洲',africa:'非洲',afrique:'非洲',asia:'亚洲',asie:'亚洲',price:'价格',prix:'价格',quality:'质量',qualite:'质量','delivery time':'交货时间','delai de livraison':'交货时间','shipping cost':'运费'};
-const key=()=>{if(!process.env.AUTH_SECRET)throw new Error('AUTH_SECRET 未配置');return createHash('sha256').update(process.env.AUTH_SECRET).digest();};
-function encrypt(value:string){if(!value)return '';const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key(),iv);const data=Buffer.concat([cipher.update(value,'utf8'),cipher.final()]);return [iv,cipher.getAuthTag(),data].map(b=>b.toString('base64')).join('.');}
-function decrypt(value:string){if(!value)return '';const [iv,tag,data]=value.split('.').map(v=>Buffer.from(v,'base64'));const cipher=createDecipheriv('aes-256-gcm',key(),iv);cipher.setAuthTag(tag);return Buffer.concat([cipher.update(data),cipher.final()]).toString('utf8');}
+const encrypt=sealSecret,decrypt=openSecret;
 export async function translationSettings(){const s=await db.translationSetting.findUnique({where:{id:'meta'}});return {endpoint:s?.endpoint??'',keyConfigured:!!s?.encryptedKey};}
 export async function saveTranslationSettings(input:unknown){
  const v=z.object({endpoint:z.string().trim().max(500),apiKey:z.string().max(500).optional(),clearKey:z.boolean().optional()}).parse(input);

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { Actor } from '@/lib/auth';
-import { sources } from '@/lib/constants';
+import { AD_LEAD_FRESH_HOURS, sources } from '@/lib/constants';
+import { ringFor, type RingMode } from '@/lib/lead-grade';
 import { getReminders } from './workflow-service';
 import { firstContactFocus } from './sales-team-service';
 import { TEST_LEAD_NOTE } from './meta-lead-service';
@@ -9,12 +10,16 @@ import { unreadConversationCount, unreadMessagesSince } from './inbox-service';
 
 export type NotificationItem = {
   id: string;
-  kind: 'POOL_LEAD' | 'ASSIGNED' | 'FIRST_CONTACT_OVERDUE' | 'REPEAT_SUBMISSION' | 'TASK_DUE' | 'TASK_OVERDUE' | 'LEAD_NEEDS_HUMAN' | 'NEW_MESSAGE';
+  kind: 'POOL_LEAD' | 'NEW_LEAD' | 'ASSIGNED' | 'FIRST_CONTACT_OVERDUE' | 'REPEAT_SUBMISSION' | 'TASK_DUE' | 'TASK_OVERDUE' | 'LEAD_NEEDS_HUMAN' | 'NEW_MESSAGE';
   title: string;
   body: string;
   href: string;
   at: string;
   urgent: boolean;
+  /** Leads: 'loop' rings until someone opens or dismisses it (and stays pinned), 'once' chimes, 'none' stays quiet. */
+  ring?: RingMode;
+  /** Shared with the server's phone push for the same event, so a device shows one notification, not two. */
+  tag?: string;
 };
 
 const WINDOW_MS = 24 * 3600_000;
@@ -30,7 +35,7 @@ export async function notificationFeed(user: Actor) {
   // Administrators see every reminder in the bell count, but are only interrupted for their own work:
   // other people's tasks are announced to the people who own them.
   const personal: Actor = { ...user, role: 'SALES' };
-  const [settings, reminders, ownReminders, focus, assignments, poolRows, oldestPool, humanEvents, todayWork, unreadConversations, newMessages] = await Promise.all([
+  const [settings, reminders, ownReminders, focus, assignments, poolRows, oldestPool, humanEvents, todayWork, unreadConversations, newMessages, autoAssigned] = await Promise.all([
     db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { adLeadFirstContactMinutes: true } }),
     getReminders(user),
     admin ? getReminders(personal) : Promise.resolve(null),
@@ -38,10 +43,10 @@ export async function notificationFeed(user: Actor) {
     db.customerAssignment.findMany({
       where: { toOwnerId: user.id, actorId: { not: user.id }, assignedAt: { gte: since }, customer: { deletedAt: null, ownerId: user.id, pendingAssignment: false } },
       orderBy: { assignedAt: 'desc' }, take: 20,
-      include: { customer: { select: { id: true, name: true, country: true, assignedAt: true, firstContactDueAt: true } } },
+      include: { customer: { select: { id: true, name: true, country: true, assignedAt: true, firstContactDueAt: true, leadGrade: true, leadGradeReason: true } } },
     }),
     admin ? db.customer.findMany({ where: { deletedAt: null, pendingAssignment: true, createdAt: { gte: since } }, orderBy: { createdAt: 'desc' }, take: 20,
-      select: { id: true, name: true, country: true, source: true, productInterest: true, createdAt: true } }) : Promise.resolve([]),
+      select: { id: true, name: true, country: true, source: true, productInterest: true, createdAt: true, leadGrade: true, leadGradeReason: true } }) : Promise.resolve([]),
     admin ? db.customer.findFirst({ where: { deletedAt: null, pendingAssignment: true }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }) : Promise.resolve(null),
     admin ? db.metaLeadEvent.findMany({ where: { status: 'FAILED', createdAt: { gte: since }, OR: [{ error: { contains: 'AMBIGUOUS' } }, { error: { contains: '缺少可确认' } }] },
       orderBy: { createdAt: 'desc' }, take: 10, select: { leadgenId: true, error: true, createdAt: true } }) : Promise.resolve([]),
@@ -50,18 +55,31 @@ export async function notificationFeed(user: Actor) {
     // Customer messages interrupt the customer's owner, administrators included for their own customers.
     unreadConversationCount(user),
     unreadMessagesSince(user, since),
+    // Administrators also hear about fresh leads the rules assigned straight to a salesperson.
+    admin ? db.leadAlert.findMany({ where: { kind: 'NEW', createdAt: { gte: since }, customer: { deletedAt: null, pendingAssignment: false, OR: [{ inquiryAt: { gte: new Date(now.getTime() - AD_LEAD_FRESH_HOURS * 3600_000) } }, { inquiryAt: null }] } },
+      orderBy: { createdAt: 'desc' }, take: 20, select: { id: true, createdAt: true, customer: { select: { id: true, name: true, country: true, leadGrade: true, leadGradeReason: true, owner: { select: { name: true } } } } } }) : Promise.resolve([]),
   ]);
   const items: NotificationItem[] = [];
+  const gradeTitle = (grade: string) => grade ? `${grade} 级` : '';
   for (const c of poolRows) {
-    items.push({ id: `pool:${c.id}`, kind: 'POOL_LEAD', title: '新线索待分配', urgent: true, at: c.createdAt.toISOString(), href: '/customers?assign=pending',
-      body: [c.name, c.country, sourceLabel(c.source), c.productInterest].filter(Boolean).join(' · ') });
+    const ring = ringFor(c.leadGrade);
+    items.push({ id: `pool:${c.id}`, kind: 'POOL_LEAD', title: `${gradeTitle(c.leadGrade)}新线索待分配`, urgent: ring === 'loop', ring, tag: `lead:${c.id}`, at: c.createdAt.toISOString(), href: '/customers?assign=pending',
+      body: [c.name, c.country, c.leadGradeReason || [sourceLabel(c.source), c.productInterest].filter(Boolean).join(' · ')].filter(Boolean).join(' · ') });
+  }
+  for (const a of autoAssigned) {
+    const c = a.customer;
+    items.push({ id: `lead:${a.id}`, kind: 'NEW_LEAD', title: `${gradeTitle(c.leadGrade)}新线索 · 已分配给 ${c.owner.name}`, urgent: false, ring: c.leadGrade === 'D' ? 'none' : 'once', tag: `lead:${c.id}`,
+      at: a.createdAt.toISOString(), href: `/customers/${c.id}`, body: [c.name, c.country, c.leadGradeReason].filter(Boolean).join(' · ') });
   }
   for (const a of assignments) {
     const due = a.customer.firstContactDueAt, assigned = a.customer.assignedAt;
     const minutes = due && assigned && a.customer.assignedAt?.getTime() === a.assignedAt.getTime() ? Math.round((due.getTime() - assigned.getTime()) / 60000) : null;
-    items.push({ id: `assign:${a.id}`, kind: 'ASSIGNED', title: '新分配客户', at: a.assignedAt.toISOString(), href: `/customers/${a.customer.id}`,
-      urgent: minutes !== null && minutes <= 120,
-      body: `${a.customer.name}${a.customer.country ? ` · ${a.customer.country}` : ''}${minutes === null ? '' : minutes <= 120 ? ` · 请在 ${minutes} 分钟内联系` : ' · 请按首联要求联系'}` });
+    const quick = minutes !== null && minutes <= 120;
+    // A fresh ad lead with a short deadline rings until opened, unless its form graded it C or D.
+    const ring: RingMode = quick && ringFor(a.customer.leadGrade) === 'loop' ? 'loop' : 'once';
+    items.push({ id: `assign:${a.id}`, kind: 'ASSIGNED', title: `新分配客户${a.customer.leadGrade ? ` · ${a.customer.leadGrade} 级` : ''}`, at: a.assignedAt.toISOString(), href: `/customers/${a.customer.id}`,
+      urgent: quick, ring, tag: `assign:${a.customer.id}`,
+      body: `${a.customer.name}${a.customer.country ? ` · ${a.customer.country}` : ''}${minutes === null ? '' : quick ? ` · 请在 ${minutes} 分钟内联系` : ' · 请按首联要求联系'}${a.customer.leadGradeReason ? ` · ${a.customer.leadGradeReason}` : ''}` });
   }
   for (const r of ownReminders ?? reminders) {
     const key = r.task.automationKey ?? '';
@@ -71,6 +89,7 @@ export async function notificationFeed(user: Actor) {
     const kind: NotificationItem['kind'] = repeat ? 'REPEAT_SUBMISSION' : firstContact ? 'FIRST_CONTACT_OVERDUE' : r.kind === 'OVERDUE' ? 'TASK_OVERDUE' : 'TASK_DUE';
     const title = repeat ? (r.kind === 'OVERDUE' ? '再次留资的客户还没有联系' : '老客户再次留资') : firstContact ? '首次联系已超时' : r.kind === 'OVERDUE' ? '任务已到期' : '任务即将到期';
     items.push({ id: `reminder:${r.id}`, kind, title, at: r.remindAt.toISOString(), urgent: repeat || firstContact || r.kind === 'OVERDUE',
+      ...(repeat && r.kind !== 'OVERDUE' && r.task.customer ? { ring: 'loop' as const, tag: `repeat:${r.task.customer.id}` } : {}),
       href: r.task.customer ? `/customers/${r.task.customer.id}` : '/tasks', body: r.task.title });
   }
   for (const e of humanEvents) {

@@ -16,6 +16,7 @@ model User {
  createdAt DateTime @default(now())
  customers Customer[]
  salesTargets UserSalesTarget[]
+ pushSubscriptions PushSubscription[]
 }
 model Customer {
  id String @id @default(cuid())
@@ -76,6 +77,12 @@ model Customer {
  aiReason String @default("")
  aiRisk String @default("")
  aiLastAnalyzedAt DateTime?
+ // 广告表单等级 A/B/C/D：入库时按表单答案评定（DeepSeek，未配置或失败时按规则），空字符串表示尚未评级。
+ leadGrade String @default("") @db.VarChar(1)
+ leadGradeReason String @default("") @db.VarChar(500)
+ // AI | RULE
+ leadGradeSource String @default("") @db.VarChar(8)
+ leadGradedAt DateTime?
  lastContactAt DateTime?
  lastWhatsAppAt DateTime?
  lastInboundAt DateTime?
@@ -108,6 +115,7 @@ model Customer {
  whatsappContacts WhatsAppContact[]
  advertisingFeedback AdvertisingFeedback[]
  assignments CustomerAssignment[]
+ leadAlerts LeadAlert[]
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -127,6 +135,7 @@ model Customer {
  @@index([emailNormalized])
  @@index([waId])
  @@index([aiScore])
+ @@index([leadGrade])
  @@index([aiPriority])
  @@index([lastWhatsAppAt])
  @@index([whatsappOptInStatus])
@@ -236,6 +245,9 @@ model Setting {
  usdCnyRate Decimal @default(6.70) @db.Decimal(10, 4)
  // 欧元/人民币汇率。为空时欧元报价不自动折算单价与运费，需要手动填写。
  eurCnyRate Decimal? @db.Decimal(10, 4)
+ // 手机 / 浏览器系统推送（Web Push）的 VAPID 密钥：未配置环境变量时首次使用自动生成，私钥用 AUTH_SECRET 加密保存。
+ pushPublicKey String @default("") @db.VarChar(255)
+ pushPrivateKey String @default("") @db.VarChar(255)
 }
 
 model LeadSubmission {
@@ -1251,4 +1263,33 @@ model DailyAdInsight {
  model String @db.VarChar(80)
  createdAt DateTime @default(now())
  @@index([reportDate])
+}
+
+// 一台设备（手机上的 CRM App 或桌面浏览器）的系统推送订阅；推送服务返回已失效时删除。
+model PushSubscription {
+ id String @id @default(cuid())
+ userId String
+ user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ endpoint String @unique @db.VarChar(768)
+ p256dh String @db.VarChar(255)
+ auth String @db.VarChar(255)
+ userAgent String @default("") @db.VarChar(255)
+ createdAt DateTime @default(now())
+ lastSuccessAt DateTime?
+ failures Int @default(0)
+ @@index([userId])
+}
+
+// 线索提醒发件箱：与建客户 / 分配在同一事务里写入，响应返回后推送到手机；定时任务兜底补发。
+model LeadAlert {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ // NEW 新线索（推给管理员）| ASSIGNED 分配给销售 | REPEAT 老客户再次留资（推给负责人）
+ kind String @db.VarChar(16)
+ recipientId String?
+ createdAt DateTime @default(now())
+ sentAt DateTime?
+ @@index([sentAt, createdAt])
+ @@index([customerId])
 }

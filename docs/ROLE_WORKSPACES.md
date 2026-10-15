@@ -162,3 +162,7 @@
 - 客户详情、任务和身份链对销售隐藏聊天记录的既有规则不变；聊天只在消息中心查看。
 - 完整分析、数据与接口变化见 [消息中心](MESSAGE_CENTER.md)。
 
+
+## 广告表单自动分级与响铃推送（2026-10-14）
+
+新表单入库即评 A/B/C/D 级（DeepSeek，未配置时按规则），然后提醒：管理员收到每条新表单，负责人收到分配和再次留资；A、B 级在 CRM 顶部置顶持续响铃，手机 App 关着也能通过系统推送收到。等级显示在客户列表和档案中，可按等级筛选。细节和接入检查见 [Meta 线索接入](META_LEAD_ADS.md#表单自动分级与响铃推送2026-10-14)、[手机 App](MOBILE_APP.md#提醒通知)。新增迁移 `lead_grade_and_push_alerts`（只增不改）：客户等级字段、`PushSubscription`、`LeadAlert`、设置里的推送密钥；可选环境变量 `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT`。

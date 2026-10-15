@@ -14,7 +14,7 @@ export function rememberedListUrl() {
   try { return sessionStorage.getItem(LIST_URL_KEY) || '/customers'; } catch { return '/customers'; }
 }
 
-const FILTER_KEYS = ['q', 'stage', 'country', 'source', 'owner', 'product', 'from', 'to', 'wonFrom', 'wonTo', 'qualified', 'behavior', 'period', 'date', 'assign'] as const;
+const FILTER_KEYS = ['q', 'stage', 'country', 'source', 'owner', 'product', 'grade', 'from', 'to', 'wonFrom', 'wonTo', 'qualified', 'behavior', 'period', 'date', 'assign'] as const;
 
 /**
  * Customer list whose filters, sort and page live in the URL: they survive refreshes, opening a customer
@@ -92,6 +92,7 @@ export function CustomerList({ boot, revision, onFollow, onChanged }: {
         {select('阶段', 'stage', stages)}
         {select('国家', 'country', data?.countries ?? [])}
         {select('来源', 'source', sources)}
+        {select('表单等级', 'grade', { A: 'A 优质', B: 'B 良好', C: 'C 一般', D: 'D 无效', none: '未评级' })}
         {admin && select('负责人', 'owner', ownerOptions)}
         <input aria-label="产品筛选" placeholder="产品 / 型号" defaultValue={get('product')} key={`product-${get('product')}`}
           onBlur={e => { if (e.target.value !== get('product')) update({ product: e.target.value }); }}
