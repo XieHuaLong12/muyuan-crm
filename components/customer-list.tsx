@@ -17,6 +17,8 @@ export function rememberedListUrl() {
   try { return sessionStorage.getItem(LIST_URL_KEY) || '/customers'; } catch { return '/customers'; }
 }
 
+/** Automatic form grades with their own tab (D stays in the grade filter). */
+const GRADE_TABS = ['A', 'B', 'C'] as const;
 const FILTER_KEYS = ['q', 'stage', 'country', 'source', 'owner', 'product', 'grade', 'from', 'to', 'wonFrom', 'wonTo', 'qualified', 'behavior', 'period', 'date', 'assign'] as const;
 
 /**
@@ -73,8 +75,19 @@ export function CustomerList({ boot, revision, initialColumns, onFollow, onChang
     ...(admin ? [{ key: 'assign', label: `待分配${data?.pool ? ` ${data.pool}` : ''}` }] : []),
     { key: 'NEW', label: stages.NEW }, { key: 'QUOTED', label: stages.QUOTED },
     { key: 'FOLLOW_UP', label: stages.FOLLOW_UP }, { key: 'WON', label: stages.WON }, { key: 'PAUSED', label: stages.PAUSED }, { key: 'INVALID', label: stages.INVALID },
-  ], [admin, data?.pool]);
-  const activeTab = get('assign') === 'pending' ? 'assign' : get('stage') || 'all';
+    ...GRADE_TABS.map(grade => ({ key: `grade:${grade}`, label: `${grade} 级${data?.grades?.[grade] ? ` ${data.grades[grade]}` : ''}` })),
+  ], [admin, data?.pool, data?.grades]);
+  const grade = get('grade');
+  const gradeTab = (GRADE_TABS as readonly string[]).includes(grade) ? `grade:${grade}` : '';
+  const activeTab = get('assign') === 'pending' ? 'assign' : get('stage') || gradeTab || 'all';
+  // Each tab is its own view: leaving an A / B / C tab drops its grade; 全部 drops every grouping.
+  const openTab = (key: string) => {
+    const leaveGrade: Record<string, string> = activeTab.startsWith('grade:') ? { grade: '' } : {};
+    if (key === 'all') update({ stage: '', assign: '', grade: '' });
+    else if (key.startsWith('grade:')) update({ grade: key.slice('grade:'.length), stage: '', assign: '' });
+    else if (key === 'assign') update({ assign: 'pending', stage: '', ...leaveGrade });
+    else update({ stage: key, assign: '', ...leaveGrade });
+  };
   const filtersActive = FILTER_KEYS.some(key => params.get(key));
   const select = (label: string, key: string, values: string[] | Record<string, string>) => (
     <select aria-label={label} value={get(key)} onChange={e => update({ [key]: e.target.value })}>
@@ -91,7 +104,7 @@ export function CustomerList({ boot, revision, initialColumns, onFollow, onChang
       <div className="tabs" role="tablist" aria-label="客户分组">
         {tabs.map(tab => (
           <button key={tab.key} role="tab" aria-selected={activeTab === tab.key} className={activeTab === tab.key ? 'active' : ''}
-            onClick={() => update(tab.key === 'assign' ? { assign: 'pending', stage: '' } : { stage: tab.key === 'all' ? '' : tab.key, assign: '' })}>
+            onClick={() => openTab(tab.key)}>
             {tab.label}
           </button>
         ))}
@@ -117,6 +130,7 @@ export function CustomerList({ boot, revision, initialColumns, onFollow, onChang
         {filtersActive && <button className="text-button" onClick={() => { setSearch(''); window.history.replaceState(null, '', pathname); }}>清除筛选</button>}
       </div>
       {get('period') && <div className="filter-hint">已按 {get('date')} 所在周期的新增客户筛选</div>}
+      {activeTab.startsWith('grade:') && <div className="filter-hint">按广告表单自动分级：A 优质、B 良好、C 一般。新表单进来时自动评级（配置了 DeepSeek 用 AI，否则按表单规则），漏评的由后台补上；没有表单的客户不评级。</div>}
       {activeTab === 'assign' && <div className="filter-hint">自动进入的线索在这里等待分配，请尽快处理：勾选客户后点击「分配 / 转交」。分配后开始计算首联期限，24 小时内的广告留资须在 {boot.settings.adLeadFirstContactMinutes ?? 5} 分钟内联系。</div>}
       {error && <div role="alert" className="error-banner">{error}<button onClick={() => setRetry(v => v + 1)}>重试</button></div>}
       {loading && !data ? <div className="loading">正在加载客户…</div> : (

@@ -201,8 +201,10 @@ export function DealForm({ customer, deal, timezone, onClose, onSaved, inline = 
 }
 
 /** Asks for a reason before an action that needs one (void, cancel, pause…). */
-export function ReasonDialog({ title, description, label = '原因', confirmText, danger = false, onClose, onConfirm }: {
+export function ReasonDialog({ title, description, label = '原因', confirmText, danger = false, suggestions, onClose, onConfirm }: {
   title: string; description?: React.ReactNode; label?: string; confirmText: string; danger?: boolean;
+  /** Common reasons offered as one-click choices above the text box. */
+  suggestions?: readonly string[];
   onClose: () => void; onConfirm: (reason: string) => Promise<void>;
 }) {
   const [reason, setReason] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -215,6 +217,11 @@ export function ReasonDialog({ title, description, label = '原因', confirmText
         try { await onConfirm(reason.trim()); } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
       }}>
         {description && <div className="muted">{description}</div>}
+        {suggestions && (
+          <div className="reason-suggestions" role="group" aria-label="常用原因">
+            {suggestions.map(s => <button key={s} type="button" aria-pressed={reason === s} onClick={() => setReason(s)}>{s}</button>)}
+          </div>
+        )}
         <Field label={`${label} *`}><textarea rows={3} value={reason} onChange={e => setReason(e.target.value)} maxLength={190} autoFocus /></Field>
         {error && <p role="alert" className="error">{error}</p>}
         <div className="form-actions">

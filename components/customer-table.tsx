@@ -3,7 +3,7 @@ import { useEffect,useState,type ReactNode } from 'react';
 import Link from 'next/link';
 import { ArrowUpDown,Check,ChevronDown,Copy,MessageCircle,MessageSquare,PanelRightOpen } from 'lucide-react';
 import { Customer } from '@/lib/types';
-import { stages,sources,purchases } from '@/lib/constants';
+import { stages,sources,purchases,invalidReasons } from '@/lib/constants';
 import { KANBAN_REASON_STAGES,KANBAN_STAGES,type KanbanStage } from '@/lib/bos-kanban';
 import { api,money,dateText,dateTimeText } from '@/lib/client';
 import { dayKey } from '@/lib/time';
@@ -75,6 +75,41 @@ function StageCell({c,onChanged}:{c:Customer;onChanged?:(message:string)=>void})
  </span>;
 }
 
+const qualificationLabel=(value:boolean|null)=>value===null?'待判断':value?'有效':'无效';
+/**
+ * 有效 / 无效 / 待判断 straight from the list, with the customer form's rules: 无效 asks for a reason; a won customer is
+ * always valid, and a customer in the 「无效客户」 stage stays invalid until the stage changes.
+ */
+function QualificationCell({c,onChanged}:{c:Customer;onChanged?:(message:string)=>void}){
+ const [asking,setAsking]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ // The chosen value stays visible while the list reloads; a fresh value from the server replaces it.
+ const [chosen,setChosen]=useState<{value:boolean|null}>();
+ useEffect(()=>{setChosen(undefined);},[c.isQualified]);
+ const shown=chosen?chosen.value:c.isQualified;
+ const plain=(title?:string)=><span className={shown?'qualified':'muted'} title={title}>{qualificationLabel(shown)}</span>;
+ if(!onChanged)return plain();
+ if(c.stage==='WON'||c.deals?.length)return plain('成交客户一定是有效客户');
+ if(c.stage==='INVALID')return plain('阶段是「无效客户」：先把阶段改回其他阶段，才能修改有效性');
+ const save=async(to:boolean|null,reason='')=>{
+  setBusy(true);setError('');
+  try{await api(`customers/${c.id}/qualification`,'PATCH',{from:c.isQualified,to,reason});setChosen({value:to});setAsking(false);onChanged(`${c.name} 已标记为「${qualificationLabel(to)}」`);}
+  finally{setBusy(false);}
+ };
+ return <span className="stage-cell">
+  <span className={`badge stage-badge ${shown===null?'qualify-pending':shown?'qualify-yes':'qualify-no'}`} title="点击修改有效性">
+   <select className="stage-select" value={shown===null?'':String(shown)} disabled={busy} aria-label={`修改 ${c.name} 的有效性`}
+    onChange={e=>{const to=e.target.value===''?null:e.target.value==='true';if(to===false)setAsking(true);else save(to).catch(err=>setError((err as Error).message));}}>
+    <option value="">待判断</option><option value="true">有效</option><option value="false">无效</option>
+   </select>
+   <ChevronDown size={11} aria-hidden/>
+  </span>
+  {error&&<small role="alert" className="stage-error">{error}</small>}
+  {asking&&<ReasonDialog title={`标记为无效 · ${c.name}`} confirmText="确认标记" label="无效原因" suggestions={invalidReasons}
+   description={<p>无效客户不计入有效率；原因会显示在客户档案里，方便管理员复核。</p>}
+   onClose={()=>setAsking(false)} onConfirm={reason=>save(false,reason)}/>}
+ </span>;
+}
+
 /** Full date for facts that may be from another year (inquiry, first contact…). */
 const fullDate=(value:string|null|undefined,tz:string)=>value?new Date(value).toLocaleDateString('zh-CN',{timeZone:tz}):'—';
 const text=(value:string|number|null|undefined)=>value===null||value===undefined||value===''?'—':value;
@@ -100,7 +135,7 @@ const CELLS:Record<Exclude<CustomerColumnKey,'name'>,(c:Customer,ctx:CellContext
  phone:c=>text(c.phone),
  email:c=>text(c.email),
  stage:(c,{onChanged})=><StageCell c={c} onChanged={onChanged}/>,
- isQualified:c=><span className={c.isQualified?'qualified':'muted'}>{c.isQualified===null?'待判断':c.isQualified?'有效':'无效'}</span>,
+ isQualified:(c,{onChanged})=><QualificationCell c={c} onChanged={onChanged}/>,
  leadGrade:c=>isLeadGrade(c.leadGrade??'')?<GradeChip grade={c.leadGrade} reason={c.leadGradeReason} source={c.leadGradeSource}/>:<span className="muted">未评级</span>,
  estimatedOrderValue:c=>money(c.estimatedOrderValue,c.currency),
  budget:c=>amount(c.budget,c.currency),
