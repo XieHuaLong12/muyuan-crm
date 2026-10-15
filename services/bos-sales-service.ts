@@ -5,6 +5,7 @@ import { Actor,scope } from '@/lib/auth';
 import { bosDateRange,opportunityStage } from '@/lib/bos';
 import { TERMINAL_STAGES } from '@/lib/constants';
 import { STALE_QUOTE_DAYS } from '@/lib/metrics';
+import { buyerLabel, isBusinessBuyer } from '@/lib/lead-grade';
 
 export const salesQuery=z.object({queue:z.enum(['new','today','waiting','high','recent']).default('today'),q:z.string().trim().max(100).default(''),page:z.coerce.number().int().min(1).max(10000).default(1)});
 type Queue=z.infer<typeof salesQuery>['queue'];
@@ -44,7 +45,7 @@ export async function todayWorkCounts(user:Actor,now=new Date()){
 
 const URGENT_LIMIT=500;
 const span=(minutes:number)=>minutes<60?`${Math.max(1,Math.round(minutes))} 分钟`:minutes<1440?`${Math.round(minutes/60)} 小时`:`${Math.round(minutes/1440)} 天`;
-type Signals={deadline:Date|null;firstContactPending:boolean;leadGrade:string;aiIntent:string;aiScore:number;lastInboundAt:Date|null;lastOutboundAt:Date|null;lastFollowUpAt:Date|null;lastContactAt:Date|null;staleQuoteSentAt:Date|null};
+type Signals={deadline:Date|null;firstContactPending:boolean;leadGrade:string;purchaseType?:string;aiIntent:string;aiScore:number;lastInboundAt:Date|null;lastOutboundAt:Date|null;lastFollowUpAt:Date|null;lastContactAt:Date|null;staleQuoteSentAt:Date|null};
 /**
  * Where a customer belongs in today's work, and why. A missed deadline weighs most and grows with the delay; then
  * what makes the customer worth the next minute: the customer is waiting for an answer, a good ad form (an A lead due
@@ -60,14 +61,16 @@ export function workPriority(c:Signals,now=new Date()){
  }
  const answered=Math.max(c.lastOutboundAt?.getTime()??0,c.lastFollowUpAt?.getTime()??0);
  if(c.lastInboundAt&&c.lastInboundAt.getTime()>answered){score+=20;reasons.push(`客户在等回复 ${span((now.getTime()-c.lastInboundAt.getTime())/60_000)}`);}
- if(c.leadGrade==='A'){score+=25;reasons.push('A 级表单');}
- else if(c.leadGrade==='B'){score+=12;reasons.push('B 级表单');}
+ // Identity first: within B, a buyer with a business identity ("B + 身份") goes before one without.
+ const identity=isBusinessBuyer(c.purchaseType??'')?buyerLabel(c.purchaseType!):'';
+ if(c.leadGrade==='A'){score+=25;reasons.push(identity?`A 级 · ${identity}`:'A 级表单');}
+ else if(c.leadGrade==='B'){score+=identity?14:8;reasons.push(identity?`B 级 · ${identity}`:'B 级表单');}
  else if(c.leadGrade==='D'){score-=30;reasons.push('D 级表单');}
  if(c.aiIntent==='HIGH'||c.aiScore>=80){score+=12;reasons.push('AI 判断高意向');}
  if(c.staleQuoteSentAt&&(!c.lastContactAt||c.lastContactAt<new Date(now.getTime()-STALE_QUOTE_DAYS*86_400_000))){score+=10;reasons.push(`报价 ${span((now.getTime()-c.staleQuoteSentAt.getTime())/60_000)}未回复`);}
  return {score:Math.round(score*10)/10,reasons};
 }
-const select={id:true,name:true,companyName:true,country:true,source:true,productInterest:true,stage:true,aiScore:true,aiIntent:true,aiNextAction:true,estimatedOrderValue:true,currency:true,lastContactAt:true,nextFollowUpAt:true,firstContactDueAt:true,firstContactAt:true,lastInboundAt:true,lastOutboundAt:true,lastFollowUpAt:true,leadGrade:true,leadGradeReason:true,updatedAt:true} satisfies Prisma.CustomerSelect;
+const select={id:true,name:true,companyName:true,country:true,source:true,productInterest:true,stage:true,aiScore:true,aiIntent:true,aiNextAction:true,estimatedOrderValue:true,currency:true,lastContactAt:true,nextFollowUpAt:true,firstContactDueAt:true,firstContactAt:true,lastInboundAt:true,lastOutboundAt:true,lastFollowUpAt:true,leadGrade:true,purchaseType:true,leadGradeReason:true,updatedAt:true} satisfies Prisma.CustomerSelect;
 
 export async function salesQueue(user:Actor,input:unknown={},now=new Date()){
  const query=salesQuery.parse(input),settings=await db.setting.findUniqueOrThrow({where:{id:'system'}}),{end}=bosDateRange(now,settings.timezone);
@@ -88,7 +91,7 @@ export async function salesQueue(user:Actor,input:unknown={},now=new Date()){
   const pending=c.firstContactDueAt&&!c.firstContactAt?c.firstContactDueAt:null;
   return [pending,c.nextFollowUpAt,c.tasks[0]?.dueDate??null].filter((d):d is Date=>!!d).sort((a,b)=>a.getTime()-b.getTime())[0]??null;
  };
- const ranked=rows.map(c=>({c,...workPriority({deadline:deadlineOf(c),firstContactPending:!!c.firstContactDueAt&&!c.firstContactAt,leadGrade:c.leadGrade,aiIntent:c.aiIntent,aiScore:c.aiScore,
+ const ranked=rows.map(c=>({c,...workPriority({deadline:deadlineOf(c),firstContactPending:!!c.firstContactDueAt&&!c.firstContactAt,leadGrade:c.leadGrade,purchaseType:c.purchaseType,aiIntent:c.aiIntent,aiScore:c.aiScore,
   lastInboundAt:c.lastInboundAt,lastOutboundAt:c.lastOutboundAt,lastFollowUpAt:c.lastFollowUpAt,lastContactAt:c.lastContactAt,staleQuoteSentAt:c.quotations[0]?.sentAt??null},now)}));
  // Work queues are worked top-down: the highest priority first, the earliest deadline breaking ties.
  const ordered=urgent?ranked.sort((a,b)=>b.score-a.score||(deadlineOf(a.c)?.getTime()??Infinity)-(deadlineOf(b.c)?.getTime()??Infinity)||a.c.id.localeCompare(b.c.id)).slice(skip,skip+pageSize):ranked;
