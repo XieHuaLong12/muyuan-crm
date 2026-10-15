@@ -3,6 +3,15 @@ import {
   metaFields,
   MetaField,
 } from '@/lib/meta-import';
+// A realtime (webhook) submission also stores what the intake derived from the answers (purchaseType,
+// purchaseTimeline, extras). The answers themselves are listed under 补充回答, and the derived values live on the
+// profile (an older intake may have derived them wrongly), so they are not repeated here.
+const HIDDEN = ['inquiryAt', 'source', 'adName', 'purchaseType', 'purchaseTimeline', 'extras'];
+function shown(key: string, value: unknown) {
+  // The JSON copy of the answers stays under 原始 CSV 回答 below.
+  if (key === 'notes' && typeof value === 'string') return value.split('\nFACEBOOK_LEAD_JSON:')[0].trim();
+  return typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '');
+}
 
 function safeParseObject(value: string) {
   try {
@@ -158,11 +167,7 @@ export function LeadHistory({
                       Boolean(
                         value
                       ) &&
-                      ![
-                        'inquiryAt',
-                        'source',
-                        'adName',
-                      ].includes(
+                      !HIDDEN.includes(
                         key
                       )
                   )
@@ -182,9 +187,9 @@ export function LeadHistory({
                         </dt>
 
                         <dd>
-                          {String(
-                            value ??
-                              ''
+                          {shown(
+                            key,
+                            value
                           )}
                         </dd>
                       </div>

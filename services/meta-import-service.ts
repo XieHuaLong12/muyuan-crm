@@ -7,6 +7,8 @@ import { gradeUngradedLeads } from './lead-grade-service';
 import { Actor,HttpError,requireAdmin } from '@/lib/auth';
 import { dayKey } from '@/lib/time';
 import { parseInquiryDate } from '@/lib/customer-date';
+import { buyerTypeOf, quantityOf } from '@/lib/lead-answers';
+import { purchases } from '@/lib/constants';
 import { metaFields,identifyHeader,parseMetaCsv,normHeader,MetaField,MetaValues,MetaRow,MetaPreview,MetaDecision } from '@/lib/meta-import';
 import { normalizePhone } from './customer-service';
 import { canonicalEmail, canonicalPhone, sourceInstant } from '@/lib/contact-identity';
@@ -29,7 +31,8 @@ const importedStageLabels:Record<string,string>={'new':'新客户','new_customer
 const stageCodes:Record<string,string>={'新客户':'NEW','已联系':'CONTACTED','已回复':'REPLIED','已确认需求':'NEEDS_CONFIRMED','已报价':'QUOTED','跟进中':'FOLLOW_UP','已成交':'WON','暂不需要':'PAUSED','无效客户':'INVALID'};
 const importedCustomerTypes:Record<string,string>={'wholesaler':'批发商','grossiste':'批发商','importer':'进口商','importateur':'进口商','distributor':'经销商','distributeur':'经销商','furniture_retailer':'家具零售','détaillant_de_meubles':'家具零售','detaillant_de_meubles':'家具零售','online_seller_/_e-commerce':'电商客户','online_seller_/_ecommerce':'电商客户','brand':'品牌客户','interior_designer_/_project_business':'其他','i_am_buying_for_personal_use':'其他','other_business':'其他','批发商':'批发商','进口商':'进口商','经销商':'经销商','家具零售':'家具零售','品牌客户':'品牌客户','电商客户':'电商客户','其他':'其他'};
 function normalizeImportedStage(value:string){if(!value.trim())return '';const raw=value.trim();const key=raw.toLowerCase().replace(/[\s-]+/g,'_');return importedStageLabels[key]??importedStageLabels[raw]??'';}
-function normalizeCustomerType(value:string){if(!value.trim())return '';const raw=value.trim();const key=raw.toLowerCase().replace(/\s+/g,'_');return importedCustomerTypes[key]??importedCustomerTypes[raw]??'';}
+// Known answer keys first; any other wording ("furniture_/_mattress_wholesaler_or_distributor", "Mayorista") by meaning.
+export function normalizeCustomerType(value:string){if(!value.trim())return '';const raw=value.trim();const key=raw.toLowerCase().replace(/\s+/g,'_');const known=importedCustomerTypes[key]??importedCustomerTypes[raw];if(known)return known;const type=buyerTypeOf(raw);return type==='PROJECT'?'其他':purchases[type as keyof typeof purchases]??'';}
 
 export function metaDate(value:string,tz:string){
  let v=value.trim().replace(/^(\d{4}-\d{2}-\d{2}) /,'$1T').replace(/([+-]\d{2})(\d{2})$/,'$1:$2');
@@ -213,7 +216,7 @@ async function executeCommitMeta(input:unknown,user:Actor){
    if(customerId?.startsWith('row:'))customerId=newIds.get(customerId);
    if(row.status==='REPEAT'&&!customerId)throw new HttpError(400,'同文件中的首次留资未选中，请同时选择首次留资行');
    if(row.status==='NEW'){const importedStage=stageCodes[f.stage]??'NEW';const importedPurchaseType=purchaseCodes[f.customerType]??'OTHER';const intake=v.ownerId?{ownerId:v.ownerId,pending:false,explicit:true}:await assignment.resolveIntakeOwner(tx);
-    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,...withPhoneCountry({phone:f.phone,whatsapp:f.whatsapp,country:f.country}),whatsappNormalized:normalizePhone(f.whatsapp),email:f.email,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:importedPurchaseType,quantity:/^\d+$/.test(f.quantity)?Number(f.quantity):null,inquiryAt:sourceInstant(Object.entries(row.original).find(([header])=>draft.preview.mapping[header]==='inquiryAt')?.[1])||parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:intake.ownerId,currency:settings.currency,stage:importedStage,stageSource:f.stage?'HUMAN':'SYSTEM',isQualified:importedStage==='INVALID'?false:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
+    const c=await tx.customer.create({data:{name:f.name,companyName:f.companyName,...withPhoneCountry({phone:f.phone,whatsapp:f.whatsapp,country:f.country}),whatsappNormalized:normalizePhone(f.whatsapp),email:f.email,city:f.city,source:f.source,sourceDetail:[f.adName,f.campaignName,f.formName].filter(Boolean).join(' · '),productInterest:f.productInterest,productModel:f.productModel,purchaseType:importedPurchaseType,quantity:(q=>q?.exact?q.min:null)(quantityOf(f.quantity)),inquiryAt:sourceInstant(Object.entries(row.original).find(([header])=>draft.preview.mapping[header]==='inquiryAt')?.[1])||parseInquiryDate(f.inquiryAt,settings.timezone),ownerId:intake.ownerId,currency:settings.currency,stage:importedStage,stageSource:f.stage?'HUMAN':'SYSTEM',isQualified:importedStage==='INVALID'?false:null,notes:[f.salesMarket&&`销售市场：${f.salesMarket}`,f.concerns&&`关注点：${f.concerns}`,f.notes].filter(Boolean).join('\n')}});
     customerId=c.id;newIds.set(`row:${row.row}`,c.id);result.created++;
     await tx.stageHistory.create({data:{customerId,changedBy:user.id,toStage:importedStage,note:'CSV 智能导入'}});
     await assignment.enterIntake(tx,customerId,user.id,intake,'CSV 智能导入');
