@@ -36,3 +36,117 @@
 .grade-c{background:#f0f1f3;color:#66727b}
 .grade-d{background:#f7ebea;color:#a44b36}
 .grade-reason{font-size:12px;margin-top:4px}
+/* Customer list: 「定制列」 (each user picks and orders their own columns) and the customer preview. */
+.batch-toolbar .batch-toolbar-note{flex-basis:100%;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.batch-toolbar .batch-toolbar-note small{flex-basis:auto}
+.customer-card .column-button{min-height:34px;padding:6px 12px;font-size:12px;gap:6px;border-radius:9px}
+.cell-clamp{display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+.customer-card td.customer-cell{cursor:pointer}
+.customer-card .customer-name:hover{color:var(--green);text-decoration:underline;text-underline-offset:3px}
+.customer-card .customer-preview-button{width:28px;height:28px;padding:0;margin-left:4px;border-radius:8px;color:#5f7a6c;opacity:0;transition:opacity .16s,background .16s}
+.customer-card tr:hover .customer-preview-button,.customer-card tr.is-previewing .customer-preview-button,.customer-card .customer-preview-button:focus-visible{opacity:1}
+.customer-card tbody tr.is-previewing{background:#f3f8f5}
+.customer-card tr.is-previewing td.customer-cell{box-shadow:inset 3px 0 #164b3a}
+@media(hover:none){.customer-card .customer-preview-button{opacity:1}}
+
+.dialog-content.column-picker{width:min(1040px,96vw);padding:0;display:flex;flex-direction:column;overflow:hidden}
+.column-picker .dialog-head{padding:24px 28px 0;margin-bottom:4px}
+.column-picker-intro{margin:0;padding:0 28px 18px;color:var(--muted);font-size:13px}
+.column-picker-body{display:grid;grid-template-columns:minmax(0,1fr) 320px;height:min(600px,62vh);min-height:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.column-picker-options{display:flex;flex-direction:column;min-height:0;padding:18px 20px 0 28px;border-right:1px solid var(--line)}
+.column-picker-search{display:flex;align-items:center;gap:8px;padding-left:12px;border:1px solid #dce4e1;border-radius:10px;color:#8b9a90;background:#fff}
+.column-picker-search:focus-within{border-color:var(--green);box-shadow:0 0 0 3px #17816a20}
+.column-picker-search input{border:0;padding:11px 12px 11px 0;background:transparent}
+.column-picker-search input:focus{outline:0}
+.column-picker-tabs{display:flex;gap:6px;margin:14px 0 8px;padding-bottom:2px;overflow-x:auto}
+.column-picker-tabs button{border:0;border-radius:9px;padding:8px 14px;font-size:13px;color:#5f6f66;background:transparent}
+.column-picker-tabs button.active{background:#edf4ef;color:#164b3a;font-weight:600}
+.column-picker-groups{flex:1;min-height:0;overflow:auto;display:grid;align-content:start;gap:12px;padding:4px 8px 20px 0}
+.column-picker-group{border-radius:12px;background:#f3f8f5}
+.column-picker-group-head{width:100%;justify-content:space-between;border:0;border-radius:12px;background:transparent;padding:14px 16px;text-align:left}
+.column-picker-group-head:disabled{opacity:1;cursor:default}
+.column-picker-group-head>span{display:grid;gap:2px}
+.column-picker-group-head strong{font-size:14px;font-weight:600}
+.column-picker-group-head small{color:var(--muted)}
+.column-picker-group-head svg{color:#6e8277;transition:transform .16s}
+.column-picker-group-head svg.is-open{transform:rotate(180deg)}
+.column-picker-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 16px;margin:0 12px 12px;padding:10px 14px;border-radius:10px;background:#fff}
+.column-picker-check{display:flex;align-items:center;gap:10px;padding:8px 4px;font-size:13px;cursor:pointer}
+.column-picker-check input{width:18px;height:18px;flex:none;accent-color:var(--green);cursor:pointer}
+.column-picker-check input:disabled{cursor:not-allowed}
+.column-picker-check small{margin-left:6px;color:var(--muted);font-size:11px}
+.column-picker-empty{padding:40px 0;text-align:center;color:var(--muted)}
+.column-picker-chosen{display:flex;flex-direction:column;min-height:0;padding:18px 20px 0}
+.column-picker-chosen-head{display:grid;gap:2px;padding:0 4px 12px}
+.column-picker-chosen-head strong{font-size:15px}
+.column-picker-chosen-head small{color:var(--muted)}
+.column-picker-chosen ol{flex:1;min-height:0;overflow:auto;list-style:none;margin:0;padding:0 0 16px}
+.column-picker-chosen ol.is-sorting{user-select:none;-webkit-user-select:none;cursor:grabbing}
+.column-picker-chosen li{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--line);background:#fff;font-size:13px}
+.column-picker-chosen li.is-dragging{position:relative;z-index:1;border-radius:8px;background:#edf4ef;box-shadow:0 4px 14px #1b392418}
+.column-picker-handle{display:inline-grid;place-items:center;flex:none;width:30px;height:30px;padding:0;border:0;border-radius:7px;background:transparent;color:#8a9a91;cursor:grab;touch-action:none}
+.column-picker-handle.is-locked{cursor:default}
+.column-picker-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.column-picker-remove{flex:none;width:30px;height:30px;padding:0;border:0;background:transparent;color:#5f6f66}
+.column-picker-remove:hover{color:#bd4c3d;background:#fff6f4}
+.column-picker-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 28px 20px;background:#fff}
+.column-picker-foot>div{display:flex;gap:10px;margin-left:auto}
+.column-picker-foot .error{margin:0}
+@media(max-width:760px){
+ .dialog-content.column-picker{overflow:auto}
+ .column-picker .dialog-head{padding:20px 20px 0}
+ .column-picker-intro{padding:0 20px 14px}
+ .column-picker-body{display:block;height:auto}
+ .column-picker-options{padding:16px 16px 0;border-right:0}
+ .column-picker-groups{overflow:visible;padding-right:0}
+ .column-picker-chosen{padding:16px;border-top:1px solid var(--line)}
+ .column-picker-chosen ol{overflow:visible;padding-bottom:0}
+ .column-picker-foot{position:sticky;bottom:0;padding:14px 16px;border-top:1px solid var(--line)}
+}
+@media(max-width:520px){.column-picker-checks{grid-template-columns:1fr}}
+
+/* The preview reuses the BOS drawer (app/motion.css) and is rendered inside .bos, so it keeps the BOS tokens. */
+.bos-drawer.customer-preview{width:min(420px,100vw)}
+.bos .customer-preview:focus-visible{outline-offset:-3px}
+.customer-preview>header{align-items:center;padding:18px 22px 14px}
+.customer-preview-title{font-size:20px;font-weight:600}
+.customer-preview-close{display:inline-grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:10px;background:transparent;color:var(--bos-primary)}
+.customer-preview-close:hover{background:#f2f2f4}
+.customer-preview-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 22px;border-bottom:1px solid var(--bos-border)}
+.customer-preview-bar a{color:var(--bos-green);font-size:14px;font-weight:600}
+.customer-preview-bar a:hover,.customer-preview-identity h2 a:hover{text-decoration:underline;text-underline-offset:3px}
+.bos-drawer-body .customer-preview-identity{display:flex;align-items:center;gap:14px;margin-bottom:18px}
+.customer-preview-identity h2{display:flex;align-items:center;flex-wrap:wrap;gap:2px;margin:0;font-size:20px;font-weight:600;overflow-wrap:anywhere}
+.customer-preview-identity p{margin:2px 0 0;color:var(--bos-secondary);font-size:13px}
+.customer-preview-actions{display:flex;justify-content:space-between;gap:6px;padding:2px 0 18px;margin-bottom:6px;border-bottom:1px solid var(--bos-border)}
+.customer-preview-actions>*{display:flex;flex:1;flex-direction:column;align-items:center;gap:6px;min-width:0;padding:0;border:0;background:transparent;color:var(--bos-primary);cursor:pointer}
+.customer-preview-actions>*>span{display:grid;place-items:center;width:42px;height:42px;border:1px solid #dbe8e2;border-radius:50%;transition:background .16s,color .16s}
+.customer-preview-actions>*:hover{background:transparent}
+.customer-preview-actions>*:not(.is-disabled):hover>span{background:#edf4ef;color:var(--bos-green)}
+.customer-preview-actions>*:active>span{transform:scale(.98)}
+.customer-preview-actions small{font-size:12px;color:var(--bos-secondary)}
+.customer-preview-actions .is-disabled{opacity:.4;cursor:not-allowed}
+.customer-preview-section{padding:2px 0 12px;margin-bottom:10px;border-bottom:1px solid var(--bos-border)}
+.customer-preview-section>summary{display:flex;align-items:center;gap:8px;padding:10px 0;font-size:14px;font-weight:600;list-style:none;cursor:pointer}
+.customer-preview-section>summary::-webkit-details-marker{display:none}
+.customer-preview-section>summary::before{content:'';width:7px;height:7px;margin:0 4px 3px 2px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(-45deg);transition:transform .16s}
+.customer-preview-section[open]>summary::before{margin-bottom:6px;transform:rotate(45deg)}
+.customer-preview-section dl{margin:2px 0 0}
+.customer-preview-section dl>div{display:grid;grid-template-columns:88px minmax(0,1fr);gap:12px;padding:6px 0;font-size:13px}
+.customer-preview-section dt{color:var(--bos-secondary)}
+.customer-preview-section dd{margin:0;overflow-wrap:anywhere}
+.customer-preview-follows{display:grid;gap:12px;margin:2px 0 0;padding:0;list-style:none}
+.customer-preview-follows li{padding-left:12px;border-left:2px solid #dbe8e2}
+.customer-preview-follows strong{font-size:13px;font-weight:600}
+.customer-preview-follows p,.customer-preview-notes{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;margin:4px 0 0;font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.customer-preview-follows p{-webkit-line-clamp:3}
+.customer-preview-notes{-webkit-line-clamp:6}
+.customer-preview .error-banner{align-items:center;gap:10px;margin:0 0 12px;font-size:13px}
+.customer-preview-skeleton{display:grid;gap:10px;padding:6px 0}
+.customer-preview-skeleton i{display:block;height:12px;border-radius:6px;background:linear-gradient(90deg,#efeff1,#f7f7f8,#efeff1);background-size:200% 100%;animation:customerPreviewShimmer 1.2s linear infinite}
+.customer-preview-skeleton i:nth-child(2){width:80%}
+.customer-preview-skeleton i:nth-child(3){width:55%}
+@keyframes customerPreviewShimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.customer-preview-open{display:flex;align-items:center;justify-content:center;gap:8px;min-height:40px;border-radius:12px;background:var(--bos-green);color:#fff!important;font-size:14px;font-weight:600;transition:background .16s,transform .16s}
+.customer-preview-open:hover{background:#0f3a2c}
+.customer-preview-open:active{transform:scale(.98)}

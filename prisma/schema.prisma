@@ -17,6 +17,7 @@ model User {
  customers Customer[]
  salesTargets UserSalesTarget[]
  pushSubscriptions PushSubscription[]
+ viewPreferences UserViewPreference[]
 }
 model Customer {
  id String @id @default(cuid())
@@ -1278,6 +1279,20 @@ model PushSubscription {
  lastSuccessAt DateTime?
  failures Int @default(0)
  @@index([userId])
+}
+
+// 每位用户自己的列表视图（如客户列表的「定制列」：显示哪些列、按什么顺序）。只影响本人界面，不影响数据权限。
+model UserViewPreference {
+ id String @id @default(cuid())
+ userId String
+ user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ // 视图标识：customers = 客户列表
+ view String @db.VarChar(32)
+ // 列键数组，按显示顺序；可用列见 lib/customer-columns.ts
+ columns Json
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([userId, view])
 }
 
 // 线索提醒发件箱：与建客户 / 分配在同一事务里写入，响应返回后推送到手机；定时任务兜底补发。

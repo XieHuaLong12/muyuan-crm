@@ -1,12 +1,15 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Columns3, Search } from 'lucide-react';
 import { api } from '@/lib/client';
 import { sources, stages } from '@/lib/constants';
 import type { Bootstrap, Customer, CustomerPage } from '@/lib/types';
+import { DEFAULT_CUSTOMER_COLUMNS, type CustomerColumnKey } from '@/lib/customer-columns';
 import { Options } from './forms';
 import { BatchCustomerTable } from './customer-batch';
+import { ColumnPicker } from './customer-columns';
+import { CustomerPreview } from './customer-preview';
 
 /** Remembered so "back to list" from a customer returns to the same filters and page. */
 export const LIST_URL_KEY = 'crm:customer-list-url';
@@ -19,9 +22,10 @@ const FILTER_KEYS = ['q', 'stage', 'country', 'source', 'owner', 'product', 'gra
 /**
  * Customer list whose filters, sort and page live in the URL: they survive refreshes, opening a customer
  * and coming back, and can be shared. Filtering, sorting and paging happen on the server.
+ * Each user picks their own columns (「定制列」); the customer column opens a side preview.
  */
-export function CustomerList({ boot, revision, onFollow, onChanged }: {
-  boot: Bootstrap; revision: number; onFollow: (c: Customer) => void; onChanged: (message: string) => void;
+export function CustomerList({ boot, revision, initialColumns, onFollow, onChanged }: {
+  boot: Bootstrap; revision: number; initialColumns?: readonly CustomerColumnKey[]; onFollow: (c: Customer) => void; onChanged: (message: string) => void;
 }) {
   const pathname = usePathname(), params = useSearchParams();
   const admin = boot.user.role === 'ADMIN';
@@ -31,6 +35,9 @@ export function CustomerList({ boot, revision, onFollow, onChanged }: {
   const [data, setData] = useState<CustomerPage>();
   const [error, setError] = useState(''), [loading, setLoading] = useState(true), [retry, setRetry] = useState(0);
   const [search, setSearch] = useState(get('q'));
+  const [columns, setColumns] = useState<readonly CustomerColumnKey[]>(initialColumns ?? DEFAULT_CUSTOMER_COLUMNS);
+  const [picking, setPicking] = useState(false);
+  const [preview, setPreview] = useState<{ customer: Customer; fromKeyboard: boolean }>();
 
   const update = (patch: Record<string, string>, resetPage = true) => {
     const next = new URLSearchParams(params);
@@ -76,6 +83,8 @@ export function CustomerList({ boot, revision, onFollow, onChanged }: {
     </select>
   );
   const ownerOptions = Object.fromEntries(boot.users.map(u => [u.id, `${u.name}${u.isActive === false ? '（已停用）' : ''}`]));
+  // The previewed customer follows list reloads (stage changes, follow-ups) while it is on the page.
+  const previewRow = preview && (data?.rows.find(c => c.id === preview.customer.id) ?? preview.customer);
 
   return (
     <section className="card customer-card">
@@ -113,6 +122,8 @@ export function CustomerList({ boot, revision, onFollow, onChanged }: {
       {loading && !data ? <div className="loading">正在加载客户…</div> : (
         <div aria-busy={loading}>
           <BatchCustomerTable key={FILTER_KEYS.map(key => params.get(key)).join('|')} rows={data?.rows ?? []} tz={tz} boot={boot} onFollow={onFollow}
+            columns={columns} previewId={previewRow?.id} onPreview={(customer, fromKeyboard = false) => setPreview({ customer, fromKeyboard })}
+            tools={<button type="button" className="column-button" onClick={() => setPicking(true)}><Columns3 size={15} aria-hidden />定制列</button>}
             onSort={key => update({ sort: key, dir: sort === key && dir === 'asc' ? 'desc' : 'asc' })} onChanged={onChanged} />
         </div>
       )}
@@ -129,6 +140,10 @@ export function CustomerList({ boot, revision, onFollow, onChanged }: {
           <button aria-label="下一页" disabled={page >= pages} onClick={() => update({ page: String(page + 1) }, false)}><ChevronRight size={16} /></button>
         </div>
       </div>
+      {picking && <ColumnPicker value={columns} onClose={() => setPicking(false)}
+        onSaved={view => { setColumns(view.columns); setPicking(false); onChanged(view.custom ? '列设置已保存，只对你自己生效' : '已恢复默认列'); }} />}
+      {preview && previewRow && <CustomerPreview customer={previewRow} tz={tz} revision={revision} autoFocus={preview.fromKeyboard}
+        onClose={() => setPreview(undefined)} onFollow={onFollow} />}
     </section>
   );
 }
