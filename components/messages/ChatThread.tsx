@@ -1,9 +1,9 @@
 'use client';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, Check, CheckCheck, CircleAlert, Clock3, FileText, Languages, LayoutTemplate, Loader2, PanelRight, Paperclip, RefreshCw, Send, Sparkles, Undo2, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, CheckCheck, CircleAlert, Clock3, FileText, Languages, LayoutTemplate, Loader2, Maximize2, Minimize2, PanelRight, Paperclip, RefreshCw, Send, Sparkles, Undo2, X } from 'lucide-react';
 import { api } from '@/lib/client';
-import { pipeline, purchases, sources, stages } from '@/lib/constants';
+import { FIRST_TOUCH_PRODUCT_LINES, pipeline, purchases, sources, stages } from '@/lib/constants';
 import { formatDateTime, formatDay, formatTime, initial, requestId, toneOf, windowLeft, type ChatMessage, type TemplateList, type Thread } from './types';
 
 const POLL_MS = 8_000;
@@ -58,8 +58,11 @@ function mergeMessages(current: ChatMessage[], latest: ChatMessage[]) {
   return [...current.filter(m => !ids.has(m.id) && m.sentAt < oldest), ...latest];
 }
 
-export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile, onBack, onChanged, onRead }: {
+export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile, onBack, onChanged, onRead, fullscreen, onToggleFullscreen, autoTemplate = false, onTemplateSent }: {
   customerId: string; timezone: string; profileOpen: boolean; onToggleProfile: () => void; onBack: () => void; onChanged: () => void; onRead: (customerId: string) => void;
+  fullscreen: boolean; onToggleFullscreen: () => void;
+  /** Opened from 待首联: show the suggested greeting as soon as the thread loads, if only a template can go out. */
+  autoTemplate?: boolean; onTemplateSent?: () => void;
 }) {
   const [thread, setThread] = useState<Thread>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -74,8 +77,8 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
   const [original, setOriginal] = useState<{ text: string; language: string }>();
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [broken, setBroken] = useState<Set<string>>(new Set());
-  const [templates, setTemplates] = useState<TemplateList & { open: boolean; chosen: string; params: string[]; error: string }>({ status: 'CONNECTED', templates: [], open: false, chosen: '', params: [], error: '' });
-  const log = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null), file = useRef<HTMLInputElement>(null), stickToBottom = useRef(true), lastSeen = useRef('');
+  const [templates, setTemplates] = useState<TemplateList & { open: boolean; chosen: string; params: string[]; error: string }>({ status: 'CONNECTED', templates: [], suggestion: null, open: false, chosen: '', params: [], error: '' });
+  const log = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null), file = useRef<HTMLInputElement>(null), stickToBottom = useRef(true), lastSeen = useRef(''), autoOpened = useRef(false);
 
   const load = useCallback(async (quiet = false) => {
     try {
@@ -173,11 +176,22 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
     catch (e) { setTranslations(t => ({ ...t, [id]: (e as Error).message })); }
   }
 
-  async function openTemplates() {
+  /** The suggested greeting comes filled in from the customer record; any other template starts empty. */
+  const paramsFor = (list: TemplateList, id: string) => list.suggestion?.templateId === id ? [...list.suggestion.params] : Array(list.templates.find(t => t.id === id)?.variables ?? 0).fill('');
+  const openTemplates = useCallback(async () => {
     setTemplates(t => ({ ...t, open: true, error: '' }));
-    try { const r = await api<TemplateList>(`whatsapp/templates?customerId=${encodeURIComponent(customerId)}`); setTemplates(t => ({ ...t, ...r, chosen: r.templates[0]?.id ?? '', params: Array(r.templates[0]?.variables ?? 0).fill('') })); }
-    catch (e) { setTemplates(t => ({ ...t, error: (e as Error).message })); }
-  }
+    try {
+      const r = await api<TemplateList>(`whatsapp/templates?customerId=${encodeURIComponent(customerId)}`);
+      const chosen = r.suggestion?.templateId ?? r.templates[0]?.id ?? '';
+      setTemplates(t => ({ ...t, ...r, chosen, params: paramsFor(r, chosen) }));
+    } catch (e) { setTemplates(t => ({ ...t, error: (e as Error).message })); }
+  }, [customerId]);
+
+  useEffect(() => {
+    if (!autoTemplate || !thread || autoOpened.current) return;
+    autoOpened.current = true;
+    if (thread.sending.configured && thread.sending.templates && !thread.sending.optedOut && thread.window.status !== 'OPEN') void openTemplates();
+  }, [autoTemplate, thread, openTemplates]);
 
   async function sendTemplate() {
     const template = templates.templates.find(t => t.id === templates.chosen);
@@ -187,6 +201,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
       const r = await api<{ error?: string }>('whatsapp/templates', 'POST', { customerId, templateId: template.id, params: templates.params.map(p => p.trim()), requestId: requestId() });
       if (r.error) setTemplates(t => ({ ...t, error: r.error! })); else setTemplates(t => ({ ...t, open: false }));
       stickToBottom.current = true; await load(true); onChanged();
+      if (!r.error) onTemplateSent?.();
     } catch (e) { setTemplates(t => ({ ...t, error: (e as Error).message })); } finally { setBusy(''); }
   }
 
@@ -194,6 +209,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
   const win = thread?.window, left = win?.status === 'OPEN' ? windowLeft(win.expiresAt) : null;
   const canChat = !!thread?.sending.configured && !thread.sending.optedOut && win?.status === 'OPEN';
   const chosenTemplate = templates.templates.find(t => t.id === templates.chosen);
+  const suggested = !!chosenTemplate && templates.suggestion?.templateId === chosenTemplate.id ? templates.suggestion : null;
   const preview = chosenTemplate ? chosenTemplate.body.replace(/\{\{\s*(\d{1,2})\s*\}\}/g, (whole, n) => templates.params[Number(n) - 1]?.trim() || whole) : '';
   const stageIndex = customer ? pipeline.indexOf(customer.stage as (typeof pipeline)[number]) : -1;
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -210,6 +226,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
           <p>{customer ? [customer.companyName, [customer.country, customer.city].filter(Boolean).join(' '), customer.whatsapp || customer.phone, `负责人 ${customer.owner.name}`].filter(Boolean).join(' · ') : ''}</p>
         </div>
         <div className="bos-chat-thread-actions">
+          <button type="button" className="bos-chat-icon-button" onClick={onToggleFullscreen} aria-pressed={fullscreen} aria-label={fullscreen ? '退出全屏聊天' : '全屏聊天'} title={fullscreen ? '退出全屏（Esc）' : '全屏聊天'}>{fullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>
           <button type="button" className="bos-chat-icon-button" onClick={onToggleProfile} aria-pressed={profileOpen} aria-label={profileOpen ? '收起客户资料' : '查看客户资料'}><PanelRight size={18} /></button>
         </div>
       </header>
@@ -264,12 +281,17 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
             : !templates.templates.length && !templates.error ? <p className="bos-chat-hint">没有已审核通过的文字模板。请先在 Gupshup 后台创建并等待审核。</p>
             : <div className="bos-chat-templates">
               <div className="bos-chat-template-list" role="radiogroup" aria-label="已审核模板">
-                {templates.templates.map(t => <label key={t.id}><span><input type="radio" name="template" checked={templates.chosen === t.id} onChange={() => setTemplates(s => ({ ...s, chosen: t.id, params: Array(t.variables).fill('') }))} />{t.name}</span><small>{[t.language, t.category].filter(Boolean).join(' · ')}</small></label>)}
+                {templates.templates.map(t => <label key={t.id}><span><input type="radio" name="template" checked={templates.chosen === t.id} onChange={() => setTemplates(s => ({ ...s, chosen: t.id, params: paramsFor(s, t.id) }))} />{t.name}</span><small>{[t.language, t.category, templates.suggestion?.templateId === t.id ? '推荐' : ''].filter(Boolean).join(' · ')}</small></label>)}
               </div>
               {chosenTemplate && <div className="bos-chat-template-preview">
-                <small>预览 · 发送前请核对</small>
+                <small>{suggested ? '预览 · 已按客户资料填好，发送前请核对' : '预览 · 发送前请核对'}</small>
                 <p>{preview}</p>
-                {templates.params.map((value, i) => <label key={i}>变量 {`{{${i + 1}}}`}<input value={value} onChange={e => setTemplates(s => ({ ...s, params: s.params.map((p, j) => j === i ? e.target.value : p) }))} /></label>)}
+                {templates.params.map((value, i) => <Fragment key={i}>
+                  <label>变量 {`{{${i + 1}}}`}{suggested?.labels[i] ? ` · ${suggested.labels[i]}` : ''}<input value={value} onChange={e => setTemplates(s => ({ ...s, params: s.params.map((p, j) => j === i ? e.target.value : p) }))} /></label>
+                  {suggested?.productVariable === i + 1 && <div className="bos-chat-template-picks" role="group" aria-label="选择产品线">
+                    {FIRST_TOUCH_PRODUCT_LINES.map(line => <button key={line.value} type="button" aria-pressed={value === line.value} onClick={() => setTemplates(s => ({ ...s, params: s.params.map((p, j) => j === i ? line.value : p) }))}>{line.label}</button>)}
+                  </div>}
+                </Fragment>)}
                 <div className="bos-chat-actions"><button type="button" className="is-primary" onClick={sendTemplate} disabled={busy === 'template' || templates.params.some(p => !p.trim())}>{busy === 'template' ? '发送中…' : '发送模板'}</button><button type="button" onClick={() => setTemplates(s => ({ ...s, open: false }))}>取消</button></div>
               </div>}
             </div>}

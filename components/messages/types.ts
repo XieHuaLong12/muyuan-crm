@@ -1,5 +1,5 @@
 import type { inboxConversations, inboxThread, linkCandidates } from '@/services/inbox-service';
-import type { ApprovedTemplate } from '@/services/whatsapp-template-service';
+import type { ApprovedTemplate, TemplateSuggestion } from '@/services/whatsapp-template-service';
 
 /** Server results after JSON: dates arrive as ISO strings. */
 type Jsonify<T> = T extends Date ? string : T extends (infer U)[] ? Jsonify<U>[] : T extends object ? { [K in keyof T]: Jsonify<T[K]> } : T;
@@ -7,11 +7,12 @@ type Jsonify<T> = T extends Date ? string : T extends (infer U)[] ? Jsonify<U>[]
 export type InboxList = Jsonify<Awaited<ReturnType<typeof inboxConversations>>>;
 export type Conversation = InboxList['conversations'][number];
 export type UnmatchedNumber = InboxList['numbers'][number];
+export type PendingCustomer = InboxList['pending'][number];
 export type Thread = Jsonify<Awaited<ReturnType<typeof inboxThread>>>;
 export type ChatMessage = Thread['messages'][number];
 export type LinkCandidate = Jsonify<Awaited<ReturnType<typeof linkCandidates>>>['candidates'][number];
-export type TemplateList = { status: 'CONNECTED' | 'NOT_CONNECTED'; templates: ApprovedTemplate[] };
-export type Filter = 'all' | 'unread' | 'awaiting' | 'unmatched';
+export type TemplateList = { status: 'CONNECTED' | 'NOT_CONNECTED'; templates: ApprovedTemplate[]; suggestion: TemplateSuggestion | null };
+export type Filter = 'all' | 'unread' | 'awaiting' | 'unmatched' | 'pending';
 
 /** Request ids for idempotent sends; falls back to getRandomValues where randomUUID is unavailable (plain HTTP). */
 export function requestId() {
@@ -41,4 +42,13 @@ export function windowLeft(expiresAt: string | null, now = Date.now()) {
   if (!expiresAt) return null;
   const minutes = Math.max(0, Math.floor((Date.parse(expiresAt) - now) / 60000));
   return { minutes, text: `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}` };
+}
+
+const span = (minutes: number) => minutes < 60 ? `${Math.max(1, Math.round(minutes))} 分钟` : minutes < 1440 ? `${Math.round(minutes / 60)} 小时` : `${Math.round(minutes / 1440)} 天`;
+/** First-contact deadline as the list shows it: "超时 12 分钟" once late, "剩 3 分钟" before, urgent under two hours. */
+export function dueLabel(dueAt: string | null, now = Date.now()) {
+  if (!dueAt) return null;
+  const minutes = (Date.parse(dueAt) - now) / 60000;
+  if (minutes < 0) return { text: `超时 ${span(-minutes)}`, tone: 'danger' as const };
+  return { text: `剩 ${span(minutes)}`, tone: minutes < 120 ? 'warning' as const : 'neutral' as const };
 }

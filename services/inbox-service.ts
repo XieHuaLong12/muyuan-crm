@@ -13,6 +13,7 @@ import { lockIdentity, resolveActiveContact } from './contact-identity-service';
 import { createInboundCustomer } from './whatsapp-webhook-service';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { templatesConfigured } from './whatsapp-template-service';
+import { queueFilters, workPriority } from './bos-sales-service';
 
 /**
  * Message center: one conversation per customer with WhatsApp messages, newest first.
@@ -32,7 +33,8 @@ const unreadJoin = (kind: 'LEFT' | 'INNER') => Prisma.sql`${kind === 'LEFT' ? Pr
 
 export const inboxQuery = z.object({
   q: z.string().trim().max(100).default(''),
-  filter: z.enum(['all', 'unread', 'awaiting', 'unmatched']).default('all'),
+  // pending = 待首联: assigned customers nobody has contacted yet, whether or not they have any messages.
+  filter: z.enum(['all', 'unread', 'awaiting', 'unmatched', 'pending']).default('all'),
   // Administrators may narrow to one salesperson; 'mine' is their own customers. Salespeople always see their own.
   ownerId: z.string().trim().max(191).default(''),
   page: z.coerce.number().int().min(1).max(1000).default(1),
@@ -122,12 +124,49 @@ export type InboxConversation = {
   window: { status: 'OPEN' | 'CLOSED' | 'UNKNOWN'; expiresAt: Date | null };
 };
 export type UnmatchedNumber = { key: string; peerPhone: string | null; peerName: string; lastMessage: string; lastMessageAt: Date; reason: string; count: number };
-export type InboxPage = { query: z.infer<typeof inboxQuery>; conversations: InboxConversation[]; hasMore: boolean; unmatchedTotal: number; numbers: UnmatchedNumber[];
-  sales: { id: string; name: string; role: string }[] };
+export type PendingCustomer = { id: string; name: string; companyName: string; country: string; countryCode: string; source: string; leadGrade: string;
+  purchaseType: string; productInterest: string; quantity: number | null; owner: { id: string; name: string }; assignedAt: Date | null; firstContactDueAt: Date | null };
+export type InboxPage = { query: z.infer<typeof inboxQuery>; conversations: InboxConversation[]; pending: PendingCustomer[]; pendingTotal: number; hasMore: boolean;
+  unmatchedTotal: number; numbers: UnmatchedNumber[]; sales: { id: string; name: string; role: string }[] };
+
+/** Same owner narrowing as the conversation list, for queries written with Prisma. */
+function ownerWhere(user: Actor, ownerId: string): Prisma.CustomerWhereInput {
+  if (user.role !== 'ADMIN' || ownerId === 'mine') return { ownerId: user.id };
+  return ownerId ? { ownerId } : {};
+}
+
+/** 待首联: the work queue's "new assignment, not contacted yet" customers, so the number matches 今日工作 and the top bar. */
+const pendingWhere = (user: Actor, ownerId: string, now: Date): Prisma.CustomerWhereInput => ({ AND: [scope(user), ownerWhere(user, ownerId), queueFilters(now).new] });
+const PENDING_LIMIT = 500;
+
+/** Pending customers ranked like 今日工作 (late first, then good forms and soon deadlines), one page at a time. */
+async function pendingCustomers(user: Actor, query: z.infer<typeof inboxQuery>, now: Date) {
+  const search: Prisma.CustomerWhereInput = query.q ? { OR: [{ name: { contains: query.q } }, { companyName: { contains: query.q } }, { country: { contains: query.q } },
+    { whatsapp: { contains: query.q } }, { phone: { contains: query.q } }] } : {};
+  const rows = await db.customer.findMany({ where: { AND: [pendingWhere(user, query.ownerId, now), search] }, orderBy: [{ firstContactDueAt: 'asc' }, { id: 'asc' }], take: PENDING_LIMIT,
+    select: { id: true, name: true, companyName: true, country: true, countryCode: true, source: true, leadGrade: true, purchaseType: true, productInterest: true, quantity: true,
+      owner: { select: { id: true, name: true } }, assignedAt: true, firstContactDueAt: true, aiIntent: true, aiScore: true, lastInboundAt: true, lastContactAt: true } });
+  const ranked = rows.map(c => ({ c, score: workPriority({ deadline: c.firstContactDueAt, firstContactPending: true, leadGrade: c.leadGrade, purchaseType: c.purchaseType,
+    aiIntent: c.aiIntent, aiScore: c.aiScore, lastInboundAt: c.lastInboundAt, lastOutboundAt: null, lastFollowUpAt: null, lastContactAt: c.lastContactAt, staleQuoteSentAt: null }, now).score }))
+    .sort((a, b) => b.score - a.score || (a.c.firstContactDueAt?.getTime() ?? Infinity) - (b.c.firstContactDueAt?.getTime() ?? Infinity) || a.c.id.localeCompare(b.c.id));
+  const skip = (query.page - 1) * PAGE_SIZE;
+  const pending = ranked.slice(skip, skip + PAGE_SIZE).map(({ c }): PendingCustomer => ({ id: c.id, name: c.name, companyName: c.companyName, country: c.country,
+    countryCode: c.countryCode, source: c.source, leadGrade: c.leadGrade, purchaseType: c.purchaseType, productInterest: c.productInterest, quantity: c.quantity,
+    owner: c.owner, assignedAt: c.assignedAt, firstContactDueAt: c.firstContactDueAt }));
+  return { pending, hasMore: ranked.length > skip + PAGE_SIZE };
+}
 
 export async function inboxConversations(user: Actor, input: unknown): Promise<InboxPage> {
   const query = inboxQuery.parse(input);
-  if (query.filter === 'unmatched') return { query, conversations: [], hasMore: false, ...(await unmatchedNumbers(user)), sales: await salesOptions(user) };
+  const now = new Date();
+  // The chip shows the count on every filter, so salespeople see new assignments while answering chats.
+  const pendingTotal = await db.customer.count({ where: pendingWhere(user, query.ownerId, now) });
+  if (query.filter === 'unmatched') return { query, conversations: [], pending: [], pendingTotal, hasMore: false, ...(await unmatchedNumbers(user)), sales: await salesOptions(user) };
+  if (query.filter === 'pending') {
+    const [page, sales] = await Promise.all([pendingCustomers(user, query, now), salesOptions(user)]);
+    const unmatchedTotal = user.role === 'ADMIN' ? await db.whatsAppUnmatchedMessage.count({ where: { status: 'PENDING', provider: { in: ['gupshup', 'cloud_api'] } } }) : 0;
+    return { query, conversations: [], pending: page.pending, pendingTotal, hasMore: page.hasMore, unmatchedTotal, numbers: [], sales };
+  }
   const rows = await conversationRows(user, query, { take: PAGE_SIZE + 1, skip: (query.page - 1) * PAGE_SIZE });
   const page = rows.slice(0, PAGE_SIZE), ids = page.map(row => row.customerId);
   const [customers, live] = await Promise.all([
@@ -137,7 +176,6 @@ export async function inboxConversations(user: Actor, input: unknown): Promise<I
     windows(ids),
   ]);
   const byId = new Map(customers.map(customer => [customer.id, customer]));
-  const now = new Date();
   const conversations = page.flatMap((row): InboxConversation[] => {
     const customer = byId.get(row.customerId);
     if (!customer) return [];
@@ -151,7 +189,7 @@ export async function inboxConversations(user: Actor, input: unknown): Promise<I
       window: { status: window.conversationWindowStatus, expiresAt: window.conversationWindowExpiresAt } }];
   });
   const unmatched = user.role === 'ADMIN' ? await db.whatsAppUnmatchedMessage.count({ where: { status: 'PENDING', provider: { in: ['gupshup', 'cloud_api'] } } }) : 0;
-  return { query, conversations, hasMore: rows.length > PAGE_SIZE, unmatchedTotal: unmatched, numbers: [], sales: await salesOptions(user) };
+  return { query, conversations, pending: [], pendingTotal, hasMore: rows.length > PAGE_SIZE, unmatchedTotal: unmatched, numbers: [], sales: await salesOptions(user) };
 }
 
 async function salesOptions(user: Actor) {

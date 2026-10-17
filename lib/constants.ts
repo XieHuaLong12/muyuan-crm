@@ -18,3 +18,12 @@ export const ADVANCED_STAGES = ['QUOTED', 'FOLLOW_UP', 'ORDER', 'WON'] as const;
  */
 export const QUALIFYING_STAGES = ['REPLIED', 'CATALOG_SENT', 'NEEDS_CONFIRMED', 'PRODUCT_CONFIRMED', 'QUOTED', 'FOLLOW_UP', 'ORDER'] as const;
 export const stageQualifies = (stage: string) => (QUALIFYING_STAGES as readonly string[]).includes(stage);
+/**
+ * Product lines named in the first-touch WhatsApp templates ({{3}} in lvanju_hi_* / lvanju_first_*): the English
+ * wording the customer saw in the ad, and the label salespeople pick from when the lead does not say which line.
+ */
+export const FIRST_TOUCH_PRODUCT_LINES = [
+  { value: 'compressed sofas', label: '压缩沙发' },
+  { value: 'vacuum-packed mattresses', label: '真空压缩床垫' },
+  { value: 'smart electric mattresses', label: '智能电动床垫' },
+] as const;

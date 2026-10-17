@@ -2,12 +2,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, CheckCheck, MessageCircle, Plus, Search, UserRound, X } from 'lucide-react';
 import { api } from '@/lib/client';
-import { stages } from '@/lib/constants';
+import { purchases, sources, stages } from '@/lib/constants';
 import { ChatThread } from './ChatThread';
-import { formatListTime, initial, toneOf, windowLeft, type Conversation, type Filter, type InboxList, type LinkCandidate, type UnmatchedNumber } from './types';
+import { dueLabel, formatListTime, initial, toneOf, windowLeft, type Conversation, type Filter, type InboxList, type LinkCandidate, type PendingCustomer, type UnmatchedNumber } from './types';
 
 const LIST_POLL_MS = 15_000;
-const FILTERS: { key: Filter; label: string }[] = [{ key: 'all', label: '全部' }, { key: 'unread', label: '未读' }, { key: 'awaiting', label: '待我回复' }];
+const FILTERS: { key: Filter; label: string }[] = [{ key: 'all', label: '全部' }, { key: 'unread', label: '未读' }, { key: 'awaiting', label: '待我回复' }, { key: 'pending', label: '待首联' }];
+
+/** Later pages and refreshes add what is not shown yet, in both the conversation and the 待首联 lists. */
+const mergePages = (current: InboxList, next: InboxList): InboxList => ({ ...next,
+  conversations: [...current.conversations, ...next.conversations.filter(c => !current.conversations.some(m => m.id === c.id))],
+  pending: [...current.pending, ...next.pending.filter(c => !current.pending.some(m => m.id === c.id))] });
 
 function listUrl(filter: Filter, q: string, ownerId: string, page: number) {
   const params = new URLSearchParams({ filter, page: String(page) });
@@ -34,6 +39,27 @@ function ConversationItem({ item, active, admin, timezone, onOpen }: { item: Con
         </span>
         {!!item.unread && <b className="bos-chat-count" aria-label={`${item.unread} 条未读`}>{item.unread}</b>}
       </span>
+    </span>
+  </button>;
+}
+
+/** A customer assigned to someone who has not contacted them yet: the deadline, the ad form and (for administrators) the owner. */
+function PendingItem({ item, active, admin, timezone, now, onOpen }: { item: PendingCustomer; active: boolean; admin: boolean; timezone: string; now: number; onOpen: () => void }) {
+  const due = dueLabel(item.firstContactDueAt, now);
+  const summary = [item.productInterest.replace(/_+/g, ' ').trim() || '产品未填写', (purchases as Record<string, string>)[item.purchaseType] && item.purchaseType !== 'OTHER' ? (purchases as Record<string, string>)[item.purchaseType] : '',
+    item.quantity ? `首单 ${item.quantity} 件` : ''].filter(Boolean).join(' · ');
+  return <button type="button" className="bos-chat-conversation" aria-current={active ? 'true' : undefined} onClick={onOpen}>
+    <span className={`bos-chat-avatar bos-chat-tone-${toneOf(item.id)}`} aria-hidden="true">{initial(item.name)}</span>
+    <span className="bos-chat-conversation-body">
+      <span className="bos-chat-row"><strong>{item.name}</strong>{item.assignedAt && <time dateTime={item.assignedAt}>分配 {formatListTime(item.assignedAt, timezone)}</time>}</span>
+      <span className="bos-chat-meta">
+        {item.countryCode && <span className="bos-chat-code">{item.countryCode}</span>}
+        <span className="bos-chat-tag">{(sources as Record<string, string>)[item.source] ?? item.source}</span>
+        {item.leadGrade && <span className={`bos-chat-tag${item.leadGrade === 'A' ? ' is-green' : ''}`}>{item.leadGrade} 级</span>}
+        {due && <span className={`bos-chat-tag${due.tone === 'danger' ? ' is-danger' : due.tone === 'warning' ? ' is-warning' : ''}`}>{due.text}</span>}
+        {admin && <span>· {item.owner.name}</span>}
+      </span>
+      <span className="bos-chat-preview"><span>{summary}</span></span>
     </span>
   </button>;
 }
@@ -105,6 +131,10 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
   const [selected, setSelected] = useState<string | null>(initialCustomerId);
   const [profileOpen, setProfileOpen] = useState(true);
   const [dialog, setDialog] = useState<{ kind: 'new' } | { kind: 'link'; number: UnmatchedNumber } | null>(null);
+  // Full-screen chat: the conversation fills the window; the list and the workspace frame step aside.
+  const [fullscreen, setFullscreen] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [now, setNow] = useState(() => Date.now());
   const firstLoad = useRef(true);
 
   // Narrow screens open the profile as an overlay on demand instead of as a third column.
@@ -115,11 +145,8 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
       const first = await api<InboxList>(listUrl(filter, q.trim(), ownerId, 1));
       let merged = first;
       // Keep the pages already shown (load more) while refreshing.
-      for (let p = 2; p <= pages && merged.hasMore; p++) {
-        const next = await api<InboxList>(listUrl(filter, q.trim(), ownerId, p));
-        merged = { ...next, conversations: [...merged.conversations, ...next.conversations.filter(c => !merged.conversations.some(m => m.id === c.id))] };
-      }
-      setList(merged); setError('');
+      for (let p = 2; p <= pages && merged.hasMore; p++) merged = mergePages(merged, await api<InboxList>(listUrl(filter, q.trim(), ownerId, p)));
+      setList(merged); setError(''); setNow(Date.now());
     } catch (e) { setError((e as Error).message); }
   }, [filter, q, ownerId, page]);
 
@@ -136,9 +163,24 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
     return () => clearInterval(timer);
   }, [refresh]);
 
+  useEffect(() => {
+    if (!fullscreen) return;
+    const exit = (e: KeyboardEvent) => { if (e.key === 'Escape') setFullscreen(false); };
+    document.addEventListener('keydown', exit);
+    return () => document.removeEventListener('keydown', exit);
+  }, [fullscreen]);
+
   function open(id: string | null) {
     setSelected(id);
+    if (!id) setFullscreen(false);
     window.history.replaceState(null, '', id ? `/messages?customer=${encodeURIComponent(id)}` : '/messages');
+  }
+  // After a greeting goes out from 待首联 the customer leaves the list (first contact is recorded): open the next one.
+  function sentFromPending(id: string) {
+    const order = list.pending.map(p => p.id), at = order.indexOf(id);
+    const next = at >= 0 ? order[at + 1] ?? order[at - 1] ?? null : null;
+    setNotice(`已发送给 ${list.pending[at]?.name ?? '客户'}，记为首次联系。${next ? '已打开下一位。' : ''}`);
+    open(next);
   }
   const markRead = useCallback((id: string) => setList(current => ({ ...current, conversations: current.conversations.map(c => c.id === id ? { ...c, unread: 0 } : c) })), []);
   const changed = useCallback(() => { void refresh(); }, [refresh]);
@@ -156,14 +198,15 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
   async function more() {
     try {
       const next = await api<InboxList>(listUrl(filter, q.trim(), ownerId, page + 1));
-      setList(current => ({ ...next, conversations: [...current.conversations, ...next.conversations.filter(c => !current.conversations.some(m => m.id === c.id))] }));
+      setList(current => mergePages(current, next));
       setPage(page + 1);
     } catch (e) { setError((e as Error).message); }
   }
 
   const unreadTotal = list.conversations.filter(c => c.unread).length;
+  const pendingHint = admin ? '所有销售名下已分配、还没联系过的客户，最急的在最上面。' : '分配给你、还没联系过的客户，最急的在最上面。点开直接发首条模板，发出后自动移出。';
   return <div className="bos-messages-page">
-    <div className={`bos-chat${selected ? ' is-thread-open' : ''}${selected && profileOpen ? ' is-profile-open' : ' is-profile-closed'}`}>
+    <div className={`bos-chat${selected ? ' is-thread-open' : ''}${selected && profileOpen ? ' is-profile-open' : ' is-profile-closed'}${selected && fullscreen ? ' is-fullscreen' : ''}`}>
       <section className="bos-chat-list" aria-label="会话列表">
         <header className="bos-chat-list-head"><h1>消息</h1><div>
           <button type="button" className="bos-chat-icon-button is-primary" onClick={() => setDialog({ kind: 'new' })} aria-label="发起新会话"><Plus size={18} /></button>
@@ -174,9 +217,10 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
           {list.sales.map(s => <option key={s.id} value={s.id}>{s.name}{s.role === 'ADMIN' ? '（管理员）' : ''}</option>)}
         </select>}
         <div className="bos-chat-filters" role="group" aria-label="会话分类">
-          {FILTERS.map(f => <button key={f.key} type="button" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)}>{f.label}{f.key === 'unread' && filter !== 'unread' && unreadTotal ? ` ${unreadTotal}` : ''}</button>)}
+          {FILTERS.map(f => <button key={f.key} type="button" aria-pressed={filter === f.key} onClick={() => { setFilter(f.key); setNotice(''); }}>{f.label}{f.key === 'unread' && filter !== 'unread' && unreadTotal ? ` ${unreadTotal}` : ''}{f.key === 'pending' && list.pendingTotal ? ` ${list.pendingTotal}` : ''}</button>)}
           {admin && (list.unmatchedTotal > 0 || filter === 'unmatched') && <button type="button" aria-pressed={filter === 'unmatched'} onClick={() => setFilter('unmatched')}>未关联 {list.unmatchedTotal}</button>}
         </div>
+        {filter === 'pending' && <p className="bos-chat-list-hint" role="status">{notice || pendingHint}</p>}
         <div className="bos-chat-conversations">
           {error && <p className="bos-chat-error" role="alert" style={{ padding: '0 16px' }}>{error}</p>}
           {filter === 'unmatched' && !!list.numbers.length && <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f3ef' }}>
@@ -191,14 +235,18 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
               <span className="bos-chat-preview"><span>{n.lastMessage}</span></span>
             </span>
           </button>)
+            : filter === 'pending' ? list.pending.map(item => <PendingItem key={item.id} item={item} admin={admin} timezone={timezone} now={now} active={selected === item.id} onOpen={() => { setNotice(''); open(item.id); }} />)
             : list.conversations.map(item => <ConversationItem key={item.id} item={item} admin={admin} timezone={timezone} active={selected === item.id} onOpen={() => open(item.id)} />)}
-          {filter !== 'unmatched' && !list.conversations.length && <div className="bos-chat-list-empty"><strong>{q ? '没有找到匹配的会话' : filter === 'unread' ? '没有未读消息' : filter === 'awaiting' ? '没有等待回复的客户' : '还没有 WhatsApp 会话'}</strong>{q ? '换个关键词试试。' : '客户通过公司业务号发来消息后，会出现在这里。'}</div>}
+          {filter === 'pending' && !list.pending.length && <div className="bos-chat-list-empty"><strong>{q ? '没有找到匹配的客户' : '待首联的客户都联系过了'}</strong>{q ? '换个关键词试试。' : admin ? '分配后还没联系的客户会出现在这里。' : '新分配给你的客户会出现在这里。'}</div>}
+          {filter !== 'unmatched' && filter !== 'pending' && !list.conversations.length && <div className="bos-chat-list-empty"><strong>{q ? '没有找到匹配的会话' : filter === 'unread' ? '没有未读消息' : filter === 'awaiting' ? '没有等待回复的客户' : '还没有 WhatsApp 会话'}</strong>{q ? '换个关键词试试。' : '客户通过公司业务号发来消息后，会出现在这里。'}</div>}
           {filter === 'unmatched' && !list.numbers.length && <div className="bos-chat-list-empty"><strong>没有待关联的号码</strong>新号码会自动建档；只有号码对应多位客户或号码无效时才需要人工关联。</div>}
-          {list.hasMore && filter !== 'unmatched' && <button type="button" className="bos-chat-more" onClick={more}>加载更多会话</button>}
+          {list.hasMore && filter !== 'unmatched' && <button type="button" className="bos-chat-more" onClick={more}>{filter === 'pending' ? '加载更多客户' : '加载更多会话'}</button>}
         </div>
       </section>
 
-      {selected ? <ChatThread key={selected} customerId={selected} timezone={timezone} profileOpen={profileOpen} onToggleProfile={() => setProfileOpen(v => !v)} onBack={() => open(null)} onChanged={changed} onRead={markRead} />
+      {selected ? <ChatThread key={selected} customerId={selected} timezone={timezone} profileOpen={profileOpen} onToggleProfile={() => setProfileOpen(v => !v)} onBack={() => open(null)} onChanged={changed} onRead={markRead}
+        fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(v => !v)}
+        autoTemplate={filter === 'pending'} onTemplateSent={filter === 'pending' && list.pending.some(p => p.id === selected) ? () => sentFromPending(selected) : undefined} />
         : <section className="bos-chat-thread"><div className="bos-chat-empty-thread"><div><MessageCircle size={34} aria-hidden="true" color="#174b3b" /><strong>选择一个会话开始聊天</strong>客户发来的文字、图片、语音、视频和文件都会显示在这里，<br />回复通过公司 WhatsApp 业务号发出并自动记入客户档案。</div></div></section>}
 
       {dialog?.kind === 'new' && <NewChatDialog onClose={() => setDialog(null)} onPick={id => { setDialog(null); open(id); }} />}
