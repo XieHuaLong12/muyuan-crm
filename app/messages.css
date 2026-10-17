@@ -129,6 +129,23 @@ audio.bos-chat-media{width:280px;max-width:100%;height:40px}
 .bos-chat-template-preview p{white-space:pre-wrap;color:#16261e}
 .bos-chat-template-preview input{border:1px solid #e2e9e1;border-radius:9px;padding:7px 9px;font-size:13px;width:100%;box-sizing:border-box}
 .bos-chat-template-preview label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b7d70}
+/* 模板变量：每个变量标出值从哪里来；预览里填好的值标绿，空的标黄 */
+.bos-chat-fill{border-radius:4px;padding:0 2px;background:#e3efe6;color:#164b3a;font-weight:600}
+.bos-chat-fill.is-empty{background:#faf1e6;color:#85521b}
+.bos-chat-var{display:flex;flex-direction:column;gap:4px;padding-top:8px;border-top:1px solid #eef1ec}
+.bos-chat-var-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#2c4535}
+.bos-chat-var-head small{font-size:11px;font-weight:400;color:#84988a}
+.bos-chat .bos-chat-var-head button{margin-left:auto;min-height:28px;padding:0 8px;border:1px solid rgba(27,49,40,.14);border-radius:8px;background:#fff;font-size:11px;color:#174b3b}
+.bos-chat-var-chip{padding:1px 7px;border-radius:6px;font-size:11px;line-height:17px;white-space:nowrap}
+.bos-chat-var-chip.is-auto{background:#e3efe6;color:#164b3a}
+.bos-chat-var-chip.is-missing{background:#faf1e6;color:#85521b}
+.bos-chat-var-chip.is-unknown{background:#f1f1f3;color:#55555b}
+.bos-chat-var-chip.is-changed,.bos-chat-var-chip.is-typed{background:#e4eaf2;color:#3d5878}
+.bos-chat-var-note{font-size:11px;line-height:1.5;color:#6b7d70}
+.bos-chat-var-note.is-warning{color:#85521b}
+.bos-chat-template-status{padding-left:20px;font-weight:600;color:#3a674b}
+.bos-chat-template-status.is-warning{color:#85521b}
+.bos-chat .bos-chat-used{display:inline-block;vertical-align:1px;margin-left:6px;padding:0 5px;border-radius:5px;background:#e3efe6;color:#164b3a;font-size:10px;line-height:16px;font-weight:600;white-space:nowrap}
 /* 待首联的首条模板：判断不出产品线时，点一下填入 {{3}} */
 .bos-chat-template-picks{display:flex;flex-wrap:wrap;gap:6px}
 .bos-chat .bos-chat-template-picks button{min-height:32px;padding:0 10px;border:1px solid rgba(27,49,40,.14);border-radius:999px;background:#fff;color:#2c4535;font-size:12px}

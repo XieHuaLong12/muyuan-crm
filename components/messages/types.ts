@@ -1,5 +1,5 @@
 import type { inboxConversations, inboxThread, linkCandidates } from '@/services/inbox-service';
-import type { ApprovedTemplate, TemplateSuggestion } from '@/services/whatsapp-template-service';
+import type { ApprovedTemplate, VariableFill } from '@/services/whatsapp-template-service';
 
 /** Server results after JSON: dates arrive as ISO strings. */
 type Jsonify<T> = T extends Date ? string : T extends (infer U)[] ? Jsonify<U>[] : T extends object ? { [K in keyof T]: Jsonify<T[K]> } : T;
@@ -11,7 +11,7 @@ export type PendingCustomer = InboxList['pending'][number];
 export type Thread = Jsonify<Awaited<ReturnType<typeof inboxThread>>>;
 export type ChatMessage = Thread['messages'][number];
 export type LinkCandidate = Jsonify<Awaited<ReturnType<typeof linkCandidates>>>['candidates'][number];
-export type TemplateList = { status: 'CONNECTED' | 'NOT_CONNECTED'; templates: ApprovedTemplate[]; suggestion: TemplateSuggestion | null };
+export type TemplateList = { status: 'CONNECTED' | 'NOT_CONNECTED'; templates: ApprovedTemplate[]; suggestion: { templateId: string } | null; fills: Record<string, VariableFill[]> };
 export type Filter = 'all' | 'unread' | 'awaiting' | 'unmatched' | 'pending';
 
 /** Request ids for idempotent sends; falls back to getRandomValues where randomUUID is unavailable (plain HTTP). */

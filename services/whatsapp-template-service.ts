@@ -61,10 +61,43 @@ const PRODUCT_LINE_WORDS: [string, RegExp][] = [
   ['vacuum-packed mattresses', /mattress|matelas|colch[oó]n|床垫|مرتبة|فرشة/i],
   ['compressed sofas', /sofa|couch|canap[eé]|sof[aá]|沙发|كنب/i],
 ];
-const FIRST_TOUCH_LABELS = ['客户名', '负责销售', '产品线'];
 
-export type TemplateSuggestion = { templateId: string; params: string[]; labels: string[]; productVariable: number | null };
-type FirstTouchCustomer = { name: string; source: string; sourceDetail: string; productInterest: string; productModel: string; language: string; owner: { name: string } };
+/**
+ * What a template variable stands for, read from the words around it ("___" is the variable, other variables "…").
+ * Checked in order; a variable none of them describes is left for the salesperson.
+ */
+export type VariableSource = 'firstName' | 'owner' | 'quoteNo' | 'orderNo' | 'eta' | 'productLine';
+const VARIABLE_PATTERNS: [VariableSource, RegExp][] = [
+  ['owner', /\b(it'?s|it’s|this is|i am|i'?m|i’m|c'?est|c’est|je suis|soy)\s+___|___\s+(here|ici|aquí|from (lvanju|our)|de lvanju)/i],
+  ['firstName', /(^|[\s,.!?])(hi|hello|hey|dear|bonjour|salut|hola|ciao|ol[aá]|مرحبا)\s*,?\s*___/i],
+  ['quoteNo', /\b(quotation|quote|devis|cotizaci[oó]n|proforma|\bpi)\s*(no\.?|number|#)?\s*___/i],
+  ['orderNo', /\b(order|commande|pedido|po)\s*(no\.?|number|#)?\s*___/i],
+  ['eta', /(delivery date|arrival date|\beta|arrive[sd]?|be delivered|livraison|entrega)\s+(date\s+)?(is|on|by|around|:|le|el)?\s*___/i],
+  ['productLine', /((\bads?|\badvert\S*|\bpublicit\S*|\banuncio)\s+(\w+\s+)?(for|about|on|pour|sur|de|para)|(quotation|quote|catalog(ue)?|price sheet|prices|samples?|devis)\s+(…\s+)?(for|of|on|pour|de)|interested in|looking for)\s+___/i],
+];
+const SOURCE_LABELS: Record<VariableSource, string> = { firstName: '客户名', owner: '负责销售', quoteNo: '报价单号', orderNo: '订单号', eta: '预计送达日期', productLine: '产品线' };
+
+/** A few whole words either side of the variable ("___"), shown so the salesperson sees where it goes. */
+function contextAround(text: string, index: number) {
+  let start = Math.max(0, index - 20), end = Math.min(text.length, index + 3 + 16);
+  if (start > 0 && !/\s/.test(text[start - 1])) start = text.indexOf(' ', start) + 1 || index;
+  if (end < text.length && !/\s/.test(text[end])) end = Math.max(index + 3, text.lastIndexOf(' ', end));
+  return text.slice(start, end).replace(/\s+/g, ' ').trim();
+}
+
+/** For each variable {{1}}…{{n}}: what it stands for (null when the words around it do not say) and that context. */
+export function variableSources(body: string, variables: number) {
+  return Array.from({ length: variables }, (_, i) => {
+    const marker = new RegExp(`\\{\\{\\s*${i + 1}\\s*\\}\\}`);
+    const at = body.search(marker);
+    if (at < 0) return { source: null, context: '' };
+    const blank = body.replace(marker, '___').replace(/\{\{\s*\d{1,2}\s*\}\}/g, '…');
+    const index = blank.indexOf('___');
+    const window = blank.slice(Math.max(0, index - 48), index + 33).replace(/\s+/g, ' ');
+    const source = VARIABLE_PATTERNS.find(([, pattern]) => pattern.test(window))?.[0] ?? null;
+    return { source, context: contextAround(blank, index) };
+  });
+}
 
 /** "MUHAMMAD ANAS" → "Muhammad"; '' when the name is a number or empty, so the salesperson types it. */
 export function firstNameOf(name: string) {
@@ -80,24 +113,42 @@ export function productLineOf(...texts: string[]) {
   return PRODUCT_LINE_WORDS.find(([, words]) => words.test(text))?.[0] ?? '';
 }
 
+/** What the customer record says, for filling variables. Quotation and order are the latest sent / not cancelled. */
+export type TemplateFacts = { name: string; owner: string; productLine: string; quote: { number: string; sentAt: string } | null;
+  order: { number: string; eta: string } | null };
+export type VariableFill = { source: VariableSource | null; label: string; context: string; value: string; note: string };
+
 /**
- * The template a never-contacted Facebook or Instagram lead should get first, with its variables filled from the
- * customer record: {{1}} first name, {{2}} the owner, {{3}} the product line. Only the English templates get a product
- * line filled in (the line names are English); anything the record does not say is left for the salesperson.
+ * Each variable of a template filled from the customer record, with where the value came from or why it is empty.
+ * Product lines are English names, so other-language templates leave that variable to the salesperson.
  */
-export function firstTouchSuggestion(customer: FirstTouchCustomer, templates: ApprovedTemplate[]): TemplateSuggestion | null {
+export function fillVariables(template: ApprovedTemplate, facts: TemplateFacts): VariableFill[] {
+  const english = !template.language || template.language.toLowerCase().startsWith('en');
+  return variableSources(template.body, template.variables).map(({ source, context }) => {
+    if (!source) return { source, label: '未识别', context, value: '', note: '模板这个位置看不出要填什么，请手动填写。' };
+    const fill = (value: string, from: string, missing: string) => ({ source, label: SOURCE_LABELS[source], context, value, note: value ? from : missing });
+    switch (source) {
+      case 'firstName': return fill(firstNameOf(facts.name), `取自客户姓名「${facts.name}」的第一个词`, '客户姓名里没有可用的名字，请手动填写。');
+      case 'owner': return fill(facts.owner, '取自负责人', '这位客户没有负责人，请手动填写。');
+      case 'productLine': return english ? fill(facts.productLine, '按广告名和表单答案判断', '看不出产品线，请在下面选一个。')
+        : fill('', '', '产品线名称是英文，这个模板请手动填写。');
+      case 'quoteNo': return fill(facts.quote?.number ?? '', `取自最近一份已发出的报价单（${facts.quote?.sentAt ?? ''}）`, '这位客户还没有发出过报价单，请手动填写。');
+      case 'orderNo': return fill(facts.order?.number ?? '', '取自最近的订单', '这位客户还没有订单，请手动填写，或先在客户档案里建订单。');
+      case 'eta': return fill(facts.order?.eta ?? '', `取自订单 ${facts.order?.number ?? ''} 的预计送达日期`,
+        facts.order ? `订单 ${facts.order.number} 还没有填预计送达日期，请手动填写。` : '这位客户还没有订单，请手动填写。');
+    }
+  });
+}
+
+/** The greeting a never-contacted Facebook or Instagram lead should get first; the customer's language goes first. */
+export function firstTouchTemplate(customer: { source: string; language: string }, templates: ApprovedTemplate[]) {
   const prefixes = FIRST_TOUCH_TEMPLATES[customer.source];
   if (!prefixes) return null;
   const language = /^[a-z]{2}/i.test(customer.language.trim()) ? customer.language.trim().slice(0, 2).toLowerCase() : 'en';
   const languageRank = (template: ApprovedTemplate) => template.language.toLowerCase().startsWith(language) ? 0 : template.language.toLowerCase().startsWith('en') ? 1 : 2;
   for (const prefix of prefixes) {
-    const matches = templates.filter(t => t.name === prefix || t.name.startsWith(`${prefix}_`)).sort((a, b) => languageRank(a) - languageRank(b));
-    const template = matches[0];
-    if (!template) continue;
-    if (template.variables !== FIRST_TOUCH_LABELS.length) return { templateId: template.id, params: Array(template.variables).fill(''), labels: [], productVariable: null };
-    const english = template.language.toLowerCase().startsWith('en');
-    return { templateId: template.id, labels: FIRST_TOUCH_LABELS, productVariable: 3,
-      params: [firstNameOf(customer.name), customer.owner.name.trim(), english ? productLineOf(customer.sourceDetail, customer.productInterest, customer.productModel) : ''] };
+    const match = templates.filter(t => t.name === prefix || t.name.startsWith(`${prefix}_`)).sort((a, b) => languageRank(a) - languageRank(b))[0];
+    if (match) return match;
   }
   return null;
 }
@@ -105,12 +156,24 @@ export function firstTouchSuggestion(customer: FirstTouchCustomer, templates: Ap
 export async function listTemplates(user: Actor, input: unknown) {
   const { customerId, refresh } = z.object({ customerId: z.string().trim().min(1).max(191), refresh: z.enum(['1']).optional() }).parse(input);
   await accessible(customerId, user);
-  if (!templatesConfigured()) return { status: 'NOT_CONNECTED' as const, templates: [], suggestion: null };
-  const [templates, customer] = await Promise.all([approvedTemplates(!!refresh), db.customer.findUniqueOrThrow({ where: { id: customerId },
-    select: { name: true, source: true, sourceDetail: true, productInterest: true, productModel: true, language: true, firstContactAt: true, lastOutboundAt: true, owner: { select: { name: true } } } })]);
-  // Only a customer nobody has written to yet gets a greeting picked and filled in.
-  const suggestion = !customer.firstContactAt && !customer.lastOutboundAt ? firstTouchSuggestion(customer, templates) : null;
-  return { status: 'CONNECTED' as const, templates, suggestion };
+  if (!templatesConfigured()) return { status: 'NOT_CONNECTED' as const, templates: [], suggestion: null, fills: {} as Record<string, VariableFill[]> };
+  const [templates, customer, setting] = await Promise.all([approvedTemplates(!!refresh), db.customer.findUniqueOrThrow({ where: { id: customerId },
+    select: { name: true, source: true, sourceDetail: true, productInterest: true, productModel: true, language: true, firstContactAt: true, lastOutboundAt: true,
+      owner: { select: { name: true } },
+      quotations: { where: { sentAt: { not: null } }, orderBy: { sentAt: 'desc' }, take: 1, select: { quoteNumber: true, sentAt: true } },
+      orders: { where: { status: { not: 'CANCELLED' } }, orderBy: { orderDate: 'desc' }, take: 1, select: { orderNo: true, estimatedDelivery: true } } } }),
+    db.setting.findUnique({ where: { id: 'system' }, select: { timezone: true } })]);
+  // Dates go to the customer, so they are written in English ("November 20, 2026") in the business time zone.
+  const english = (date: Date) => new Intl.DateTimeFormat('en-US', { timeZone: setting?.timezone ?? 'Asia/Shanghai', month: 'long', day: 'numeric', year: 'numeric' }).format(date);
+  const quote = customer.quotations[0], order = customer.orders[0];
+  const facts: TemplateFacts = { name: customer.name, owner: customer.owner.name.trim(),
+    productLine: productLineOf(customer.sourceDetail, customer.productInterest, customer.productModel),
+    quote: quote ? { number: quote.quoteNumber, sentAt: new Intl.DateTimeFormat('zh-CN', { timeZone: setting?.timezone ?? 'Asia/Shanghai', month: 'numeric', day: 'numeric' }).format(quote.sentAt!) + ' 发出' } : null,
+    order: order ? { number: order.orderNo, eta: order.estimatedDelivery ? english(order.estimatedDelivery) : '' } : null };
+  const fills = Object.fromEntries(templates.map(t => [t.id, fillVariables(t, facts)]));
+  // Only a customer nobody has written to yet gets a greeting picked for them.
+  const greeting = !customer.firstContactAt && !customer.lastOutboundAt ? firstTouchTemplate(customer, templates) : null;
+  return { status: 'CONNECTED' as const, templates, suggestion: greeting ? { templateId: greeting.id } : null, fills };
 }
 
 export const templateSendSchema = z.object({ customerId: z.string().trim().min(1).max(191), templateId: z.string().trim().min(1).max(100),
