@@ -1,12 +1,13 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, CheckCheck, MessageCircle, Plus, Search, UserRound, X } from 'lucide-react';
+import { Check, CheckCheck, Minimize2, MessageCircle, PanelLeftClose, PanelLeftOpen, Plus, Search, UserRound, X } from 'lucide-react';
 import { api } from '@/lib/client';
 import { purchases, sources, stages } from '@/lib/constants';
 import { ChatThread } from './ChatThread';
 import { dueLabel, formatListTime, initial, toneOf, windowLeft, type Conversation, type Filter, type InboxList, type LinkCandidate, type PendingCustomer, type UnmatchedNumber } from './types';
 
 const LIST_POLL_MS = 15_000;
+const LIST_COLLAPSED_KEY = 'bos-chat-list-collapsed';
 const FILTERS: { key: Filter; label: string }[] = [{ key: 'all', label: '全部' }, { key: 'unread', label: '未读' }, { key: 'awaiting', label: '待我回复' }, { key: 'pending', label: '待首联' }];
 
 /** Later pages and refreshes add what is not shown yet, in both the conversation and the 待首联 lists. */
@@ -131,11 +132,28 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
   const [selected, setSelected] = useState<string | null>(initialCustomerId);
   const [profileOpen, setProfileOpen] = useState(true);
   const [dialog, setDialog] = useState<{ kind: 'new' } | { kind: 'link'; number: UnmatchedNumber } | null>(null);
-  // Full-screen chat: the conversation fills the window; the list and the workspace frame step aside.
+  // Full-screen chat: the message center fills the window and the workspace frame steps aside.
   const [fullscreen, setFullscreen] = useState(false);
+  // The list folds into a column of avatars to give the chat more room; remembered per browser. Phones never fold it.
+  const [listCollapsed, setListCollapsed] = useState(false);
+  const [narrow, setNarrow] = useState(false);
   const [notice, setNotice] = useState('');
   const [now, setNow] = useState(() => Date.now());
   const firstLoad = useRef(true);
+
+  useEffect(() => {
+    try { setListCollapsed(localStorage.getItem(LIST_COLLAPSED_KEY) === '1'); } catch { /* storage unavailable: start expanded */ }
+    const phone = window.matchMedia('(max-width: 760px)');
+    const update = () => setNarrow(phone.matches);
+    update(); phone.addEventListener('change', update);
+    return () => phone.removeEventListener('change', update);
+  }, []);
+  function toggleList() {
+    const next = !listCollapsed;
+    setListCollapsed(next);
+    try { localStorage.setItem(LIST_COLLAPSED_KEY, next ? '1' : '0'); } catch { /* storage unavailable: not remembered */ }
+  }
+  const collapsed = listCollapsed && !narrow;
 
   // Narrow screens open the profile as an overlay on demand instead of as a third column.
   useEffect(() => { if (window.matchMedia('(max-width: 1400px)').matches) setProfileOpen(false); }, []);
@@ -172,7 +190,6 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
 
   function open(id: string | null) {
     setSelected(id);
-    if (!id) setFullscreen(false);
     window.history.replaceState(null, '', id ? `/messages?customer=${encodeURIComponent(id)}` : '/messages');
   }
   // After a greeting goes out from 待首联 the customer leaves the list (first contact is recorded): open the next one.
@@ -206,9 +223,23 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
   const unreadTotal = list.conversations.filter(c => c.unread).length;
   const pendingHint = admin ? '所有销售名下已分配、还没联系过的客户，最急的在最上面。' : '分配给你、还没联系过的客户，最急的在最上面。点开直接发首条模板，发出后自动移出。';
   return <div className="bos-messages-page">
-    <div className={`bos-chat${selected ? ' is-thread-open' : ''}${selected && profileOpen ? ' is-profile-open' : ' is-profile-closed'}${selected && fullscreen ? ' is-fullscreen' : ''}`}>
-      <section className="bos-chat-list" aria-label="会话列表">
+    <div className={`bos-chat${selected ? ' is-thread-open' : ''}${selected && profileOpen ? ' is-profile-open' : ' is-profile-closed'}${fullscreen ? ' is-fullscreen' : ''}${collapsed ? ' is-list-collapsed' : ''}`}>
+      {collapsed ? <section className="bos-chat-list is-collapsed" aria-label="会话列表（已收起）">
+        <button type="button" className="bos-chat-icon-button" onClick={toggleList} aria-label="展开会话列表" title="展开会话列表"><PanelLeftOpen size={18} /></button>
+        <button type="button" className="bos-chat-icon-button is-primary" onClick={() => setDialog({ kind: 'new' })} aria-label="发起新会话" title="发起新会话"><Plus size={18} /></button>
+        <div className="bos-chat-rail">
+          {(filter === 'pending' ? list.pending.map(p => ({ id: p.id, name: p.name, badge: dueLabel(p.firstContactDueAt, now)?.tone === 'danger' ? '首联超时' : '', count: 0 }))
+            : filter === 'unmatched' ? [] : list.conversations.map(c => ({ id: c.id, name: c.name, badge: '', count: c.unread }))).map(item =>
+            <button key={item.id} type="button" className="bos-chat-rail-item" aria-current={selected === item.id ? 'true' : undefined} onClick={() => { setNotice(''); open(item.id); }}
+              title={item.name} aria-label={[item.name, item.badge, item.count ? `${item.count} 条未读` : ''].filter(Boolean).join('，')}>
+              <span className={`bos-chat-avatar bos-chat-tone-${toneOf(item.id)}`} aria-hidden="true">{initial(item.name)}</span>
+              {item.count > 0 ? <b className="bos-chat-rail-count" aria-hidden="true">{item.count}</b> : item.badge && <b className="bos-chat-rail-dot" aria-hidden="true" />}
+            </button>)}
+        </div>
+      </section>
+      : <section className="bos-chat-list" aria-label="会话列表">
         <header className="bos-chat-list-head"><h1>消息</h1><div>
+          {!narrow && <button type="button" className="bos-chat-icon-button" onClick={toggleList} aria-label="收起会话列表" title="收起会话列表"><PanelLeftClose size={18} /></button>}
           <button type="button" className="bos-chat-icon-button is-primary" onClick={() => setDialog({ kind: 'new' })} aria-label="发起新会话"><Plus size={18} /></button>
         </div></header>
         <label className="bos-chat-search"><Search size={16} aria-hidden="true" /><span className="bos-chat-sr">搜索会话</span><input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="搜索客户、公司、国家或电话" /></label>
@@ -242,12 +273,13 @@ export function MessageCenter({ initialList, initialCustomerId, timezone, admin 
           {filter === 'unmatched' && !list.numbers.length && <div className="bos-chat-list-empty"><strong>没有待关联的号码</strong>新号码会自动建档；只有号码对应多位客户或号码无效时才需要人工关联。</div>}
           {list.hasMore && filter !== 'unmatched' && <button type="button" className="bos-chat-more" onClick={more}>{filter === 'pending' ? '加载更多客户' : '加载更多会话'}</button>}
         </div>
-      </section>
+      </section>}
 
       {selected ? <ChatThread key={selected} customerId={selected} timezone={timezone} profileOpen={profileOpen} onToggleProfile={() => setProfileOpen(v => !v)} onBack={() => open(null)} onChanged={changed} onRead={markRead}
         fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(v => !v)}
         autoTemplate={filter === 'pending'} onTemplateSent={filter === 'pending' && list.pending.some(p => p.id === selected) ? () => sentFromPending(selected) : undefined} />
-        : <section className="bos-chat-thread"><div className="bos-chat-empty-thread"><div><MessageCircle size={34} aria-hidden="true" color="#174b3b" /><strong>选择一个会话开始聊天</strong>客户发来的文字、图片、语音、视频和文件都会显示在这里，<br />回复通过公司 WhatsApp 业务号发出并自动记入客户档案。</div></div></section>}
+        : <section className="bos-chat-thread"><div className="bos-chat-empty-thread"><div><MessageCircle size={34} aria-hidden="true" color="#174b3b" /><strong>选择一个会话开始聊天</strong>客户发来的文字、图片、语音、视频和文件都会显示在这里，<br />回复通过公司 WhatsApp 业务号发出并自动记入客户档案。
+          {fullscreen && <div className="bos-chat-actions" style={{ justifyContent: 'center', marginTop: 14 }}><button type="button" onClick={() => setFullscreen(false)}><Minimize2 size={14} aria-hidden="true" />退出全屏</button></div>}</div></div></section>}
 
       {dialog?.kind === 'new' && <NewChatDialog onClose={() => setDialog(null)} onPick={id => { setDialog(null); open(id); }} />}
       {dialog?.kind === 'link' && <LinkDialog number={dialog.number} onClose={() => setDialog(null)} onLinked={id => { setDialog(null); setFilter('all'); open(id); }} />}
