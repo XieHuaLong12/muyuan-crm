@@ -207,7 +207,7 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
       sourcePhone:direction==='INBOUND'?validPhone:canonicalPhone(input.sender,undefined,true),destinationPhone:direction==='INBOUND'?canonicalPhone(input.accountId,undefined,true):validPhone,
       waId, direction, source:input.source||'cloud_api',
       sender: input.sender || (direction === 'INBOUND' ? waId : 'BUSINESS'), content: input.content,
-      messageType: input.messageType, mediaUrl: input.mediaUrl?.startsWith('https://') ? input.mediaUrl : null, mimeType: input.mimeType, fileName: input.fileName, status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT',
+      messageType: input.messageType, mediaUrl: input.mediaUrl?.startsWith('https://') ? input.mediaUrl : null, mimeType: input.mimeType?.slice(0, 120) ?? null, fileName: input.fileName?.slice(0, 180) ?? null, status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT',
       sentAt: input.sentAt, raw: JSON.stringify(input.raw) }, select: { id: true } });
     if (direction === 'INBOUND' && MEDIA_MESSAGE_TYPES.has(input.messageType)) delta.mediaMessageIds.push(stored.id);
     await messageFacts(tx,customerId,input.sentAt,direction);

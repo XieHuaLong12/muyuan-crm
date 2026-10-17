@@ -74,10 +74,23 @@
 | 来源 | 文件位置 | 处理 |
 | --- | --- | --- |
 | Gupshup V2 回调 | `payload.url`（附 `contentType`、`urlExpiry`） | Webhook 处理完立即下载保存 |
-| Gupshup V3（Meta 格式）回调 | `<type>.url`，旁边是 Meta 的媒体 id | 同上 |
+| Gupshup V3（Meta 格式）回调 | `<type>.url`，旁边是 Meta 的媒体 id；有时只有 id | 同上；只有 id 时按应用名（`/sm/api/wamedia/<应用名>/<id>`）和 App ID 向 Gupshup 取文件 |
 | Meta Cloud API 直连 | 只有媒体 id | 用已连接账号的令牌经 Graph API 取下载地址 |
 
-后台下载失败时，有人打开这条消息会再试一次；仍然失败就显示“文件已过期或无法下载，请在手机 WhatsApp 中查看”。只从 Gupshup、Meta、WhatsApp 的域名下载，重定向必须保持 HTTPS 且不能指向 IP 地址；单个文件上限 32 MB。
+下载 Gupshup 链接时先不带密钥；被拒绝时依次带上 `apikey` 头和 `Authorization` 头重试（密钥只发给 gupshup.io）。链接返回的是指向文件的 JSON 时，会再跟一次真正的文件地址。
+
+后台下载失败时，有人打开这条消息会再试一次；聊天里失败的文件旁有「重试」，点开会显示具体原因（需要授权、链接已过期、连不上服务器、地址不安全）。只从 Gupshup、Meta、WhatsApp 的域名下载，重定向必须保持 HTTPS 且不能指向 IP 地址；单个文件上限 32 MB。
+
+### 排查「收不到图片 / 文件 / 视频」（2026-10-17）
+
+设置 › 集成与接入 › WhatsApp 接入 页底部的「最近收到的客户消息」直接读取已保存的 Gupshup 推送原文（只显示类型和域名，不显示内容、链接或密钥），逐条给出：
+
+- **格式与类型**：V2 或 V3（Meta 格式），文字 / 图片 / 视频 / 语音 / 文件。没有出现在这里，说明 Gupshup 根本没有推送这条消息（检查 Gupshup 后台的回调订阅）。
+- **Gupshup 给的文件信息**：有没有下载链接（显示域名）、有没有文件编号。
+- **处理结果**：已进会话 / 待关联（原因）/ 没保存（处理失败的原因）。
+- **文件**：已保存 / 下载失败（原因，以及每次尝试的域名、带的密钥方式、返回码）/ 还没下载。
+
+每次下载失败都会记一条 `SyncJob`（`provider=GUPSHUP`，`jobType=MEDIA_DOWNLOAD`），只记消息 id、域名、认证方式和返回码。
 
 ## 7. 上线与验证
 

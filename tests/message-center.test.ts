@@ -293,3 +293,57 @@ test('inbound numbers: "+" optional, deleted customers ignored, waiting messages
     await deleteTestCustomers({ where: { OR: [{ id: { in: ids } }, { whatsappNormalized: { in: phones } }] } });
   }
 });
+
+test('media diagnostics: every customer message shows how far it got, and Gupshup links are retried with the app key', async t => {
+  const storage = await mkdtemp(path.join(tmpdir(), 'inbox-diag-'));
+  const phone = `86158${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`, marker = randomUUID().slice(0, 8);
+  const admin = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } }), actor = actorOf(admin);
+  const { acceptWebhookReceipt, processWebhookReceipt } = await import('../services/webhook-receipt-service');
+  const { inboundDiagnostics } = await import('../services/gupshup-integration-service');
+  await withEnv({ GUPSHUP_SOURCE_NUMBER: business, GUPSHUP_APP_NAME: 'INBOX_TEST', GUPSHUP_API_KEY: 'inbox-key', GUPSHUP_APP_ID: '', MEDIA_STORAGE_DIR: storage }, async () => {
+    const calls: { url: string; headers: Record<string, string> }[] = [];
+    t.mock.method(globalThis, 'fetch', async (input: string | URL, init?: RequestInit) => {
+      const url = String(input), headers = Object.fromEntries(new Headers(init?.headers).entries());
+      calls.push({ url, headers });
+      // Needs the app key; answered with the key in an "apikey" header.
+      if (url.includes('/needs-key.jpg')) return headers.apikey === 'inbox-key' ? new Response(new Uint8Array([255, 216, 255]), { headers: { 'content-type': 'image/jpeg' } }) : new Response('denied', { status: 401 });
+      // A link that answers with JSON pointing at the real file.
+      if (url.includes('/pointer')) return Response.json({ url: 'https://filemanager.gupshup.io/wa/real.mp4' });
+      if (url.includes('/real.mp4')) return new Response(new Uint8Array([0, 0, 0, 24]), { headers: { 'content-type': 'video/mp4' } });
+      // Only a media id: Gupshup's app media download by app name.
+      if (url === `https://api.gupshup.io/sm/api/wamedia/INBOX_TEST/media-${marker}`) return headers.apikey === 'inbox-key' ? new Response(new Uint8Array([79, 103, 103, 83]), { headers: { 'content-type': 'audio/ogg' } }) : new Response('denied', { status: 401 });
+      if (url.includes('/gone.pdf')) return new Response('gone', { status: 404 });
+      return new Response('unexpected', { status: 500 });
+    });
+    try {
+      const events = [
+        v2(`d-text-${marker}`, phone, 'text', { text: 'Hello' }),
+        v2(`d-image-${marker}`, phone, 'image', { url: 'https://filemanager.gupshup.io/wa/needs-key.jpg', contentType: 'image/jpeg' }),
+        cloud({ id: `d-video-${marker}`, from: phone, timestamp: String(Math.floor(Date.now() / 1000)), type: 'video', video: { id: 'meta-video', mime_type: 'video/mp4', url: 'https://filemanager.gupshup.io/wa/pointer' } }),
+        cloud({ id: `d-voice-${marker}`, from: phone, timestamp: String(Math.floor(Date.now() / 1000)), type: 'audio', audio: { id: `media-${marker}`, mime_type: 'audio/ogg; codecs=opus', voice: true } }),
+        v2(`d-file-${marker}`, phone, 'file', { url: 'https://filemanager.gupshup.io/wa/gone.pdf', contentType: 'application/pdf', name: 'Specs.pdf' }),
+      ];
+      for (const event of events) await processWebhookReceipt(await acceptWebhookReceipt(event, 'WHATSAPP'));
+      const byId = Object.fromEntries((await db.whatsAppMessage.findMany({ where: { waMessageId: { in: [`d-image-${marker}`, `d-video-${marker}`, `d-voice-${marker}`, `d-file-${marker}`] } } })).map(m => [m.waMessageId!, m]));
+      assert.match(byId[`d-image-${marker}`].mediaUrl ?? '', /^\/api\/whatsapp\/media\//, 'retried with the app key');
+      assert.match(byId[`d-video-${marker}`].mediaUrl ?? '', /^\/api\/whatsapp\/media\//, 'followed the JSON pointer');
+      assert.match(byId[`d-voice-${marker}`].mediaUrl ?? '', /^\/api\/whatsapp\/media\//, 'downloaded by media id');
+      assert.equal(byId[`d-file-${marker}`].mediaUrl, 'https://filemanager.gupshup.io/wa/gone.pdf');
+      assert.ok(!calls.some(call => call.headers.apikey && !new URL(call.url).hostname.endsWith('gupshup.io')), 'the key is only sent to Gupshup');
+
+      const diag = (await inboundDiagnostics({}, actor)).rows;
+      const find = (type: string) => diag.find(row => row.type === type && row.result === 'IN_CHAT');
+      assert.ok(diag.filter(row => row.result === 'IN_CHAT').length >= 5, 'text, image, video, voice and file all reached the chat');
+      assert.equal(find('text')?.file, null);
+      assert.equal(find('image')?.file, 'SAVED'); assert.equal(find('image')?.link, 'filemanager.gupshup.io');
+      assert.equal(find('video')?.format, 'V3'); assert.equal(find('audio')?.link, null); assert.equal(find('audio')?.mediaId, true); assert.equal(find('audio')?.file, 'SAVED');
+      const file = find('file');
+      assert.equal(file?.file, 'FAILED'); assert.match(file?.fileError ?? '', /过期/); assert.match(file?.attempts ?? '', /filemanager\.gupshup\.io → 404/);
+      await assert.rejects(inboundDiagnostics({}, { ...actor, role: 'SALES' }), (e: { status?: number }) => e.status === 403);
+    } finally {
+      await db.syncJob.deleteMany({ where: { provider: 'GUPSHUP', jobType: { in: ['WEBHOOK_INBOX', 'WEBHOOK', 'MEDIA_DOWNLOAD'] }, startedAt: { gte: new Date(Date.now() - 10 * 60_000) } } });
+      await deleteTestCustomers({ where: { whatsappNormalized: phone } });
+      await rm(storage, { recursive: true, force: true });
+    }
+  });
+});

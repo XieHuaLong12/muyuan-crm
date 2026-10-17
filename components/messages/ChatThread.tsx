@@ -30,7 +30,23 @@ function Status({ status }: { status: string }) {
   return null;
 }
 
-function Media({ message, broken, onBroken, onLoad }: { message: ChatMessage; broken: boolean; onBroken: () => void; onLoad: () => void }) {
+/** A file that failed to load: asks the server again and shows its reason (expired link, refused, unreachable…). */
+function MissingMedia({ href, onRecovered }: { href: string; onRecovered: () => void }) {
+  const [state, setState] = useState<{ busy: boolean; reason: string }>({ busy: false, reason: '' });
+  async function retry() {
+    setState({ busy: true, reason: '' });
+    try {
+      const response = await fetch(href, { cache: 'no-store' });
+      if (response.ok) { onRecovered(); return; }
+      const body = await response.json().catch(() => null) as { error?: string } | null;
+      setState({ busy: false, reason: body?.error || `下载失败（${response.status}）` });
+    } catch { setState({ busy: false, reason: '网络连接失败，请稍后重试' }); }
+  }
+  return <span className="bos-chat-media-missing">{state.reason || '文件没能显示'}
+    <button type="button" className="bos-chat-translate" style={{ marginLeft: 8 }} onClick={retry} disabled={state.busy}>{state.busy ? '下载中…' : '重试'}</button></span>;
+}
+
+function Media({ message, broken, onBroken, onRecovered, onLoad }: { message: ChatMessage; broken: boolean; onBroken: () => void; onRecovered: () => void; onLoad: () => void }) {
   const type = message.messageType.toUpperCase(), mime = message.mimeType || '';
   if (!message.mediaHref) {
     if (!message.attachmentMetadata) return null;
@@ -38,7 +54,7 @@ function Media({ message, broken, onBroken, onLoad }: { message: ChatMessage; br
     try { files = JSON.parse(message.attachmentMetadata); } catch { return null; }
     return Array.isArray(files) ? <>{files.map((file, index) => <span key={index} className="bos-chat-media-missing">{file.fileName || file.kind || '历史附件'} · 仅留存文件信息</span>)}</> : null;
   }
-  if (broken) return <span className="bos-chat-media-missing">文件已过期或无法下载，请在手机 WhatsApp 中查看</span>;
+  if (broken) return <MissingMedia href={message.mediaHref} onRecovered={onRecovered} />;
   const href = message.mediaHref;
   if (type === 'IMAGE' || type === 'STICKER' || (/^image\/(jpeg|png|webp|gif)/.test(mime) && !['DOCUMENT', 'FILE'].includes(type)))
     // Authenticated media from our own API: next/image would proxy it without the session cookie.
@@ -226,7 +242,8 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
             {day !== previous && <div className="bos-chat-day">{day}</div>}
             <article className={`bos-chat-bubble${out ? ' is-out' : ''}`}>
               {message.messageType === 'TEMPLATE' && <span className="bos-chat-bubble-label">模板消息</span>}
-              <Media message={message} broken={broken.has(message.id)} onBroken={() => setBroken(set => new Set(set).add(message.id))} onLoad={keepAtBottom} />
+              <Media message={message} broken={broken.has(message.id)} onBroken={() => setBroken(set => new Set(set).add(message.id))}
+                onRecovered={() => setBroken(set => { const next = new Set(set); next.delete(message.id); return next; })} onLoad={keepAtBottom} />
               {body && <p>{body}</p>}
               {translation && <p className="bos-chat-translation">{translation}</p>}
               <div className="bos-chat-bubble-meta">

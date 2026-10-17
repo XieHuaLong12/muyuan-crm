@@ -102,26 +102,78 @@ async function cloudAccessToken(){
   const {decryptWhatsAppAccessToken}=await import('./whatsapp-connect-service');
   try{return decryptWhatsAppAccessToken(integration.encryptedAccessToken);}catch{return '';}
 }
-async function fetchProviderMedia(message:MediaMessage,ref:NonNullable<ReturnType<typeof inboundMediaRef>>){
-  const unavailable=new HttpError(404,'媒体文件已过期或无法从 WhatsApp 下载，请在手机 WhatsApp 中查看');
-  if(ref.url){
-    const url=trustedUrl(ref.url);if(!url)throw new HttpError(400,'媒体文件不在 WhatsApp 服务商域名下，已拒绝下载');
-    let response=await download(url);
-    // Gupshup links are normally public until urlExpiry; some accounts require the app key.
-    const apiKey=process.env.GUPSHUP_API_KEY?.trim();
-    if([401,403].includes(response.status)&&apiKey&&/(^|\.)gupshup\.io$/i.test(url.hostname))response=await download(url,{apikey:apiKey});
-    if(!response.ok)throw unavailable;
-    return {buffer:await readCapped(response),mimeType:cleanMime(response.headers.get('content-type'))};
+/** One download attempt as shown in the diagnostics: host, how it authenticated, what came back. Never the full link or key. */
+export type MediaAttempt={host:string;auth:'none'|'apikey'|'authorization'|'bearer';status:number|'network'|'refused';note?:string};
+class MediaDownloadError extends HttpError{constructor(status:number,message:string,public attempts:MediaAttempt[]){super(status,message,{attempts});}}
+const isGupshup=(url:URL)=>/(^|\.)gupshup\.io$/i.test(url.hostname);
+
+/** Downloads one link; a JSON answer that only points at the file (some Gupshup links do) is followed once. */
+async function tryDownload(url:URL,headers:Record<string,string>,auth:MediaAttempt['auth'],attempts:MediaAttempt[],followJson=true):Promise<{buffer:Buffer;mimeType:string}|null>{
+  let response:Response;
+  try{response=await download(url,headers);}
+  catch(error){attempts.push({host:url.hostname,auth,status:error instanceof HttpError&&error.status===502&&/不安全|重定向/.test(error.message)?'refused':'network',note:error instanceof Error?error.message:undefined});return null;}
+  attempts.push({host:url.hostname,auth,status:response.status});
+  if(!response.ok)return null;
+  const mimeType=cleanMime(response.headers.get('content-type'));
+  if(followJson&&mimeType.startsWith('application/json')){
+    const body=record(await response.json().catch(()=>null));
+    const next=text(body?.url)||text(body?.link)||text(body?.downloadUrl)||text(record(body?.media)?.url);
+    const target=next?trustedUrl(next):null;
+    if(!target){attempts[attempts.length-1].note='返回的是数据而不是文件';return null;}
+    return tryDownload(target,headers,auth,attempts,false);
   }
-  if(message.source!=='cloud_api'||!ref.mediaId||!/^[\w-]{1,128}$/.test(ref.mediaId))throw unavailable;
-  const token=await cloudAccessToken();if(!token)throw unavailable;
-  const meta=await fetch(`https://graph.facebook.com/${graphVersion()}/${ref.mediaId}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:AbortSignal.timeout(20_000)})
-    .catch(()=>{throw new HttpError(502,'暂时无法连接 WhatsApp 媒体服务器，请稍后重试');});
-  const body=await meta.json().catch(()=>({})) as {url?:string;mime_type?:string};
-  const url=body.url?trustedUrl(body.url):null;if(!meta.ok||!url)throw unavailable;
-  const response=await download(url,{Authorization:`Bearer ${token}`});
-  if(!response.ok)throw unavailable;
-  return {buffer:await readCapped(response),mimeType:cleanMime(body.mime_type)||cleanMime(response.headers.get('content-type'))};
+  return {buffer:await readCapped(response),mimeType};
+}
+
+async function fetchProviderMedia(message:MediaMessage,ref:NonNullable<ReturnType<typeof inboundMediaRef>>){
+  const attempts:MediaAttempt[]=[];
+  const fail=(reason='媒体文件已过期或无法从 WhatsApp 下载，请在手机 WhatsApp 中查看')=>new MediaDownloadError(404,reason,attempts);
+  const apiKey=process.env.GUPSHUP_API_KEY?.trim();
+  // Gupshup links are usually public until urlExpiry; some apps want the app key, as a header named either way.
+  const gupshupAuth=(url:URL):[Record<string,string>,MediaAttempt['auth']][]=>[[{},'none'],
+    ...(apiKey&&isGupshup(url)?[[{apikey:apiKey},'apikey'],[{Authorization:apiKey},'authorization']] as [Record<string,string>,MediaAttempt['auth']][]:[])];
+  if(ref.url){
+    const url=trustedUrl(ref.url);
+    if(!url){attempts.push({host:(()=>{try{return new URL(ref.url!).hostname;}catch{return '无效链接';}})(),auth:'none',status:'refused'});throw new MediaDownloadError(400,'媒体文件不在 WhatsApp 服务商域名下，已拒绝下载',attempts);}
+    for(const [headers,auth] of gupshupAuth(url)){
+      const file=await tryDownload(url,headers,auth,attempts);
+      if(file)return file;
+      if(attempts.at(-1)?.status==='refused')break;
+    }
+  }
+  if(message.source==='gupshup'&&ref.mediaId&&/^[\w.-]{1,191}$/.test(ref.mediaId)&&apiKey){
+    // Only a media id (no link): Gupshup's media download for the app, by app name and by app id.
+    const appName=process.env.GUPSHUP_APP_NAME?.trim(),appId=process.env.GUPSHUP_APP_ID?.trim();
+    const links=[...(appName?[`https://api.gupshup.io/sm/api/wamedia/${encodeURIComponent(appName)}/${encodeURIComponent(ref.mediaId)}`]:[]),
+      ...(appId?[`https://filemanager.gupshup.io/wa/${encodeURIComponent(appId)}/wa/media/${encodeURIComponent(ref.mediaId)}?download=true`]:[])];
+    for(const link of links)for(const [headers,auth] of gupshupAuth(new URL(link)).slice(1)){
+      const file=await tryDownload(new URL(link),headers,auth,attempts);
+      if(file)return file;
+    }
+  }
+  if(message.source==='cloud_api'&&ref.mediaId&&/^[\w-]{1,128}$/.test(ref.mediaId)){
+    const token=await cloudAccessToken();if(!token)throw fail('Cloud API 未连接，无法下载这条消息的文件');
+    const meta=await fetch(`https://graph.facebook.com/${graphVersion()}/${ref.mediaId}`,{headers:{Authorization:`Bearer ${token}`},cache:'no-store',signal:AbortSignal.timeout(20_000)}).catch(()=>null);
+    attempts.push({host:'graph.facebook.com',auth:'bearer',status:meta?.status??'network'});
+    const body=(meta?await meta.json().catch(()=>({})):{}) as {url?:string;mime_type?:string};
+    const url=meta?.ok&&body.url?trustedUrl(body.url):null;
+    const file=url?await tryDownload(url,{Authorization:`Bearer ${token}`},'bearer',attempts):null;
+    if(file)return {buffer:file.buffer,mimeType:cleanMime(body.mime_type)||file.mimeType};
+  }
+  if(!attempts.length)throw fail('这条消息没有可下载的文件链接');
+  const statuses=attempts.map(a=>a.status);
+  if(statuses.includes('refused'))throw new MediaDownloadError(502,'媒体文件地址不安全，已拒绝下载',attempts);
+  throw fail(statuses.every(s=>s==='network')?'暂时无法连接 WhatsApp 媒体服务器，请稍后重试'
+    :statuses.some(s=>s===401||s===403)?'WhatsApp 媒体服务器拒绝下载（需要授权或链接已过期），请在手机 WhatsApp 中查看'
+    :statuses.some(s=>s===404||s===410)?'媒体文件已过期，请在手机 WhatsApp 中查看'
+    :'媒体文件无法从 WhatsApp 下载，请在手机 WhatsApp 中查看');
+}
+
+/** Failed downloads are kept as jobs so the WhatsApp settings page can say which step broke. */
+async function recordMediaFailure(messageId:string,error:unknown){
+  const attempts=error instanceof MediaDownloadError?error.attempts:[];
+  await db.syncJob.create({data:{provider:'GUPSHUP',jobType:'MEDIA_DOWNLOAD',status:'FAILED',completedAt:new Date(),failed:1,
+    error:(error instanceof HttpError?error.message:'保存文件失败').slice(0,500),detail:{messageId,attempts}}}).catch(()=>{});
 }
 
 /** Copies a received photo, video, voice note or document into storage; returns the asset id (idempotent). */
@@ -131,8 +183,10 @@ export async function archiveInboundMedia(messageId:string){
   if(archived(message.mediaUrl))return message.mediaUrl!.slice('/api/whatsapp/media/'.length);
   const ref=inboundMediaRef(message);
   if(!ref)throw new HttpError(404,'这条消息没有可下载的文件');
-  const file=await fetchProviderMedia(message,ref);
-  if(!file.buffer.length)throw new HttpError(404,'媒体文件为空，请在手机 WhatsApp 中查看');
+  let file:Awaited<ReturnType<typeof fetchProviderMedia>>;
+  try{file=await fetchProviderMedia(message,ref);}
+  catch(error){await recordMediaFailure(message.id,error);throw error;}
+  if(!file.buffer.length){await recordMediaFailure(message.id,new HttpError(404,'媒体文件为空'));throw new HttpError(404,'媒体文件为空，请在手机 WhatsApp 中查看');}
   const mimeType=ref.mimeType||file.mimeType||'application/octet-stream',bare=mimeType.split(';')[0];
   const fileName=ref.fileName||`${message.messageType.toLowerCase()}-${message.id}.${extensions[bare]||'bin'}`;
   const asset=await storeMedia({customerId:message.customerId,createdBy:'SYSTEM',fileName,mimeType,buffer:file.buffer});
