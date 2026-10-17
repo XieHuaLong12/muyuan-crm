@@ -214,8 +214,19 @@ audio.bos-chat-media{width:280px;max-width:100%;height:40px}
 .bos-chat-ai .bos-chat-ai-grade{font-size:12px;color:#11603e}
 .bos-chat-ai .bos-chat-link{display:inline-flex;align-items:center;gap:4px;border:0;background:transparent;cursor:pointer}
 
-/* 全屏聊天：聊天铺满窗口，会话列表和工作台框架让开；Esc 或再点按钮退出。新线索提醒（z-index 80/90）仍在最上层。 */
-.bos-chat.is-fullscreen{position:fixed;inset:0;z-index:70;height:100dvh;min-height:0;border:0;border-radius:0;box-shadow:none;grid-template-columns:minmax(0,1fr) 300px}
-.bos-chat.is-fullscreen.is-profile-closed{grid-template-columns:minmax(0,1fr)}
-.bos-chat.is-fullscreen .bos-chat-list{display:none}
-@media(max-width:1400px){.bos-chat.is-fullscreen,.bos-chat.is-fullscreen.is-profile-closed{grid-template-columns:minmax(0,1fr)}}
+/* 全屏聊天：整个消息中心（会话列表、聊天、客户资料）铺满窗口，工作台框架让开；Esc 或再点按钮退出。新线索提醒（z-index 80/90）仍在最上层。 */
+.bos-chat.is-fullscreen{position:fixed;inset:0;z-index:70;height:100dvh;min-height:0;border:0;border-radius:0;box-shadow:none}
+
+/* 会话列表收起：只留一列头像，点头像切换会话；手机宽度不收起 */
+.bos-chat.is-list-collapsed{grid-template-columns:64px minmax(0,1fr) 300px}
+.bos-chat.is-list-collapsed.is-profile-closed{grid-template-columns:64px minmax(0,1fr)}
+.bos-chat-list.is-collapsed{align-items:center;gap:8px;padding:16px 0 12px}
+.bos-chat-rail{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;margin-top:6px;padding-top:10px;border-top:1px solid #f1f3ef;overflow:auto;flex:1;min-height:0}
+.bos-chat-rail-item{position:relative;display:grid;place-items:center;width:52px;height:52px;flex:none;border:0;border-radius:14px;background:transparent;padding:0;transition:background .16s}
+.bos-chat-rail-item:hover{background:#f6f8f4}
+.bos-chat-rail-item[aria-current=true]{background:#edf4ed;box-shadow:inset 3px 0 #174b3b}
+.bos-chat-rail-count{position:absolute;top:2px;right:2px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:999px;background:#174b3b;color:#fff;font-size:10px;line-height:18px;text-align:center;font-weight:600}
+.bos-chat-rail-dot{position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:#a44b36;box-shadow:0 0 0 2px #fff}
+@media(max-width:1400px){
+  .bos-chat.is-list-collapsed,.bos-chat.is-list-collapsed.is-profile-closed{grid-template-columns:64px minmax(0,1fr)}
+}
