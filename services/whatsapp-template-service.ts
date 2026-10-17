@@ -47,11 +47,70 @@ export async function approvedTemplates(force = false): Promise<ApprovedTemplate
   return templates;
 }
 
+/**
+ * First-touch templates by lead source, best first: the v2 greeting, then the first version already approved in
+ * Gupshup. Names are matched with any language suffix (lvanju_hi_fb_en, lvanju_hi_fb_fr…).
+ */
+export const FIRST_TOUCH_TEMPLATES: Record<string, string[]> = {
+  FACEBOOK: ['lvanju_hi_fb', 'lvanju_first_fb'],
+  INSTAGRAM: ['lvanju_hi_ig', 'lvanju_first_ig'],
+};
+/** Words in the ad name or form answers that name a product line; electric is checked before mattress. */
+const PRODUCT_LINE_WORDS: [string, RegExp][] = [
+  ['smart electric mattresses', /electric|smart[\s-]*(bed|mattress)|adjustable[\s-]*(bed|base|mattress)|massage|电动|智能床/i],
+  ['vacuum-packed mattresses', /mattress|matelas|colch[oó]n|床垫|مرتبة|فرشة/i],
+  ['compressed sofas', /sofa|couch|canap[eé]|sof[aá]|沙发|كنب/i],
+];
+const FIRST_TOUCH_LABELS = ['客户名', '负责销售', '产品线'];
+
+export type TemplateSuggestion = { templateId: string; params: string[]; labels: string[]; productVariable: number | null };
+type FirstTouchCustomer = { name: string; source: string; sourceDetail: string; productInterest: string; productModel: string; language: string; owner: { name: string } };
+
+/** "MUHAMMAD ANAS" → "Muhammad"; '' when the name is a number or empty, so the salesperson types it. */
+export function firstNameOf(name: string) {
+  const word = name.trim().split(/\s+/)[0] ?? '';
+  if (!/\p{L}/u.test(word)) return '';
+  const cased = word.toLowerCase() !== word.toUpperCase();
+  return cased && (word === word.toUpperCase() || word === word.toLowerCase()) ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : word;
+}
+
+/** The product line an ad name or form answer names, in the English the templates use; '' when it names none. */
+export function productLineOf(...texts: string[]) {
+  const text = texts.join(' ').replace(/_+/g, ' ');
+  return PRODUCT_LINE_WORDS.find(([, words]) => words.test(text))?.[0] ?? '';
+}
+
+/**
+ * The template a never-contacted Facebook or Instagram lead should get first, with its variables filled from the
+ * customer record: {{1}} first name, {{2}} the owner, {{3}} the product line. Only the English templates get a product
+ * line filled in (the line names are English); anything the record does not say is left for the salesperson.
+ */
+export function firstTouchSuggestion(customer: FirstTouchCustomer, templates: ApprovedTemplate[]): TemplateSuggestion | null {
+  const prefixes = FIRST_TOUCH_TEMPLATES[customer.source];
+  if (!prefixes) return null;
+  const language = /^[a-z]{2}/i.test(customer.language.trim()) ? customer.language.trim().slice(0, 2).toLowerCase() : 'en';
+  const languageRank = (template: ApprovedTemplate) => template.language.toLowerCase().startsWith(language) ? 0 : template.language.toLowerCase().startsWith('en') ? 1 : 2;
+  for (const prefix of prefixes) {
+    const matches = templates.filter(t => t.name === prefix || t.name.startsWith(`${prefix}_`)).sort((a, b) => languageRank(a) - languageRank(b));
+    const template = matches[0];
+    if (!template) continue;
+    if (template.variables !== FIRST_TOUCH_LABELS.length) return { templateId: template.id, params: Array(template.variables).fill(''), labels: [], productVariable: null };
+    const english = template.language.toLowerCase().startsWith('en');
+    return { templateId: template.id, labels: FIRST_TOUCH_LABELS, productVariable: 3,
+      params: [firstNameOf(customer.name), customer.owner.name.trim(), english ? productLineOf(customer.sourceDetail, customer.productInterest, customer.productModel) : ''] };
+  }
+  return null;
+}
+
 export async function listTemplates(user: Actor, input: unknown) {
   const { customerId, refresh } = z.object({ customerId: z.string().trim().min(1).max(191), refresh: z.enum(['1']).optional() }).parse(input);
   await accessible(customerId, user);
-  if (!templatesConfigured()) return { status: 'NOT_CONNECTED' as const, templates: [] };
-  return { status: 'CONNECTED' as const, templates: await approvedTemplates(!!refresh) };
+  if (!templatesConfigured()) return { status: 'NOT_CONNECTED' as const, templates: [], suggestion: null };
+  const [templates, customer] = await Promise.all([approvedTemplates(!!refresh), db.customer.findUniqueOrThrow({ where: { id: customerId },
+    select: { name: true, source: true, sourceDetail: true, productInterest: true, productModel: true, language: true, firstContactAt: true, lastOutboundAt: true, owner: { select: { name: true } } } })]);
+  // Only a customer nobody has written to yet gets a greeting picked and filled in.
+  const suggestion = !customer.firstContactAt && !customer.lastOutboundAt ? firstTouchSuggestion(customer, templates) : null;
+  return { status: 'CONNECTED' as const, templates, suggestion };
 }
 
 export const templateSendSchema = z.object({ customerId: z.string().trim().min(1).max(191), templateId: z.string().trim().min(1).max(100),

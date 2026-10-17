@@ -118,7 +118,7 @@ tests/                  核心指标与边界单元测试
 | 管理员 | 团队 | 销售业绩与账号 `/team` · 目标 `/targets` · 沟通监督 `/communication` |
 | 管理员 | 设置 | 公司设置 `/settings` · 集成与接入 `/settings/integrations`（表单询盘、Meta、WhatsApp 与排查工具） |
 | 销售 | 今日工作 | 今日跟进 `/sales`（待首联、到期跟进与到期待办，按截止时间排序）· 全部待办 `/tasks` |
-| 销售 | 消息 | WhatsApp 消息中心 `/messages`（自己负责的客户） |
+| 销售 | 消息 | WhatsApp 消息中心 `/messages`（自己负责的客户；「待首联」列出分配后还没联系的客户，点开即发首条模板） |
 | 销售 | 我的客户 | 客户列表与档案 `/customers` · 销售看板 `/crm` |
 | 销售 | 产品与报价 | 产品库 `/products` · 报价单 `/products/quotes` · 运费库 `/products/freight`（只读） |
 | 销售 | 我的订单 / 我的业绩 | `/orders` · `/sales/performance` |
