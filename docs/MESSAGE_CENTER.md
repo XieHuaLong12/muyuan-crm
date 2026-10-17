@@ -44,7 +44,7 @@
 | `POST /api/inbox/translate {messageId}` | 按需把一条客户消息译成中文（使用线索导入里配置的翻译服务；没有配置时用 DeepSeek） | 同上 |
 | `POST /api/inbox/translate-out {customerId,text}` | 把销售写的中文译成客户的语言，结果放回输入框，不发送（需要 DeepSeek） | 同上 |
 | `GET/POST /api/inbox/link` | 未关联号码的候选客户 / 关联 | 管理员 |
-| `GET /api/whatsapp/templates?customerId=` · `POST {customerId,templateId,params,requestId}` | 已审核文字模板清单（还没联系过的广告线索另带 `suggestion`：推荐的首条模板和已填好的变量）/ 发送模板 | 客户负责人或管理员 |
+| `GET /api/whatsapp/templates?customerId=` · `POST {customerId,templateId,params,requestId}` | 已审核文字模板清单，`fills` 是每个模板按客户资料填好的变量（值、来源、为什么空着）；还没联系过的广告线索另带 `suggestion`（推荐的首条模板）/ 发送模板 | 客户负责人或管理员 |
 | `GET /api/whatsapp/messages/[id]/media` | 打开一条客户消息里的文件；未保存过就先从服务商下载 | 客户负责人或管理员 |
 | `POST /api/whatsapp/send`、`GET /api/whatsapp/messages`、`POST /api/whatsapp/media`、`POST /api/whatsapp/ai-reply` | 原有接口，由“仅管理员”改为按客户负责人限制 | 客户负责人或管理员 |
 
@@ -63,6 +63,21 @@
 从待首联点开客户，如果只能发模板，模板面板自动展开并选好首条模板：来源 Facebook 用 `lvanju_hi_fb_*`、Instagram 用 `lvanju_hi_ig_*`，还没审核通过时退回 `lvanju_first_fb_*` / `lvanju_first_ig_*`，按客户语言优先（`FIRST_TOUCH_TEMPLATES`）。三个变量按客户资料填好：`{{1}}` 姓名的第一个词，`{{2}}` 负责人，`{{3}}` 按广告名和表单答案判断的产品线（压缩沙发 / 真空压缩床垫 / 智能电动床垫，见 `FIRST_TOUCH_PRODUCT_LINES`）。判断不出产品线时留空，销售点下面的产品线按钮选一个；有空变量时不能发送。只有英文模板会自动填产品线。
 
 模板仍由销售核对后点「发送模板」，系统不会自动发出（业务红线不变）。发出后记为首次联系，客户离开待首联，列表自动打开下一位。
+
+### 模板变量自动填写（2026-10-17）
+
+Gupshup 的变量只有编号，系统看变量前后的文字判断它是什么（`variableSources`），再从客户资料取值（`fillVariables`），所有模板、所有客户都适用：
+
+| 模板里写的 | 认作 | 取自 |
+| --- | --- | --- |
+| `Hi / Hello / Dear / Bonjour ___` | 客户名 | 姓名的第一个词（全大写或全小写时改成首字母大写） |
+| `it's ___ from`、`___ here`、`c'est ___` | 负责销售 | 负责人 |
+| `ad for / about ___`、`publicité … pour ___`、`quotation for ___` | 产品线 | 广告名和表单答案（只给英文模板填） |
+| `quotation ___` | 报价单号 | 最近一份已发出的报价单（草稿不算） |
+| `your order ___` | 订单号 | 最近一笔未取消的订单 |
+| `delivery date is ___`、`arrive on ___` | 预计送达日期 | 该订单的预计送达，按业务时区写成英文日期（November 20, 2026） |
+
+每个变量标出来源：「自动 · 客户名」、资料里没有时说明缺什么（比如还没有订单）、认不出时显示「未识别」，销售改过的显示「已手动修改」并可「恢复自动」。模板列表显示每个模板是否已填好；打开模板面板时，右侧客户资料标出被用到的字段。有空变量仍不能发送，仍由销售点击发送。认不出的变量由销售填写；以后如需让管理员给变量指定来源，需要新增一张表（未做）。
 
 ### 全屏聊天（2026-10-17）
 

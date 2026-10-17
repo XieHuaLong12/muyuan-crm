@@ -77,7 +77,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
   const [original, setOriginal] = useState<{ text: string; language: string }>();
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [broken, setBroken] = useState<Set<string>>(new Set());
-  const [templates, setTemplates] = useState<TemplateList & { open: boolean; chosen: string; params: string[]; error: string }>({ status: 'CONNECTED', templates: [], suggestion: null, open: false, chosen: '', params: [], error: '' });
+  const [templates, setTemplates] = useState<TemplateList & { open: boolean; chosen: string; params: string[]; error: string }>({ status: 'CONNECTED', templates: [], suggestion: null, fills: {}, open: false, chosen: '', params: [], error: '' });
   const log = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null), file = useRef<HTMLInputElement>(null), stickToBottom = useRef(true), lastSeen = useRef(''), autoOpened = useRef(false);
 
   const load = useCallback(async (quiet = false) => {
@@ -176,8 +176,8 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
     catch (e) { setTranslations(t => ({ ...t, [id]: (e as Error).message })); }
   }
 
-  /** The suggested greeting comes filled in from the customer record; any other template starts empty. */
-  const paramsFor = (list: TemplateList, id: string) => list.suggestion?.templateId === id ? [...list.suggestion.params] : Array(list.templates.find(t => t.id === id)?.variables ?? 0).fill('');
+  /** Every template comes filled in from the customer record; what the record does not say stays empty. */
+  const paramsFor = (list: TemplateList, id: string) => list.fills[id]?.map(f => f.value) ?? Array(list.templates.find(t => t.id === id)?.variables ?? 0).fill('');
   const openTemplates = useCallback(async () => {
     setTemplates(t => ({ ...t, open: true, error: '' }));
     try {
@@ -209,8 +209,16 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
   const win = thread?.window, left = win?.status === 'OPEN' ? windowLeft(win.expiresAt) : null;
   const canChat = !!thread?.sending.configured && !thread.sending.optedOut && win?.status === 'OPEN';
   const chosenTemplate = templates.templates.find(t => t.id === templates.chosen);
-  const suggested = !!chosenTemplate && templates.suggestion?.templateId === chosenTemplate.id ? templates.suggestion : null;
-  const preview = chosenTemplate ? chosenTemplate.body.replace(/\{\{\s*(\d{1,2})\s*\}\}/g, (whole, n) => templates.params[Number(n) - 1]?.trim() || whole) : '';
+  const fills = chosenTemplate ? templates.fills[chosenTemplate.id] ?? [] : [];
+  // Filled values are marked in the preview; an empty variable shows its {{n}} so it is easy to spot.
+  const preview = chosenTemplate ? chosenTemplate.body.split(/(\{\{\s*\d{1,2}\s*\}\})/).map(part => {
+    const n = /^\{\{\s*(\d{1,2})\s*\}\}$/.exec(part)?.[1];
+    return n ? { text: templates.params[Number(n) - 1]?.trim() || part, variable: true, empty: !templates.params[Number(n) - 1]?.trim() } : { text: part, variable: false, empty: false };
+  }) : [];
+  const emptyIn = (id: string) => (id === templates.chosen ? templates.params : paramsFor(templates, id)).filter(p => !p.trim()).length;
+  // Which profile facts the chosen template uses, shown next to them while the template panel is open.
+  const usedBy = templates.open ? fills.reduce<Record<string, string[]>>((all, fill, i) => fill.source ? { ...all, [fill.source]: [...(all[fill.source] ?? []), `{{${i + 1}}}`] } : all, {}) : {};
+  const used = (source: string) => usedBy[source] ? <span className="bos-chat-used">{usedBy[source].join(' ')}</span> : null;
   const stageIndex = customer ? pipeline.indexOf(customer.stage as (typeof pipeline)[number]) : -1;
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
@@ -281,17 +289,31 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
             : !templates.templates.length && !templates.error ? <p className="bos-chat-hint">没有已审核通过的文字模板。请先在 Gupshup 后台创建并等待审核。</p>
             : <div className="bos-chat-templates">
               <div className="bos-chat-template-list" role="radiogroup" aria-label="已审核模板">
-                {templates.templates.map(t => <label key={t.id}><span><input type="radio" name="template" checked={templates.chosen === t.id} onChange={() => setTemplates(s => ({ ...s, chosen: t.id, params: paramsFor(s, t.id) }))} />{t.name}</span><small>{[t.language, t.category, templates.suggestion?.templateId === t.id ? '推荐' : ''].filter(Boolean).join(' · ')}</small></label>)}
+                {templates.templates.map(t => <label key={t.id}><span><input type="radio" name="template" checked={templates.chosen === t.id} onChange={() => setTemplates(s => ({ ...s, chosen: t.id, params: paramsFor(s, t.id) }))} />{t.name}</span><small>{[t.language, t.category, templates.suggestion?.templateId === t.id ? '推荐' : ''].filter(Boolean).join(' · ')}</small>
+                  <small className={`bos-chat-template-status${emptyIn(t.id) ? ' is-warning' : ''}`}>{emptyIn(t.id) ? `还有 ${emptyIn(t.id)} 个变量要填` : '变量已全部填好'}</small></label>)}
               </div>
               {chosenTemplate && <div className="bos-chat-template-preview">
-                <small>{suggested ? '预览 · 已按客户资料填好，发送前请核对' : '预览 · 发送前请核对'}</small>
-                <p>{preview}</p>
-                {templates.params.map((value, i) => <Fragment key={i}>
-                  <label>变量 {`{{${i + 1}}}`}{suggested?.labels[i] ? ` · ${suggested.labels[i]}` : ''}<input value={value} onChange={e => setTemplates(s => ({ ...s, params: s.params.map((p, j) => j === i ? e.target.value : p) }))} /></label>
-                  {suggested?.productVariable === i + 1 && <div className="bos-chat-template-picks" role="group" aria-label="选择产品线">
-                    {FIRST_TOUCH_PRODUCT_LINES.map(line => <button key={line.value} type="button" aria-pressed={value === line.value} onClick={() => setTemplates(s => ({ ...s, params: s.params.map((p, j) => j === i ? line.value : p) }))}>{line.label}</button>)}
-                  </div>}
-                </Fragment>)}
+                <small>预览 · 已按客户资料填好，发送前请核对</small>
+                <p>{preview.map((part, i) => part.variable ? <span key={i} className={`bos-chat-fill${part.empty ? ' is-empty' : ''}`}>{part.text}</span> : <Fragment key={i}>{part.text}</Fragment>)}</p>
+                {templates.params.map((value, i) => {
+                  const fill = fills[i];
+                  const set = (next: string) => setTemplates(s => ({ ...s, params: s.params.map((p, j) => j === i ? next : p) }));
+                  // auto: the record's value; changed: the salesperson typed over it; missing / unknown: nothing to fill from.
+                  const state = fill?.value ? (value === fill.value ? 'auto' : 'changed') : value.trim() ? 'typed' : fill?.source ? 'missing' : 'unknown';
+                  const chip = { auto: `自动 · ${fill?.label}`, changed: '已手动修改', typed: '已手动填写', missing: `${fill?.label} · 资料里没有`, unknown: '未识别' }[state];
+                  return <div key={i} className="bos-chat-var">
+                    <div className="bos-chat-var-head">
+                      <span>变量 {`{{${i + 1}}}`}</span><span className={`bos-chat-var-chip is-${state}`}>{chip}</span>
+                      {fill?.context && <small>模板里是「{fill.context}」</small>}
+                      {state === 'changed' && <button type="button" onClick={() => set(fill!.value)}>恢复自动：{fill!.value}</button>}
+                    </div>
+                    <label><span className="bos-chat-sr">变量 {`{{${i + 1}}}`} 的值</span><input value={value} onChange={e => set(e.target.value)} aria-invalid={!value.trim()} /></label>
+                    {fill?.note && state !== 'changed' && state !== 'typed' && <p className={`bos-chat-var-note${state === 'auto' ? '' : ' is-warning'}`}>{fill.note}</p>}
+                    {fill?.source === 'productLine' && <div className="bos-chat-template-picks" role="group" aria-label="选择产品线">
+                      {FIRST_TOUCH_PRODUCT_LINES.map(line => <button key={line.value} type="button" aria-pressed={value === line.value} onClick={() => set(line.value)}>{line.label}</button>)}
+                    </div>}
+                  </div>;
+                })}
                 <div className="bos-chat-actions"><button type="button" className="is-primary" onClick={sendTemplate} disabled={busy === 'template' || templates.params.some(p => !p.trim())}>{busy === 'template' ? '发送中…' : '发送模板'}</button><button type="button" onClick={() => setTemplates(s => ({ ...s, open: false }))}>取消</button></div>
               </div>}
             </div>}
@@ -323,18 +345,18 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
       <div className="bos-chat-profile-head"><h2>客户资料</h2><span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><Link href={`/customers/${encodeURIComponent(customerId)}`}>完整档案<ArrowUpRight size={13} /></Link><button type="button" className="bos-chat-icon-button" onClick={onToggleProfile} aria-label="收起客户资料"><X size={16} /></button></span></div>
       {customer && <>
         <div className="bos-chat-person"><span className={`bos-chat-avatar is-large bos-chat-tone-${toneOf(customerId)}`} aria-hidden="true">{initial(customer.name)}</span>
-          <div><strong>{customer.name}</strong><span>{customer.companyName || '公司待补充'}</span><span>{[customer.country, customer.city].filter(Boolean).join(' · ') || '国家待补充'}{customer.language ? ` · ${customer.language}` : ''}</span></div></div>
+          <div><strong>{customer.name}{used('firstName')}</strong><span>{customer.companyName || '公司待补充'}</span><span>{[customer.country, customer.city].filter(Boolean).join(' · ') || '国家待补充'}{customer.language ? ` · ${customer.language}` : ''}</span></div></div>
         <div>
           <div className="bos-chat-section-title"><span>销售阶段</span><strong>{label(stages, customer.stage)}{stageIndex >= 0 ? ` · 第 ${stageIndex + 1} / ${pipeline.length} 步` : ''}</strong></div>
           {stageIndex >= 0 && <div className="bos-chat-progress" role="img" aria-label={`销售进度：${label(stages, customer.stage)}`}>{pipeline.map((stage, i) => <span key={stage} className={i <= stageIndex ? 'is-done' : undefined} />)}</div>}
         </div>
         <dl className="bos-chat-facts">
-          <dt>意向产品</dt><dd>{[customer.productInterest, customer.productModel].filter(Boolean).join(' · ') || '—'}</dd>
+          <dt>意向产品</dt><dd>{[customer.productInterest, customer.productModel].filter(Boolean).join(' · ') || '—'}{used('productLine')}</dd>
           <dt>采购类型</dt><dd>{customer.purchaseType === 'OTHER' ? '—' : label(purchases, customer.purchaseType)}</dd>
           <dt>采购数量</dt><dd>{customer.quantity ? customer.quantity : '—'}</dd>
           <dt>来源</dt><dd>{label(sources, customer.source)}</dd>
           <dt>询盘日期</dt><dd>{customer.inquiryAt ? formatDateTime(customer.inquiryAt, timezone) : '—'}</dd>
-          <dt>负责人</dt><dd>{customer.owner.name}</dd>
+          <dt>负责人</dt><dd>{customer.owner.name}{used('owner')}</dd>
         </dl>
         <div>
           <div className="bos-chat-section-title"><strong style={{ color: '#1c3226' }}>下一步跟进</strong><Link className="bos-chat-link" href={`/customers/${encodeURIComponent(customerId)}`}>去安排</Link></div>

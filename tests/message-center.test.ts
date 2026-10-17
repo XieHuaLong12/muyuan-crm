@@ -214,7 +214,7 @@ test('templates: approved list read from Gupshup, variables required, sent by a 
     const customer = await db.customer.findFirstOrThrow({ where: { whatsappNormalized: phone.slice(1) } });
     try {
       delete process.env.GUPSHUP_APP_ID;
-      assert.deepEqual(await listTemplates(actor, { customerId: customer.id }), { status: 'NOT_CONNECTED', templates: [], suggestion: null });
+      assert.deepEqual(await listTemplates(actor, { customerId: customer.id }), { status: 'NOT_CONNECTED', templates: [], suggestion: null, fills: {} });
       process.env.GUPSHUP_APP_ID = `app-${marker}`;
       const sent: URLSearchParams[] = [];
       t.mock.method(globalThis, 'fetch', async (input: string | URL, init?: RequestInit) => {
