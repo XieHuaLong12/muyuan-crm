@@ -24,7 +24,7 @@ test('form answers decide the fallback grade', () => {
   assert.equal(ruleGrade({ ...base, purchaseType: 'WHOLESALE', quantity: 50, answers: imports }).grade, 'A');
   assert.equal(ruleGrade({ ...base, purchaseType: 'WHOLESALE', quantity: 15, answers: imports }).grade, 'B', 'below the offline minimum order');
   assert.equal(ruleGrade({ ...base, purchaseType: 'IMPORTER', quantity: 12 }).grade, 'B', 'a business buyer without import experience');
-  assert.equal(ruleGrade({ ...base, quantity: 30 }).grade, 'B', 'a large quantity from an unknown buyer');
+  assert.equal(ruleGrade({ ...base, quantity: 30 }).grade, 'C', 'no identity is C, whatever the quantity');
   assert.equal(ruleGrade({ ...base, quantity: 3 }).grade, 'C');
   assert.equal(ruleGrade({ ...base, hasPhone: false }).grade, 'D', 'nobody can be contacted');
   assert.equal(ruleGrade({ ...base, testLead: true, purchaseType: 'WHOLESALE', quantity: 99 }).grade, 'D');

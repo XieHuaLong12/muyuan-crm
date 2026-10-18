@@ -75,18 +75,25 @@ test('a form that words its questions differently still fills the profile and ge
   // Wholesaler, 50–200 pieces, ordering within a month: A, even before the profile was filled (purchase type OTHER).
   assert.deepEqual(grade(mattressForm, { country: '沙特' }), { grade: 'A', reason: '批发商；采购 50–200 件；1 个月内下单；沙特', source: 'RULE' });
   const researching = mattressForm.map(([q, a]): [string, string] => q.startsWith('when_') ? [q, 'just_researching'] : [q, a]);
-  assert.equal(grade(researching).grade, 'A', 'identity and volume make A, whatever the timeline');
+  assert.equal(grade(researching).grade, 'B', 'an identity with volume, but not ordering yet');
+  // Identity first, then volume and timing.
+  assert.equal(grade([['what_type_of_business_are_you?', 'wholesaler'], ['when_do_you_plan_to_order?', 'within_1_month']]).grade, 'A', 'no quantity, ordering within a month');
+  assert.equal(grade([['what_type_of_business_are_you?', 'wholesaler'], ['how_many_pieces?', '5–10_pcs'], ['when_do_you_plan_to_order?', 'within_1_month']]).grade, 'B', 'soon, but a small order');
+  assert.equal(grade([['what_type_of_business_are_you?', 'wholesaler'], ['how_many_pieces?', '50–200_pcs'], ['when_do_you_plan_to_order?', '1–3_months']]).grade, 'A', '1–3 months neither helps nor hurts');
   // Identity first: a business identity alone is B ("B + 身份"); nothing promising and no identity is C.
   assert.deepEqual(grade([['what_type_of_business_are_you?', 'furniture_retailer']], { country: '印度' }), { grade: 'B', reason: '家具零售店；未填写数量；印度', source: 'RULE' });
   assert.equal(grade([['what_type_of_business_are_you?', 'wholesaler'], ['how_many_pieces?', '5–10_pcs']]).grade, 'B', 'a small first order from a wholesaler');
-  assert.equal(grade([['do_you_import_furniture_from_china?', 'yes,_regularly']]).grade, 'B', 'no identity, but already imports');
+  assert.equal(grade([['do_you_import_furniture_from_china?', 'yes,_regularly']]).grade, 'C', 'no identity is C, even if they import');
   assert.equal(grade([['when_do_you_plan_to_order?', 'within_1_month']]).grade, 'C', 'a timeline alone is not an identity');
   assert.equal(grade([['what_type_of_business_are_you?', 'i_am_buying_for_personal_use'], ['how_many_pieces?', '60']]).grade, 'C', 'personal use stays C');
   assert.deepEqual(grade([['what_type_of_business_are_you?', 'i_am_buying_for_personal_use'], ['how_many_pieces_for_your_first_order?', '1–5_pcs']]),
-    { grade: 'C', reason: '个人自用；采购 1–5 件', source: 'RULE' });
+    { grade: 'C', reason: '个人自用；采购 1–5 件', source: 'RULE', personal: true });
+  // Personal use but a full container: not taken at their word, C.
+  assert.deepEqual(grade([['what_type_of_business_are_you?', 'i_am_buying_for_personal_use'], ['how_many_pieces_for_your_first_order?', 'full_container_or_more'], ['when_do_you_plan_to_order?', '1–3_months']], { country: '沙特' }),
+    { grade: 'C', reason: '个人自用；采购 整柜；沙特', source: 'RULE', personal: true });
   assert.deepEqual(grade([['Vous êtes ?', 'Grossiste'], ['Quantité par modèle', '30'], ['Importez-vous des meubles de Chine ?', 'Oui']]),
     { grade: 'A', reason: '批发商；每款 30 件；已从中国进口', source: 'RULE' });
-  assert.equal(grade([['how_many_containers_per_order?', '2']]).grade, 'B', 'two containers from an unknown buyer');
+  assert.equal(grade([['how_many_containers_per_order?', '2']]).grade, 'C', 'no identity is C, whatever the volume');
   assert.equal(grade([['what_type_of_business_are_you?', 'interior_designer_/_project_business'], ['how_many_pieces?', '60'], ['when_will_you_order?', 'immediately']]).grade, 'A');
   assert.equal(grade([['what_type_of_business_are_you?', 'other_business']]).grade, 'C', '其他 with nothing promising');
 });
@@ -110,7 +117,8 @@ test('leads graded by the first rules are read again once: profile filled, grade
     assert.deepEqual([after.leadGrade, after.leadGradeSource, after.leadGradeReason], ['A', 'RULE', '批发商；采购 50–200 件；1 个月内下单；沙特']);
     assert.deepEqual([after.purchaseType, after.quantity, after.purchaseTimeline], ['WHOLESALE', null, 'within 1 month'], 'the profile shows what the form said');
     assert.equal(after.updatedAt.getTime(), longAgo.getTime(), 'a re-grade is not an edit');
-    assert.equal((await db.customer.findUniqueOrThrow({ where: { id: byAi.id } })).leadGrade, 'C', 'AI grades wait for the AI to read them again');
+    assert.deepEqual(await db.customer.findUniqueOrThrow({ where: { id: byAi.id }, select: { leadGrade: true, leadGradeSource: true } }), { leadGrade: 'A', leadGradeSource: 'RULE' },
+      'older AI grades are redone by the rules at once; the AI reads them again later');
     assert.deepEqual(await reviewGradesWithAi(), { reviewed: 0 }, 'nothing without DeepSeek');
     await gradeUngradedLeads();
     assert.equal((await db.customer.findUniqueOrThrow({ where: { id: old.id } })).leadGradedAt?.getTime(), after.leadGradedAt?.getTime(), 'only once');
@@ -137,7 +145,8 @@ test('DeepSeek reads every rule-graded lead: it may raise a grade, never push a 
   globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
     if (aiDown) return Response.json({ error: { message: 'overloaded' } }, { status: 503 });
     const body = String(init?.body);
-    const answer = body.includes('wholesaler') ? { grade: 'C', reasons: ['批发商', '信息太少'] } : body.includes('three shops') ? { grade: 'A', reasons: ['家具店老板', '三家门店'] } : { grade: 'C', reasons: ['身份不明'] };
+    const answer = body.includes('personal') ? { grade: 'B', reasons: ['自用但要整柜'] } : body.includes('every month') ? { grade: 'A', reasons: ['长期采购'] }
+      : body.includes('wholesaler') ? { grade: 'C', reasons: ['批发商', '信息太少'] } : body.includes('three shops') ? { grade: 'A', reasons: ['家具店老板', '三家门店'] } : { grade: 'C', reasons: ['身份不明'] };
     return Response.json({ choices: [{ message: { content: JSON.stringify(answer) } }] });
   }) as typeof fetch;
   process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
@@ -146,6 +155,8 @@ test('DeepSeek reads every rule-graded lead: it may raise a grade, never push a 
     const wholesaler = await lead('Wholesaler', [['what_type_of_business_are_you?', 'wholesaler']], 'B', 'RULE');
     const shops = await lead('Shops', [['tell_us_about_your_business', 'I own three shops in Riyadh']], 'C', 'RULE');
     const oldAi = await lead('OldAI', mattressForm, 'C', 'AI');
+    const personal = await lead('Personal', [['what_type_of_business_are_you?', 'i_am_buying_for_personal_use'], ['how_many_pieces_for_your_first_order?', 'full_container_or_more']], 'B', 'AI');
+    const vague = await lead('Vague', [['anything_else?', 'We buy every month for our clients in Jeddah']], 'C', 'RULE');
     await reviewGradesWithAi();
     const read = async (id: string) => db.customer.findUniqueOrThrow({ where: { id }, select: { leadGrade: true, leadGradeSource: true, leadGradeReason: true } });
     const w = await read(wholesaler);
@@ -153,6 +164,8 @@ test('DeepSeek reads every rule-graded lead: it may raise a grade, never push a 
     assert.match(w.leadGradeReason, /^批发商；未填写数量（AI 判 C：批发商；信息太少；按采购身份保留 B）$/);
     assert.deepEqual(await read(shops), { leadGrade: 'A', leadGradeSource: 'AI', leadGradeReason: '家具店老板；三家门店' }, 'the AI raises what the rules missed');
     assert.equal((await read(oldAi)).leadGrade, 'A', 'old AI grades are made again under the current rules');
+    assert.deepEqual(await read(personal), { leadGrade: 'C', leadGradeSource: 'AI', leadGradeReason: '个人自用；采购 整柜（AI 判 B：自用但要整柜；个人自用按 C）' }, '个人自用 stays C');
+    assert.deepEqual(await read(vague), { leadGrade: 'B', leadGradeSource: 'AI', leadGradeReason: '身份不明；未填写数量（AI 判 A：长期采购；AI 最多升一级，定为 B）' }, 'one grade up at most');
     const gradedAt = async (id: string) => (await db.customer.findUniqueOrThrow({ where: { id }, select: { leadGradedAt: true } })).leadGradedAt?.getTime();
     const firstRead = await Promise.all([wholesaler, shops, oldAi].map(gradedAt));
     await reviewGradesWithAi();

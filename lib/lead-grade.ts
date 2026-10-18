@@ -36,7 +36,8 @@ export type GradeInput = {
   hasEmail: boolean;
   testLead: boolean;
 };
-export type GradeResult = { grade: LeadGrade; reason: string; source: 'AI' | 'RULE' };
+/** personal: the buyer said they buy for themselves, so the grade stays C whatever the AI reads (lead-grade-service). */
+export type GradeResult = { grade: LeadGrade; reason: string; source: 'AI' | 'RULE'; personal?: boolean };
 
 // Contact details stay out of the grading input (and out of the AI prompt); only whether they exist matters.
 const CONTACT_QUESTION = /e-?mail|phone|mobile|whats ?app|telephone|\btel\b|full ?name|first ?name|last ?name|^name$|your name|姓名|邮箱|电话|手机/i;
@@ -79,16 +80,18 @@ export const isBusinessBuyer = (purchaseType: string) => BUSINESS_BUYERS.has(pur
 export const buyerLabel = (purchaseType: string) => BUYER_LABELS[purchaseType] ?? '';
 
 /**
- * The rule grade. Identity first, then volume, so no buyer with a business identity is lost:
- *   A: a business identity and volume (20+ pieces, a range from 20, or a container);
- *   B: a business identity ("B + 身份"); after them, leads without a stated identity that still show promise
- *      (20+ pieces, or they already import from China);
- *   C: buying for themselves, "other" and unknown buyers with nothing promising; D: test leads and leads nobody can
- *      contact. DeepSeek, when configured, may raise any grade and lower only C (lead-grade-service).
- * Reasons start with what decided the grade: the identity, or 身份不明.
+ * The rule grade. The purchase identity is the gate; only buyers who pass it are judged by volume and timing:
+ *   C: no business identity — buying for themselves (even "a full container": a home buyer asking for one is not taken
+ *      at their word), "other", or no stated identity;
+ *   A: a business identity with volume (20+ pieces, a range from 20, or a container) and no "not ordering yet", or with
+ *      no quantity stated but ordering within a month;
+ *   B: every other business buyer ("B + 身份"): a small quantity, no quantity and no near date, or not ordering yet;
+ *   D: test leads and leads nobody can contact.
+ * DeepSeek may raise a grade by one at most and never lifts 个人自用 (lead-grade-service). Reasons start with the identity.
  */
 export function ruleGrade(input: GradeInput): GradeResult {
-  const result = (grade: LeadGrade, reasons: string[]): GradeResult => ({ grade, reason: reasons.filter(Boolean).join('；').slice(0, 500), source: 'RULE' });
+  const result = (grade: LeadGrade, reasons: string[], personal = false): GradeResult =>
+    ({ grade, reason: reasons.filter(Boolean).join('；').slice(0, 500), source: 'RULE', ...(personal ? { personal } : {}) });
   if (input.testLead) return result('D', ['Meta 测试线索']);
   if (!input.hasPhone && !input.hasEmail) return result('D', ['没有可联系的号码或邮箱']);
   const said = readAnswers(input.answers);
@@ -105,7 +108,8 @@ export function ruleGrade(input: GradeInput): GradeResult {
     soon === true ? '1 个月内下单' : soon === false ? '暂不急着下单' : '',
     input.country,
   ];
-  if (business) return result(volume ? 'A' : 'B', facts);
-  if (!said.personal && (volume || imports === true)) return result('B', facts);
-  return result('C', facts);
+  if (!business) return result('C', facts, said.personal);
+  const notYet = soon === false;
+  const small = !!quantity && !volume;
+  return result(!notYet && (volume || (soon === true && !small)) ? 'A' : 'B', facts);
 }
