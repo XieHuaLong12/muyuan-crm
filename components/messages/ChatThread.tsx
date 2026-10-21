@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowUpRight, Check, CheckCheck, CircleAlert, Clock3, FileTe
 import { api } from '@/lib/client';
 import { FIRST_TOUCH_PRODUCT_LINES, pipeline, purchases, sources, stages } from '@/lib/constants';
 import { formatDateTime, formatDay, formatTime, initial, requestId, toneOf, windowLeft, type ChatMessage, type TemplateList, type Thread } from './types';
+import { OutreachBar, OutreachProfile, useOutreach } from './OutreachPanel';
 
 const POLL_MS = 8_000;
 const MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'AUDIO', 'VOICE', 'DOCUMENT', 'FILE', 'STICKER']);
@@ -78,6 +79,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [broken, setBroken] = useState<Set<string>>(new Set());
   const [templates, setTemplates] = useState<TemplateList & { open: boolean; chosen: string; params: string[]; error: string }>({ status: 'CONNECTED', templates: [], suggestion: null, fills: {}, open: false, chosen: '', params: [], error: '' });
+  const { outreach, reloadOutreach } = useOutreach(customerId);
   const log = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null), file = useRef<HTMLInputElement>(null), stickToBottom = useRef(true), lastSeen = useRef(''), autoOpened = useRef(false);
 
   const load = useCallback(async (quiet = false) => {
@@ -133,7 +135,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
     try {
       const result = await api<{ error?: string }>('whatsapp/send', 'POST', { customerId, content: text.trim(), requestId: requestId(), ...(attachment ? { mediaAssetId: attachment.id } : {}) });
       if (result.error) setSendError(result.error); else { setText(''); setAttachment(undefined); setDraft(undefined); setOriginal(undefined); }
-      stickToBottom.current = true; await load(true); onChanged();
+      stickToBottom.current = true; await load(true); onChanged(); void reloadOutreach();
     } catch (e) { setSendError((e as Error).message); } finally { setBusy(''); }
   }
 
@@ -200,7 +202,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
     try {
       const r = await api<{ error?: string }>('whatsapp/templates', 'POST', { customerId, templateId: template.id, params: templates.params.map(p => p.trim()), requestId: requestId() });
       if (r.error) setTemplates(t => ({ ...t, error: r.error! })); else setTemplates(t => ({ ...t, open: false }));
-      stickToBottom.current = true; await load(true); onChanged();
+      stickToBottom.current = true; await load(true); onChanged(); void reloadOutreach();
       if (!r.error) onTemplateSent?.();
     } catch (e) { setTemplates(t => ({ ...t, error: (e as Error).message })); } finally { setBusy(''); }
   }
@@ -283,17 +285,20 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
           : thread.sending.optedOut ? <div className="bos-chat-notice"><CircleAlert size={16} /><span><strong>客户已明确退订。</strong>系统不会再向这个客户发送 WhatsApp 消息，请人工核对后续沟通许可。</span></div>
           : win?.status !== 'OPEN' && <div className="bos-chat-notice"><CircleAlert size={16} /><span><strong>{win?.status === 'CLOSED' ? '客户超过 24 小时没有回复' : '客户还没有通过公司业务号发来消息'}，WhatsApp 只允许发送已审核的模板消息。</strong>客户回复后，自动恢复自由聊天。</span></div>}
 
+        <OutreachBar view={outreach} timezone={timezone} canTemplate={thread.sending.configured && thread.sending.templates && !thread.sending.optedOut} onUseTemplate={openTemplates} />
+
         {templates.open && <div>
           {templates.error && <p className="bos-chat-error" role="alert">{templates.error}</p>}
           {templates.status === 'NOT_CONNECTED' ? <div className="bos-chat-notice"><LayoutTemplate size={16} /><span><strong>模板消息尚未接入。</strong>需要在服务器配置 GUPSHUP_APP_ID，并在 Gupshup 后台创建模板、等待 Meta 审核通过。</span></div>
             : !templates.templates.length && !templates.error ? <p className="bos-chat-hint">没有已审核通过的文字模板。请先在 Gupshup 后台创建并等待审核。</p>
             : <div className="bos-chat-templates">
               <div className="bos-chat-template-list" role="radiogroup" aria-label="已审核模板">
-                {templates.templates.map(t => <label key={t.id}><span><input type="radio" name="template" checked={templates.chosen === t.id} onChange={() => setTemplates(s => ({ ...s, chosen: t.id, params: paramsFor(s, t.id) }))} />{t.name}</span><small>{[t.language, t.category, templates.suggestion?.templateId === t.id ? '推荐' : ''].filter(Boolean).join(' · ')}</small>
+                {templates.templates.map(t => <label key={t.id}><span><input type="radio" name="template" checked={templates.chosen === t.id} onChange={() => setTemplates(s => ({ ...s, chosen: t.id, params: paramsFor(s, t.id) }))} />{t.name}</span><small>{[t.language, t.category, templates.outreach?.templateId === t.id ? `系统分配 ${templates.outreach.scriptCode}` : templates.suggestion?.templateId === t.id ? '推荐' : ''].filter(Boolean).join(' · ')}</small>
                   <small className={`bos-chat-template-status${emptyIn(t.id) ? ' is-warning' : ''}`}>{emptyIn(t.id) ? `还有 ${emptyIn(t.id)} 个变量要填` : '变量已全部填好'}</small></label>)}
               </div>
               {chosenTemplate && <div className="bos-chat-template-preview">
                 <small>预览 · 已按客户资料填好，发送前请核对</small>
+                {templates.outreach?.templateId && templates.outreach.templateId !== chosenTemplate.id && <p className="bos-chat-var-note is-warning">没有用系统分配的话术 {templates.outreach.scriptCode}：话术由系统轮流分配，改发其他模板会让对比结果偏掉。</p>}
                 <p>{preview.map((part, i) => part.variable ? <span key={i} className={`bos-chat-fill${part.empty ? ' is-empty' : ''}`}>{part.text}</span> : <Fragment key={i}>{part.text}</Fragment>)}</p>
                 {templates.params.map((value, i) => {
                   const fill = fills[i];
@@ -363,6 +368,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
           {thread.nextTask ? <div className={`bos-chat-task${Date.parse(thread.nextTask.dueDate) > Date.now() + 86400000 ? ' is-calm' : ''}`} style={{ marginTop: 8 }}><strong>{thread.nextTask.title}</strong><span><Clock3 size={13} aria-hidden="true" />{Date.parse(thread.nextTask.dueDate) < Date.now() ? '已到期 · ' : ''}{formatDateTime(thread.nextTask.dueDate, timezone)}</span></div>
             : <p className="bos-chat-hint" style={{ display: 'block' }}>暂无待办，可在客户档案中安排下一次跟进。</p>}
         </div>
+        <OutreachProfile view={outreach} customerId={customerId} onChanged={() => { void reloadOutreach(); void load(true); }} />
         {(customer.aiSummary || customer.leadGrade || thread.ai.configured) && <div className="bos-chat-ai">
           <div className="bos-chat-section-title"><strong style={{ color: '#1c3226' }}>AI 摘要</strong>
             {thread.ai.configured && <button type="button" className="bos-chat-link" onClick={refreshSummary} disabled={busy === 'summary'}>{busy === 'summary' ? <Loader2 size={13} /> : <RefreshCw size={13} />}{customer.aiSummary ? '更新' : '生成'}</button>}</div>

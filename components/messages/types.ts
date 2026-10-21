@@ -11,7 +11,9 @@ export type PendingCustomer = InboxList['pending'][number];
 export type Thread = Jsonify<Awaited<ReturnType<typeof inboxThread>>>;
 export type ChatMessage = Thread['messages'][number];
 export type LinkCandidate = Jsonify<Awaited<ReturnType<typeof linkCandidates>>>['candidates'][number];
-export type TemplateList = { status: 'CONNECTED' | 'NOT_CONNECTED'; templates: ApprovedTemplate[]; suggestion: { templateId: string } | null; fills: Record<string, VariableFill[]> };
+export type TemplateList = { status: 'CONNECTED' | 'NOT_CONNECTED'; templates: ApprovedTemplate[]; suggestion: { templateId: string } | null; fills: Record<string, VariableFill[]>;
+  /** The script the rotation assigned for the next touch, when it is a registered template. */
+  outreach?: { position: string; scriptCode: string; templateId: string | null } | null };
 export type Filter = 'all' | 'unread' | 'awaiting' | 'unmatched' | 'pending';
 
 /** Request ids for idempotent sends; falls back to getRandomValues where randomUUID is unavailable (plain HTTP). */
