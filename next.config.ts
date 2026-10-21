@@ -14,8 +14,16 @@ const moved: [string, string][] = [
   ['/growth', '/analytics/ads'],
 ];
 
+// Hostinger's build container caps processes and threads per user. By default Next starts one build worker per CPU
+// the host reports, and each worker's native SWC binding starts a Tokio runtime with one thread per CPU, so on a
+// many-core host "Collecting page data" dies with "OS can't spawn worker thread … (os error 11)". Two workers with two
+// Tokio threads each stay far below the cap; NEXT_BUILD_CPUS and TOKIO_WORKER_THREADS raise them where allowed.
+process.env.TOKIO_WORKER_THREADS ??= '2';
+const buildWorkers = Math.max(1, Math.floor(Number(process.env.NEXT_BUILD_CPUS)) || 2);
+
 const config = (phase: string): NextConfig => ({
   devIndicators: false,
+  experimental: { cpus: buildWorkers },
   distDir: phase === PHASE_DEVELOPMENT_SERVER ? '.next-dev' : '.next',
   async redirects() {
     return moved.map(([source, destination]) => ({ source, destination, permanent: false }));
