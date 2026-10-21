@@ -45,7 +45,7 @@ export async function todayWorkCounts(user:Actor,now=new Date()){
 
 const URGENT_LIMIT=500;
 const span=(minutes:number)=>minutes<60?`${Math.max(1,Math.round(minutes))} 分钟`:minutes<1440?`${Math.round(minutes/60)} 小时`:`${Math.round(minutes/1440)} 天`;
-type Signals={deadline:Date|null;firstContactPending:boolean;leadGrade:string;purchaseType?:string;aiIntent:string;aiScore:number;lastInboundAt:Date|null;lastOutboundAt:Date|null;lastFollowUpAt:Date|null;lastContactAt:Date|null;staleQuoteSentAt:Date|null};
+type Signals={deadline:Date|null;firstContactPending:boolean;leadGrade:string;purchaseType?:string;aiIntent:string;aiScore:number;bestReplyQuality?:string;lastInboundAt:Date|null;lastOutboundAt:Date|null;lastFollowUpAt:Date|null;lastContactAt:Date|null;staleQuoteSentAt:Date|null};
 /**
  * Where a customer belongs in today's work, and why. A missed deadline weighs most and grows with the delay; then
  * what makes the customer worth the next minute: the customer is waiting for an answer, a good ad form (an A lead due
@@ -67,10 +67,11 @@ export function workPriority(c:Signals,now=new Date()){
  else if(c.leadGrade==='B'){score+=identity?14:8;reasons.push(identity?`B 级 · ${identity}`:'B 级表单');}
  else if(c.leadGrade==='D'){score-=30;reasons.push('D 级表单');}
  if(c.aiIntent==='HIGH'||c.aiScore>=80){score+=12;reasons.push('AI 判断高意向');}
+ else if(c.bestReplyQuality==='HIGH'){score+=12;reasons.push('回复出现采购信号');}
  if(c.staleQuoteSentAt&&(!c.lastContactAt||c.lastContactAt<new Date(now.getTime()-STALE_QUOTE_DAYS*86_400_000))){score+=10;reasons.push(`报价 ${span((now.getTime()-c.staleQuoteSentAt.getTime())/60_000)}未回复`);}
  return {score:Math.round(score*10)/10,reasons};
 }
-const select={id:true,name:true,companyName:true,country:true,source:true,productInterest:true,stage:true,aiScore:true,aiIntent:true,aiNextAction:true,estimatedOrderValue:true,currency:true,lastContactAt:true,nextFollowUpAt:true,firstContactDueAt:true,firstContactAt:true,lastInboundAt:true,lastOutboundAt:true,lastFollowUpAt:true,leadGrade:true,purchaseType:true,leadGradeReason:true,updatedAt:true} satisfies Prisma.CustomerSelect;
+const select={id:true,name:true,companyName:true,country:true,source:true,productInterest:true,stage:true,aiScore:true,aiIntent:true,aiNextAction:true,estimatedOrderValue:true,currency:true,lastContactAt:true,nextFollowUpAt:true,firstContactDueAt:true,firstContactAt:true,lastInboundAt:true,lastOutboundAt:true,lastFollowUpAt:true,leadGrade:true,purchaseType:true,leadGradeReason:true,bestReplyQuality:true,updatedAt:true} satisfies Prisma.CustomerSelect;
 
 export async function salesQueue(user:Actor,input:unknown={},now=new Date()){
  const query=salesQuery.parse(input),settings=await db.setting.findUniqueOrThrow({where:{id:'system'}}),{end}=bosDateRange(now,settings.timezone);
@@ -91,7 +92,7 @@ export async function salesQueue(user:Actor,input:unknown={},now=new Date()){
   const pending=c.firstContactDueAt&&!c.firstContactAt?c.firstContactDueAt:null;
   return [pending,c.nextFollowUpAt,c.tasks[0]?.dueDate??null].filter((d):d is Date=>!!d).sort((a,b)=>a.getTime()-b.getTime())[0]??null;
  };
- const ranked=rows.map(c=>({c,...workPriority({deadline:deadlineOf(c),firstContactPending:!!c.firstContactDueAt&&!c.firstContactAt,leadGrade:c.leadGrade,purchaseType:c.purchaseType,aiIntent:c.aiIntent,aiScore:c.aiScore,
+ const ranked=rows.map(c=>({c,...workPriority({deadline:deadlineOf(c),firstContactPending:!!c.firstContactDueAt&&!c.firstContactAt,leadGrade:c.leadGrade,purchaseType:c.purchaseType,aiIntent:c.aiIntent,aiScore:c.aiScore,bestReplyQuality:c.bestReplyQuality,
   lastInboundAt:c.lastInboundAt,lastOutboundAt:c.lastOutboundAt,lastFollowUpAt:c.lastFollowUpAt,lastContactAt:c.lastContactAt,staleQuoteSentAt:c.quotations[0]?.sentAt??null},now)}));
  // Work queues are worked top-down: the highest priority first, the earliest deadline breaking ties.
  const ordered=urgent?ranked.sort((a,b)=>b.score-a.score||(deadlineOf(a.c)?.getTime()??Infinity)-(deadlineOf(b.c)?.getTime()??Infinity)||a.c.id.localeCompare(b.c.id)).slice(skip,skip+pageSize):ranked;

@@ -53,6 +53,8 @@ export async function processWebhookReceipt(id: string) {
         catch { console.error('[WhatsApp Analysis] RETRY_PENDING'); }
       }
     }
+    // Touch records and reply judgements, for customer messages and for what salespeople sent from the phone.
+    await (await import('./outreach-engine-service')).processOutreachQuietly(result.messageCustomerIds);
   } catch {
     // Acknowledged evidence remains available if background ingestion fails or the process stops.
     await db.syncJob.update({ where: { id }, data: { status: 'FAILED', completedAt: new Date(), failed: 1, error: 'WEBHOOK_PROCESSING_FAILED' } });

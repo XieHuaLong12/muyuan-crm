@@ -84,6 +84,17 @@ model Customer {
  // AI | RULE
  leadGradeSource String @default("") @db.VarChar(8)
  leadGradedAt DateTime?
+ // 话术效果分析（docs/OUTREACH_AND_WORKBENCH.md）：由话术引擎按消息事实推算，空字符串表示尚未推算。
+ // 会话状态 ICEBREAK 破冰期 | CONVERSING 对话中 | SILENT 沉默期 | DORMANT 沉睡 | STOPPED 停止联系
+ outreachState String @default("") @db.VarChar(12)
+ // 下一条该发的触达序号 T0–T4 / R1–R3；不该再主动发时为空
+ outreachNext String @default("") @db.VarChar(4)
+ // 下一次「到时间就变状态」的时刻（72 小时转沉默、7 天转沉睡、24 小时回复期满），定时任务只扫到期的客户
+ outreachDueAt DateTime?
+ // 客户首次回复前最后发出的那条话术编号
+ replyScriptCode String @default("") @db.VarChar(32)
+ // 出现过的最高回复质量 HIGH | ENGAGED | LOW | REJECT
+ bestReplyQuality String @default("") @db.VarChar(12)
  lastContactAt DateTime?
  lastWhatsAppAt DateTime?
  lastInboundAt DateTime?
@@ -117,6 +128,9 @@ model Customer {
  advertisingFeedback AdvertisingFeedback[]
  assignments CustomerAssignment[]
  leadAlerts LeadAlert[]
+ outreachTouches OutreachTouch[]
+ outreachReplies OutreachReply[]
+ outreachAssignments OutreachAssignment[]
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -140,6 +154,8 @@ model Customer {
  @@index([aiPriority])
  @@index([lastWhatsAppAt])
  @@index([whatsappOptInStatus])
+ @@index([outreachState])
+ @@index([outreachDueAt])
 }
 model FollowUp {
  id String @id @default(cuid())
@@ -249,6 +265,10 @@ model Setting {
  // 手机 / 浏览器系统推送（Web Push）的 VAPID 密钥：未配置环境变量时首次使用自动生成，私钥用 AUTH_SECRET 加密保存。
  pushPublicKey String @default("") @db.VarChar(255)
  pushPrivateKey String @default("") @db.VarChar(255)
+ // 话术分析与工作日历的可调参数（72 小时、7 天、30 条门槛等），为空时用 lib/outreach.ts 的默认值。
+ outreachConfig Json?
+ // 话术记录的起点：话术引擎第一次运行时写入。之前的消息只用来推算会话状态，不生成触达记录。
+ outreachStartedAt DateTime?
 }
 
 model LeadSubmission {
@@ -301,6 +321,8 @@ model WhatsAppMessage {
  sentAt DateTime
  raw String @db.LongText
  aiProcessedAt DateTime?
+ // 在 BOS 里点发送的人（BOS 发出的消息才有）；手机端与历史消息为空。
+ sentById String?
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
  @@index([conversationId, sentAt, id])
@@ -1307,4 +1329,265 @@ model LeadAlert {
  sentAt DateTime?
  @@index([sentAt, createdAt])
  @@index([customerId])
+}
+
+// ═══════════════════════════════════════════════════════════
+// 话术效果分析（docs/OUTREACH_AND_WORKBENCH.md）
+// 加性变更：新表 + Customer / WhatsAppMessage / Setting 的可空或带默认值的新列。
+// ═══════════════════════════════════════════════════════════
+
+// 话术库：一条话术一行。发出过一次（firstSentAt 有值）后内容锁定，要改必须新建编号（T0-A1 → T0-A2）。
+model OutreachScript {
+ id String @id @default(cuid())
+ // 触达位置 + 版本，如 T0-A1；模板用 M，如 T1-M1
+ code String @unique @db.VarChar(32)
+ // T0 首回 | T1–T4 第 1–4 次跟进 | R1–R3 唤醒
+ position String @db.VarChar(4)
+ // 适用等级，逗号分隔，如 "A,B"
+ grades String @db.VarChar(8)
+ // en | fr | ar
+ language String @db.VarChar(4)
+ content String @db.Text
+ versionNote String @default("") @db.VarChar(300)
+ // TESTING 测试中 | WINNER 胜出 | RETIRED 停用
+ status String @default("TESTING") @db.VarChar(16)
+ // 登记的已审核模板名（Gupshup elementName）：BOS 发这个模板时直接带编号，不调用 DeepSeek
+ templateName String? @db.VarChar(200)
+ // 模板快捷按钮文字 → 回复质量，如 {"Get a quote":"HIGH","Not interested":"REJECT"}
+ buttonQualities Json?
+ firstSentAt DateTime?
+ createdBy String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ touches OutreachTouch[]
+ assignments OutreachAssignment[]
+ @@index([position, status])
+ @@index([templateName])
+}
+
+// 系统分配：同一触达位置、等级、语言下轮流分配话术，业务员只负责发送。
+model OutreachAssignment {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ position String @db.VarChar(4)
+ // 第几轮：破冰为 0，每次进入沉默期加 1（唤醒可以有多轮）
+ cycle Int @default(0)
+ scriptId String
+ script OutreachScript @relation(fields: [scriptId], references: [id], onDelete: Restrict)
+ grade String @default("") @db.VarChar(1)
+ language String @db.VarChar(4)
+ assignedAt DateTime @default(now())
+ // 按分配发出后回填
+ touchId String? @unique
+ @@unique([customerId, position, cycle])
+ @@index([scriptId])
+ @@index([position, grade, language])
+}
+
+// 触达记录：每发一组主动消息（10 分钟内连发的算一组）一行。
+model OutreachTouch {
+ id String @id @default(cuid())
+ // 组内第一条消息的 id，幂等键
+ groupKey String @unique @db.VarChar(191)
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ // ICEBREAK 破冰触达 | REVIVE 唤醒触达
+ kind String @db.VarChar(8)
+ // T0–T4 | R1–R3
+ code String @db.VarChar(4)
+ cycle Int @default(0)
+ scriptId String?
+ script OutreachScript? @relation(fields: [scriptId], references: [id], onDelete: SetNull)
+ // EXACT 原样 | LIGHT 轻改 | HEAVY 大幅改写 | FREE 自由发挥；空表示还没判
+ matchType String @default("") @db.VarChar(8)
+ confidence Decimal? @db.Decimal(4, 3)
+ // 消息意图 GREETING | PRODUCT | QUOTE | ANSWER | SAMPLE | NUDGE | OTHER
+ intent String @default("") @db.VarChar(12)
+ // PENDING 待判定 | DONE | REVIEW 待人工复核
+ judgeStatus String @default("PENDING") @db.VarChar(12)
+ // RULE | AI | HUMAN
+ judgedBy String @default("") @db.VarChar(8)
+ judgeReason String @default("") @db.VarChar(500)
+ judgedAt DateTime?
+ senderId String?
+ sentAt DateTime
+ // BOS_FREE | BOS_TEMPLATE | PHONE
+ channel String @db.VarChar(16)
+ windowOpen Boolean @default(false)
+ // 发送时的客户等级与话术语言（快照，统计按它分组）
+ grade String @default("") @db.VarChar(1)
+ language String @default("") @db.VarChar(4)
+ // 距上一次主动触达不足 24 小时
+ tooSoon Boolean @default(false)
+ // 计入统计的那组回复（冗余一份，统计不用联表）；replied24h 为空表示还没满 24 小时
+ replyId String? @unique
+ repliedAt DateTime?
+ replied24h Boolean?
+ lateReply Boolean @default(false)
+ replyQuality String @default("") @db.VarChar(12)
+ replySignals Json?
+ text String @db.Text
+ contentHash String @db.Char(64)
+ messageCount Int @default(1)
+ humanEdited Boolean @default(false)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ overrides OutreachOverride[]
+ @@index([customerId, sentAt])
+ @@index([code, sentAt])
+ @@index([scriptId, sentAt])
+ @@index([judgeStatus])
+ @@index([senderId, sentAt])
+}
+
+// 回复判定：客户每组回复（10 分钟内连发的算一组）一行，由 DeepSeek 判定质量与信号。
+model OutreachReply {
+ id String @id @default(cuid())
+ groupKey String @unique @db.VarChar(191)
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ // 计入哪条触达：只有破冰 / 唤醒触达之后的第一组有效回复才有
+ touchId String?
+ receivedAt DateTime
+ // HIGH 高意向 | ENGAGED 有效互动 | LOW 低意向 | REJECT 拒绝 | INVALID 无效
+ quality String @default("") @db.VarChar(12)
+ signals Json?
+ // 含图片或语音，需要业务员看完或听完后改判
+ needsHuman Boolean @default(false)
+ gradeSuggestion String @default("") @db.VarChar(1)
+ // PENDING | ACCEPTED | DISMISSED
+ gradeSuggestionStatus String @default("") @db.VarChar(12)
+ nextStep String @default("") @db.VarChar(300)
+ reason String @default("") @db.VarChar(500)
+ // PENDING 待 AI 判定（已有规则临时结果）| DONE | REVIEW
+ judgeStatus String @default("PENDING") @db.VarChar(12)
+ // RULE | AI | BUTTON | HUMAN
+ judgedBy String @default("") @db.VarChar(8)
+ judgedAt DateTime?
+ text String @db.Text
+ contentHash String @db.Char(64)
+ messageCount Int @default(1)
+ humanEdited Boolean @default(false)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ overrides OutreachOverride[]
+ @@index([customerId, receivedAt])
+ @@index([touchId])
+ @@index([judgeStatus])
+ @@index([quality, receivedAt])
+}
+
+// 判定修改记录：人工改一次记一行。统计一律按改后的结果，原值保留不删。
+model OutreachOverride {
+ id String @id @default(cuid())
+ touchId String?
+ touch OutreachTouch? @relation(fields: [touchId], references: [id], onDelete: Cascade)
+ replyId String?
+ reply OutreachReply? @relation(fields: [replyId], references: [id], onDelete: Cascade)
+ // SCRIPT 话术编号 | MATCH_TYPE 匹配类型 | QUALITY 回复质量 | SIGNALS 信号标签 | GRADE 等级建议
+ field String @db.VarChar(16)
+ oldValue String @db.Text
+ newValue String @db.Text
+ // VOICE_IMAGE 语音或图片人工判定 | AI_WRONG AI 判错 | CONTEXT 补充了上下文 | OTHER 其他
+ reason String @db.VarChar(16)
+ note String @default("") @db.VarChar(500)
+ // 原值是不是 DeepSeek 给的（改判率只算这些）
+ aiOriginal Boolean @default(false)
+ actorId String
+ createdAt DateTime @default(now())
+ @@index([touchId])
+ @@index([replyId])
+ @@index([createdAt])
+}
+
+// 每周一自动生成的话术结论（上周为止的累计数据）。
+model OutreachReport {
+ id String @id @default(cuid())
+ weekStart String @unique @db.VarChar(10)
+ lines Json
+ generatedAt DateTime @default(now())
+}
+
+// ═══════════════════════════════════════════════════════════
+// 工作日历：月重心 → 周重心 → 今日三件事
+// ═══════════════════════════════════════════════════════════
+
+// 月重心 / 周重心：每层每期最多 3 条；周重心必须关联月重心。全公司共用。
+model FocusGoal {
+ id String @id @default(cuid())
+ // MONTH | WEEK
+ level String @db.VarChar(8)
+ // 月：2026-10；周：该周周一 2026-10-19
+ periodKey String @db.VarChar(10)
+ title String @db.VarChar(200)
+ // 目标值，文字描述，如「10 位客户到厂」
+ target String @default("") @db.VarChar(200)
+ // 进度 0–100
+ progress Int @default(0)
+ parentId String?
+ parent FocusGoal? @relation("FocusTree", fields: [parentId], references: [id], onDelete: SetNull)
+ children FocusGoal[] @relation("FocusTree")
+ // 周重心完成情况：TODO 未开始 | DOING 进行中 | DONE 已完成
+ status String @default("TODO") @db.VarChar(8)
+ // CONVERT 转化 | FRONTEND 前端 | DATA 数据
+ category String @default("CONVERT") @db.VarChar(12)
+ sort Int @default(0)
+ createdBy String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ items WorkItem[]
+ @@index([level, periodKey])
+}
+
+// 日历事项：手动事项、周重心下的任务、固定事项、时间块、重点事件。没做完的第二天自动顺延。
+model WorkItem {
+ id String @id @default(cuid())
+ userId String
+ // 本地日期 yyyy-MM-dd
+ date String @db.VarChar(10)
+ // 多日的重点事件（如广交会）结束日期
+ endDate String? @db.VarChar(10)
+ title String @db.VarChar(200)
+ detail String @default("") @db.VarChar(1000)
+ // MANUAL | FOCUS | FIXED | TIMEBLOCK | EVENT
+ kind String @default("MANUAL") @db.VarChar(12)
+ category String @default("CONVERT") @db.VarChar(12)
+ focusId String?
+ focus FocusGoal? @relation(fields: [focusId], references: [id], onDelete: SetNull)
+ startTime String? @db.VarChar(5)
+ endTime String? @db.VarChar(5)
+ // 1 放进今日三件事 | -1 移出 | 0 按顺序自动
+ pin Int @default(0)
+ // TODO | DONE
+ status String @default("TODO") @db.VarChar(8)
+ doneAt DateTime?
+ carryCount Int @default(0)
+ originalDate String? @db.VarChar(10)
+ // 自动生成的事项去重（固定事项、时间块、预置事件）
+ sourceKey String? @db.VarChar(120)
+ href String? @db.VarChar(300)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([userId, date, sourceKey])
+ @@index([userId, date])
+ @@index([userId, status, date])
+ @@index([kind, date])
+}
+
+// 每日时间块模板（北京时间），每天生成当天的时间块事项。
+model TimeBlock {
+ id String @id @default(cuid())
+ userId String
+ startTime String @db.VarChar(5)
+ endTime String @db.VarChar(5)
+ title String @db.VarChar(200)
+ category String @default("CONVERT") @db.VarChar(12)
+ // 适用的星期，1–7（周一到周日），逗号分隔
+ weekdays String @default("1,2,3,4,5") @db.VarChar(16)
+ sort Int @default(0)
+ active Boolean @default(true)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([userId, active])
 }

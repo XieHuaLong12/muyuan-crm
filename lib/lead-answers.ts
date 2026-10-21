@@ -50,8 +50,12 @@ export function buyerTypeOf(answer: string): string {
 }
 export const buysForThemselves = (answer: string) => PERSONAL.test(plainText(answer));
 
-/** min: pieces to count with; exact: a single number, fit for the profile's quantity field (a range is not). */
-export type Quantity = { min: number | null; container: boolean; label: string; exact: boolean };
+/**
+ * min: pieces to count with; exact: a single number, fit for the profile's quantity field (a range is not); sets: the
+ * answer counts sofa sets ("6–19 sets"), each several pieces, so it is judged against its own threshold.
+ */
+export type Quantity = { min: number | null; container: boolean; label: string; exact: boolean; sets?: boolean };
+const SETS = /\bsets?\b|套|ensembles?|juegos?|conjuntos?|طقم|أطقم/;
 const CONTAINER = /container|\b(20|40) ?(gp|hq|ft|')|\d+ ?x ?(20|40)|整柜|货柜|集装箱|conteneur|contenedor|حاوية/;
 const AT_MOST = /less than|fewer than|under|below|up to|at most|moins de|menos de|少于|以下|不到|أقل/;
 
@@ -68,8 +72,9 @@ export function quantityOf(answer: string): Quantity | null {
   const min = Math.floor(numbers[0]);
   const ranged = numbers.length > 1 && /\d\s*(-|–|—|~|to|à|a|至|到)\s*\d/.test(text);
   const atLeast = !ranged && /\+|more than|over|above|plus de|más de|以上|أكثر/.test(text);
-  const label = ranged ? `${min}–${Math.floor(numbers[1])} 件` : atLeast ? `${min} 件以上` : `${min} 件`;
-  return { min, container: false, label, exact: !ranged && !atLeast };
+  const sets = SETS.test(text), unit = sets ? '套' : '件';
+  const label = ranged ? `${min}–${Math.floor(numbers[1])} ${unit}` : atLeast ? `${min} ${unit}以上` : `${min} ${unit}`;
+  return { min, container: false, label, exact: !ranged && !atLeast && !sets, ...(sets ? { sets } : {}) };
 }
 
 /** true: buying within about a month; false: not decided or later; null: cannot tell. */
@@ -89,7 +94,19 @@ export type AnswerSignals = {
   /** The answer to the timeline question, as written (choice keys made readable). */
   timeline: string;
   soon: boolean | null;
+  /** The form asked whether they come to the Canton Fair: true when they said yes. */
+  cantonFair: boolean | null;
 };
+
+/** "Will you visit the Canton Fair?", "Venez-vous à la Foire de Canton ?", "是否来广交会" */
+export const CANTON_FAIR_QUESTION = /canton fair|foire de canton|feria de cant[oó]n|guangzhou (fair|expo)|广交会|معرض كانتون/;
+/** Yes to the Canton Fair question: "yes", "oui", "I will come in phase 2", "已报名"… */
+export function attendsFair(answer: string): boolean | null {
+  const text = plainText(answer);
+  if (/^(no|non|not|nope|maybe not|pas)\b|^(لا|不|否|没)/.test(text)) return false;
+  if (/^(yes|oui|s[ií]|sim|ja|sure|definitely|of course|i will|we will|will come|already|planning|plan to|phase|نعم|是|会|来|已)/.test(text)) return true;
+  return null;
+}
 
 /** Everything the answers of one form say about the buyer. Questions are recognised by their wording, not by name. */
 export function readAnswers(pairs: AnswerPair[]): AnswerSignals {
@@ -108,7 +125,9 @@ export function readAnswers(pairs: AnswerPair[]): AnswerSignals {
     quantity = { ...(containers ? { min: null, container: true, label: `${parsed.min} 个货柜`, exact: false } : parsed), perModel: PER_MODEL.test(plainText(p.question)) };
     break;
   }
-  const timelineAnswer = asked(TIMELINE_QUESTION)[0];
+  const timelineAnswer = asked(TIMELINE_QUESTION).find(p => !CANTON_FAIR_QUESTION.test(plainText(p.question)));
+  const fairAnswer = asked(CANTON_FAIR_QUESTION)[0];
   return { buyer, personal: personal && !['WHOLESALE', 'IMPORTER', 'DISTRIBUTOR'].includes(buyer), quantity,
-    timeline: timelineAnswer ? plainText(timelineAnswer.answer).slice(0, 100) : '', soon: timelineAnswer ? buysSoon(timelineAnswer.answer) : null };
+    timeline: timelineAnswer ? plainText(timelineAnswer.answer).slice(0, 100) : '', soon: timelineAnswer ? buysSoon(timelineAnswer.answer) : null,
+    cantonFair: fairAnswer ? attendsFair(fairAnswer.answer) : null };
 }

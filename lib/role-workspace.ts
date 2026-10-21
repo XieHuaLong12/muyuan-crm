@@ -1,6 +1,7 @@
-export const workspaceHome = (role: string) => role === 'ADMIN' ? '/command-center' : '/sales';
+/** Administrators land on the work calendar's today view (the operations lead's workbench); sales on today's follow-ups. */
+export const workspaceHome = (role: string) => role === 'ADMIN' ? '/workbench' : '/sales';
 
-export type NavIcon = 'dashboard' | 'customers' | 'messages' | 'tasks' | 'orders' | 'growth' | 'team' | 'settings' | 'today' | 'products' | 'performance';
+export type NavIcon = 'workbench' | 'scripts' | 'dashboard' | 'customers' | 'messages' | 'tasks' | 'orders' | 'growth' | 'team' | 'settings' | 'today' | 'products' | 'performance';
 /** A page inside a section. `match` lists the path prefixes that belong to it (defaults to `href`). */
 export type NavTab = { href: string; label: string; match?: readonly string[] };
 /**
@@ -9,7 +10,18 @@ export type NavTab = { href: string; label: string; match?: readonly string[] };
  */
 export type NavSection = { href: string; label: string; icon: NavIcon; tabs?: readonly NavTab[]; badge?: 'today' | 'pool' | 'messages'; keepPeriod?: boolean };
 
+/** Script effectiveness pages (docs/OUTREACH_AND_WORKBENCH.md); everyone sees them, only administrators edit the library. */
+const scriptTabs = [
+  { href: '/outreach', label: '话术效果' },
+  { href: '/outreach/library', label: '话术库' },
+  { href: '/outreach/review', label: '人工复核' },
+] as const;
+
 const adminSections: readonly NavSection[] = [
+  { href: '/workbench', label: '工作台', icon: 'workbench', tabs: [
+    { href: '/workbench', label: '工作日历' },
+    ...scriptTabs,
+  ] },
   { href: '/command-center', label: '经营总览', icon: 'dashboard', keepPeriod: true, tabs: [
     { href: '/command-center', label: '经营驾驶舱' },
     { href: '/command-center/analysis', label: '来源与国家' },
@@ -53,6 +65,7 @@ const salesSections: readonly NavSection[] = [
     { href: '/tasks', label: '全部待办' },
   ] },
   { href: '/messages', label: '消息', icon: 'messages', badge: 'messages' },
+  { href: '/outreach/review', label: '话术', icon: 'scripts', tabs: [scriptTabs[2], scriptTabs[0], scriptTabs[1]] },
   { href: '/customers', label: '我的客户', icon: 'customers', tabs: [
     { href: '/customers', label: '客户列表' },
     { href: '/crm', label: '销售看板' },

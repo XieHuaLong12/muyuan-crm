@@ -20,6 +20,8 @@ export const ringFor = (grade: string): RingMode => isLeadGrade(grade) ? LEAD_GR
 /** Minimum order per model: 10 online, 20 when negotiated offline (ProductMoq). */
 export const GRADE_A_MIN_QUANTITY = 20;
 export const GRADE_B_MIN_QUANTITY = 10;
+/** A first order counted in sofa sets (several pieces each) has volume from this many sets (2026-10-21 requirement). */
+export const GRADE_A_MIN_SETS = 6;
 const BUSINESS_BUYERS = new Set(['WHOLESALE', 'IMPORTER', 'DISTRIBUTOR', 'RETAILER', 'BRAND', 'ECOMMERCE', 'PROJECT']);
 const BUYER_LABELS: Record<string, string> = { WHOLESALE: '批发商', IMPORTER: '进口商', DISTRIBUTOR: '经销商', RETAILER: '家具零售店', BRAND: '品牌客户', ECOMMERCE: '电商客户', PROJECT: '设计 / 工程客户' };
 
@@ -87,6 +89,8 @@ export const buyerLabel = (purchaseType: string) => BUYER_LABELS[purchaseType] ?
  *      no quantity stated but ordering within a month;
  *   B: every other business buyer ("B + 身份"): a small quantity, no quantity and no near date, or not ordering yet;
  *   D: test leads and leads nobody can contact.
+ * A form that says the buyer comes to the Canton Fair is A (unless they buy for themselves); a quantity in sofa sets
+ * has volume from 6 sets.
  * DeepSeek may raise a grade by one at most and never lifts 个人自用 (lead-grade-service). Reasons start with the identity.
  */
 export function ruleGrade(input: GradeInput): GradeResult {
@@ -100,14 +104,17 @@ export function ruleGrade(input: GradeInput): GradeResult {
   const quantity = said.quantity ?? (input.quantity ? { min: input.quantity, container: false, label: `${input.quantity} 件`, exact: true, perModel: false } : null);
   const imports = importsFromChina(input.answers);
   const soon = said.timeline ? said.soon : input.purchaseTimeline ? buysSoon(input.purchaseTimeline) : null;
-  const volume = !!quantity && (quantity.container || (quantity.min ?? 0) >= GRADE_A_MIN_QUANTITY);
+  const volume = !!quantity && (quantity.container || (quantity.min ?? 0) >= (quantity.sets ? GRADE_A_MIN_SETS : GRADE_A_MIN_QUANTITY));
   const facts = [
     business ? BUYER_LABELS[buyer] : said.personal ? '个人自用' : '身份不明',
     quantity ? `${quantity.perModel ? '每款' : '采购'} ${quantity.label}` : '未填写数量',
     imports === true ? '已从中国进口' : imports === false ? '未从中国进口过' : '',
     soon === true ? '1 个月内下单' : soon === false ? '暂不急着下单' : '',
+    said.cantonFair ? '会来广交会' : '',
     input.country,
   ];
+  // Coming to the Canton Fair is a trade buyer's trip: A, unless they said they buy for themselves.
+  if (said.cantonFair && !said.personal) return result('A', facts);
   if (!business) return result('C', facts, said.personal);
   const notYet = soon === false;
   const small = !!quantity && !volume;
