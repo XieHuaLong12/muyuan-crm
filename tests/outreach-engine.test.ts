@@ -67,9 +67,9 @@ test('outreach: rotation, BOS template touches, replies on time and late, lockin
     await assert.rejects(createScript({ code: `T0-ZT${tag}9`, position: 'T0', grades: ['A'], language: 'en', content: 'x' }, me), (e: { status?: number }) => e.status === 403);
 
     // Ten new A leads in a row: the two scripts under test alternate, 5:5.
-    const ten = [];
+    const ten: Awaited<ReturnType<typeof lead>>[] = [];
     for (let i = 0; i < 10; i++) ten.push(await lead());
-    const assigned = [];
+    const assigned: (string | undefined)[] = [];
     for (const c of ten) assigned.push((await outreachNextView({ customerId: c.id }, me)).script?.code);
     assert.deepEqual(assigned, Array.from({ length: 10 }, (_, i) => i % 2 ? s2.code : s1.code));
     const first = await outreachNextView({ customerId: ten[0].id }, me);

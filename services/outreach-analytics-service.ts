@@ -114,28 +114,33 @@ export async function outreachDashboard(user: Actor, input: unknown = {}, now = 
 }
 export type OutreachDashboard = Awaited<ReturnType<typeof outreachDashboard>>;
 
-/** Who sends their own words instead of the library, and how often a person had to correct DeepSeek this month. */
-async function qualityChecks(user: Actor, now: Date, config: OutreachConfig, timezone: string) {
-  const week = new Date(now.getTime() - 7 * DAY);
-  const month = periodRange('MONTH', dayKey(now, timezone), timezone);
-  const [judged, users, overrides, aiTouches, aiReplies] = await Promise.all([
-    db.outreachTouch.findMany({ where: { sentAt: { gte: week }, judgeStatus: 'DONE', matchType: { not: '' }, customer: { deletedAt: null } }, select: { senderId: true, matchType: true, scriptId: true } }),
+/** Per salesperson, the share of their judged touches that were not a library script as written or lightly edited. */
+export async function nonStandardShares(since: Date, until = new Date()) {
+  const [judged, users] = await Promise.all([
+    db.outreachTouch.findMany({ where: { sentAt: { gte: since, lt: until }, judgeStatus: 'DONE', matchType: { not: '' }, customer: { deletedAt: null } }, select: { senderId: true, matchType: true, scriptId: true } }),
     db.user.findMany({ select: { id: true, name: true } }),
-    db.outreachOverride.findMany({ where: { createdAt: { gte: month.start, lt: month.end }, aiOriginal: true, reason: { not: 'VOICE_IMAGE' } }, select: { touchId: true, replyId: true } }),
-    db.outreachTouch.count({ where: { judgedAt: { gte: month.start, lt: month.end }, OR: [{ judgedBy: 'AI' }, { overrides: { some: { aiOriginal: true } } }] } }),
-    db.outreachReply.count({ where: { judgedAt: { gte: month.start, lt: month.end }, OR: [{ judgedBy: 'AI' }, { overrides: { some: { aiOriginal: true } } }] } }),
   ]);
   const names = new Map(users.map(u => [u.id, u.name]));
   const bySender = new Map<string, { total: number; nonStandard: number }>();
   for (const t of judged) {
-    const key = t.senderId ?? '';
-    const entry = bySender.get(key) ?? { total: 0, nonStandard: 0 };
+    const entry = bySender.get(t.senderId ?? '') ?? { total: 0, nonStandard: 0 };
     entry.total++;
     if (!(COUNTED_MATCHES as readonly string[]).includes(t.matchType) || !t.scriptId) entry.nonStandard++;
-    bySender.set(key, entry);
+    bySender.set(t.senderId ?? '', entry);
   }
-  const people = [...bySender].map(([id, v]) => ({ id, name: names.get(id) ?? '未知业务员', total: v.total, share: v.total ? v.nonStandard / v.total : 0,
-    alert: v.total > 0 && v.nonStandard / v.total > config.nonStandardShare }))
+  return [...bySender].map(([id, v]) => ({ id, name: names.get(id) ?? '未知业务员', total: v.total, share: v.total ? v.nonStandard / v.total : 0 }));
+}
+
+/** Who sends their own words instead of the library, and how often a person had to correct DeepSeek this month. */
+async function qualityChecks(user: Actor, now: Date, config: OutreachConfig, timezone: string) {
+  const month = periodRange('MONTH', dayKey(now, timezone), timezone);
+  const [shares, overrides, aiTouches, aiReplies] = await Promise.all([
+    nonStandardShares(new Date(now.getTime() - 7 * DAY), now),
+    db.outreachOverride.findMany({ where: { createdAt: { gte: month.start, lt: month.end }, aiOriginal: true, reason: { not: 'VOICE_IMAGE' } }, select: { touchId: true, replyId: true } }),
+    db.outreachTouch.count({ where: { judgedAt: { gte: month.start, lt: month.end }, OR: [{ judgedBy: 'AI' }, { overrides: { some: { aiOriginal: true } } }] } }),
+    db.outreachReply.count({ where: { judgedAt: { gte: month.start, lt: month.end }, OR: [{ judgedBy: 'AI' }, { overrides: { some: { aiOriginal: true } } }] } }),
+  ]);
+  const people = shares.map(p => ({ ...p, alert: p.total > 0 && p.share > config.nonStandardShare }))
     .filter(p => user.role === 'ADMIN' || p.id === user.id).sort((a, b) => b.share - a.share);
   // Each corrected record counts once, however many fields were changed.
   const corrected = new Set(overrides.map(o => o.touchId ?? o.replyId)).size;

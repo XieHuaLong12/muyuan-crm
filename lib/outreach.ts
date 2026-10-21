@@ -84,6 +84,7 @@ export const configSchema = z.object({
   winProbability: z.coerce.number().min(0.5).max(1).default(0.9),
   loseProbability: z.coerce.number().min(0).max(0.5).default(0.1),
   nonStandardShare: z.coerce.number().min(0).max(1).default(0.3),
+  nonStandardMinTouches: z.coerce.number().int().min(1).max(1000).default(5),
   overrideRate: z.coerce.number().min(0).max(1).default(0.15),
   firstReplyMinutes: z.coerce.number().int().min(1).max(1440).default(5),
   hotReplyHours: z.coerce.number().min(0.5).max(72).default(2),
@@ -461,7 +462,7 @@ export function focusSignals(input: SignalInput, config: OutreachConfig): FocusS
     title: '报价停滞', focus: '转化：安排报价后跟进', detail: `${input.staleQuotes} 位客户报价后 ${config.staleQuoteDays} 天没有进展` });
   if (input.slowFirstReplies >= config.slowFirstReplyCount) signals.push({ key: 'slow-first-reply', category: 'CONVERT', href: '/messages?filter=pending',
     title: '响应变慢', focus: '流程：检查值班和分配', detail: `今天有 ${input.slowFirstReplies} 条新线索首回超过 ${config.firstReplyMinutes} 分钟` });
-  for (const person of input.nonStandard.filter(p => p.share > config.nonStandardShare)) signals.push({ key: `non-standard:${person.name}`, category: 'DATA', href: '/outreach',
+  for (const person of input.nonStandard.filter(p => p.total >= config.nonStandardMinTouches && p.share > config.nonStandardShare)) signals.push({ key: `non-standard:${person.name}`, category: 'DATA', href: '/outreach',
     title: '非标准话术偏多', focus: '管理：和业务员对一遍话术', detail: `${person.name} 近 7 天非标准话术占 ${(person.share * 100).toFixed(0)}%（${person.total} 次触达）` });
   const done = input.energy.CONVERT + input.energy.FRONTEND + input.energy.DATA;
   if (done >= config.energyMinItems) {
