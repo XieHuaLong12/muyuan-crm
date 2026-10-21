@@ -93,7 +93,7 @@ jobs:
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3306/muyuan_reuse
         run: |
-          # 从 13 条旧迁移升级至当前版本，验证身份链、销售角色、分配池、报价单、表单分级推送与客户列表定制列增量迁移。
+          # 从 13 条旧迁移升级至当前版本，验证身份链、销售角色、分配池、报价单、表单分级推送、客户列表定制列与话术分析 / 工作日历增量迁移。
           mysql -h127.0.0.1 -uroot -proot -e 'CREATE DATABASE muyuan_reuse'
           mkdir /tmp/identity-ci-migrations
           trap 'for migration in /tmp/identity-ci-migrations/*; do [ ! -d "$migration" ] || mv "$migration" prisma/migrations/; done' EXIT
@@ -108,12 +108,13 @@ jobs:
           mv prisma/migrations/20261014143255_lead_grade_and_push_alerts /tmp/identity-ci-migrations/
           mv prisma/migrations/20261015120000_customer_list_column_preference /tmp/identity-ci-migrations/
           mv prisma/migrations/20261015170000_qualify_replied_stages /tmp/identity-ci-migrations/
+          mv prisma/migrations/20261021090000_outreach_and_workbench /tmp/identity-ci-migrations/
           pnpm exec prisma migrate deploy
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "13"
           mysql -h127.0.0.1 -uroot -proot muyuan_reuse -e "INSERT INTO User (id,name,email,passwordHash) VALUES ('reuse-sentinel','Existing user','existing@example.com','preserve-me')"
           mv /tmp/identity-ci-migrations/* prisma/migrations/
           pnpm exec prisma migrate deploy
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "24"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "25"
           # 分配池、联系方式规范键、任务执行人与线索分配方式（20261009024647_assignment_pool_and_corrections）
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND ((table_name='Customer' AND column_name IN ('pendingAssignment','contactKeysAt')) OR (table_name='Task' AND column_name='assigneeId') OR (table_name='Setting' AND column_name='leadAssignMode'))")" = "4"
           # 广告线索实时入库：来源、提交时间、重试退避、表单补拉水位与广告线索首联分钟数（20261009035838_meta_lead_realtime_intake）
@@ -128,6 +129,9 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('PushSubscription','LeadAlert')")" = "2"
           # 客户列表定制列：每位用户的列表视图（20261015120000_customer_list_column_preference）
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name='UserViewPreference'")" = "1"
+          # 话术效果分析与工作日历：话术库、触达记录、回复判定、修改记录、分配、周结论、重心、日历事项、时间块与线索新字段（20261021090000_outreach_and_workbench）
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('OutreachScript','OutreachTouch','OutreachReply','OutreachOverride','OutreachAssignment','OutreachReport','FocusGoal','WorkItem','TimeBlock')")" = "9"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND ((table_name='Customer' AND column_name IN ('outreachState','outreachNext','outreachDueAt','replyScriptCode','bestReplyQuality')) OR (table_name='Setting' AND column_name IN ('outreachConfig','outreachStartedAt')) OR (table_name='WhatsAppMessage' AND column_name='sentById'))")" = "8"
           echo "reused-deployment upgrade path OK"
 
       - name: Seed test database

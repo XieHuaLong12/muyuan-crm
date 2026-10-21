@@ -205,3 +205,76 @@ test('outreach: rotation, BOS template touches, replies on time and late, lockin
     await db.setting.update({ where: { id: 'system' }, data: { outreachStartedAt: setting.outreachStartedAt, outreachConfig: setting.outreachConfig === null ? Prisma.DbNull : setting.outreachConfig } });
   }
 });
+
+test('outreach with DeepSeek: phone messages matched, unsure ones reviewed, replies judged, a stop request stops, an outage waits', async t => {
+  const tag = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase(), marker = `OutreachAi${tag}`;
+  const setting = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { outreachStartedAt: true, outreachConfig: true } });
+  await db.setting.update({ where: { id: 'system' }, data: { outreachStartedAt: new Date('2026-01-01T00:00:00Z'), outreachConfig: {} } });
+  const admin = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } });
+  const boss = actorOf(admin);
+  const script = await createScript({ code: `T0-ZT${tag}1`, position: 'T0', grades: ['A', 'B', 'C'], language: 'en', content: 'Hi {客户名}, which market do you sell to, stores or online?' }, boss);
+  const lead = (n: number, grade = 'B') => db.customer.create({ data: { name: `${marker} Lead${n}`, ownerId: admin.id, leadGrade: grade, source: 'FACEBOOK' } });
+  const message = (customerId: string, direction: 'INBOUND' | 'OUTBOUND', hoursAgo: number, content: string) =>
+    db.whatsAppMessage.create({ data: { customerId, direction, content, sentAt: new Date(Date.now() - hoursAgo * HOUR), raw: '{}', source: 'gupshup', status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT' } });
+  const asked: string[] = [];
+  let down = false;
+  try {
+    await withEnv({ DEEPSEEK_API_KEY: 'test-key', DEEPSEEK_BASE_URL: 'https://deepseek.test' }, async () => {
+      t.mock.method(globalThis, 'fetch', async (input: string | URL, init?: RequestInit) => {
+        if (String(input) !== 'https://deepseek.test/chat/completions') return new Response('unexpected', { status: 500 });
+        if (down) return Response.json({ error: { message: 'overloaded' } }, { status: 503 });
+        const body = JSON.parse(String(init?.body)) as { messages: { content: string }[] };
+        const system = body.messages[0].content, user = body.messages[1].content;
+        asked.push(system.includes('话术识别') ? 'match' : 'reply');
+        const answer = system.includes('话术识别')
+          ? user.includes('SURE') ? { scriptCode: script.code, matchType: 'LIGHT', confidence: 0.92, intent: 'GREETING', reason: '只换了称呼' }
+            : { scriptCode: script.code, matchType: 'HEAVY', confidence: 0.5, intent: 'PRODUCT', reason: '结尾问题改了' }
+          : user.includes('100 pcs') ? { quality: 'HIGH', signals: ['QUANTITY', 'ASK_PRICE', 'NOT_A_SIGNAL'], gradeSuggestion: 'A', nextStep: '先按价格表报 100 件的阶梯价，再问交期。', reason: '报出数量并问价' }
+            : { quality: 'REJECT', signals: ['STOP_CONTACT'], gradeSuggestion: null, nextStep: '', reason: '客户要求不要再联系' };
+        return Response.json({ choices: [{ message: { content: JSON.stringify(answer) } }] });
+      });
+      const [sure, unsure, stop, outage] = await Promise.all([lead(1), lead(2), lead(3), lead(4)]);
+      await message(sure.id, 'OUTBOUND', 30, 'Hello Jean, which market do you sell to — stores or online? SURE');
+      await message(sure.id, 'INBOUND', 28, 'We have 3 stores in Lyon and need 100 pcs, what is your price?');
+      await message(unsure.id, 'OUTBOUND', 30, 'We are a sofa factory in Foshan with 20 years of export experience.');
+      await message(stop.id, 'OUTBOUND', 30, 'Hello again, any news?');
+      await message(stop.id, 'INBOUND', 29, 'Please do not write to me anymore, thanks');
+      for (const c of [sure, unsure, stop]) await processOutreach(c.id);
+
+      const matched = await db.outreachTouch.findFirstOrThrow({ where: { customerId: sure.id } });
+      assert.deepEqual([matched.scriptId, matched.matchType, matched.judgeStatus, matched.judgedBy, matched.intent, Number(matched.confidence)], [script.id, 'LIGHT', 'DONE', 'AI', 'GREETING', 0.92]);
+      assert.deepEqual([matched.replied24h, matched.replyQuality], [true, 'HIGH']);
+      const reply = await db.outreachReply.findFirstOrThrow({ where: { customerId: sure.id } });
+      assert.deepEqual([reply.quality, reply.signals, reply.gradeSuggestion, reply.gradeSuggestionStatus, reply.judgedBy], ['HIGH', ['QUANTITY', 'ASK_PRICE'], 'A', 'PENDING', 'AI'], 'unknown signals are dropped');
+      assert.match(reply.nextStep, /阶梯价/);
+      assert.equal((await db.customer.findUniqueOrThrow({ where: { id: sure.id } })).bestReplyQuality, 'HIGH');
+
+      const review = await db.outreachTouch.findFirstOrThrow({ where: { customerId: unsure.id } });
+      assert.deepEqual([review.judgeStatus, review.matchType], ['REVIEW', 'HEAVY'], 'confidence below 0.7 goes to a person');
+      assert.match(review.judgeReason, /置信度 0\.50 低于 0\.7/);
+
+      const stopped = await db.customer.findUniqueOrThrow({ where: { id: stop.id } });
+      assert.deepEqual([stopped.outreachState, stopped.whatsappOptInStatus], ['STOPPED', 'OPTED_OUT'], 'a stop request the rules could not read is still a stop');
+
+      // DeepSeek down: the touch waits (rules only) and is judged by a later run.
+      down = true;
+      await message(outage.id, 'OUTBOUND', 30, 'Hi, do you still need sofas? SURE');
+      await processOutreach(outage.id);
+      assert.equal((await db.outreachTouch.findFirstOrThrow({ where: { customerId: outage.id } })).judgeStatus, 'PENDING');
+      down = false;
+      await db.outreachTouch.updateMany({ where: { customerId: outage.id }, data: { judgedAt: new Date(Date.now() - 11 * 60_000) } });
+      await processOutreach(outage.id);
+      assert.equal((await db.outreachTouch.findFirstOrThrow({ where: { customerId: outage.id } })).judgeStatus, 'DONE');
+
+      // A person corrects DeepSeek: the correction counts in this month's rate.
+      await correctTouch(review.id, { scriptId: null, matchType: 'FREE', reason: 'AI_WRONG' }, boss);
+      const board = await outreachDashboard(boss, { position: 'T0', range: '30' });
+      assert.ok(board.quality.overrideCorrected >= 1 && board.quality.overrideTotal >= 4);
+      assert.ok(asked.includes('match') && asked.includes('reply'));
+    });
+  } finally {
+    await deleteTestCustomers({ where: { name: { startsWith: marker } } });
+    await db.outreachScript.deleteMany({ where: { code: { startsWith: `T0-ZT${tag}` } } });
+    await db.setting.update({ where: { id: 'system' }, data: { outreachStartedAt: setting.outreachStartedAt, outreachConfig: setting.outreachConfig === null ? Prisma.DbNull : setting.outreachConfig } });
+  }
+});
