@@ -46,7 +46,8 @@ export async function recordFirstContact(tx:Prisma.TransactionClient,customerId:
   await tx.customer.updateMany({where:{id:customerId,OR:[{firstContactAt:null},{firstContactAt:{gt:at}}]},data:{firstContactAt:at,firstContactBy:actorId}});
   await resolveRule(tx,customerId,`first-contact:${customerId}:`);
 }
-async function resolveRule(tx: Prisma.TransactionClient, customerId: string, prefix: string, activeKey?: string) {
+/** Closes a rule's open tasks (all of them, or all but `activeKey`); shared with the outreach follow-ups. */
+export async function resolveRule(tx: Prisma.TransactionClient, customerId: string, prefix: string, activeKey?: string) {
   const where = { customerId, status: { not: 'DONE' }, automationKey: { startsWith: prefix, ...(activeKey ? { not: activeKey } : {}) } };
   const tasks = await tx.task.findMany({ where, select: { id: true }, orderBy: { id: 'asc' } });
   // Match manual task updates: lock Task before Reminder, using primary keys.

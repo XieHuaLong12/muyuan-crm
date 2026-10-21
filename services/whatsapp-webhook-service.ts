@@ -69,6 +69,8 @@ export type WhatsAppWebhookResult = {
   statusesUpdated: number;
   /** Newly stored inbound photos, videos, voice notes and documents whose files still need copying. */
   mediaMessageIds: string[];
+  /** Customers with a newly stored message in either direction (phone sends included), for the outreach engine. */
+  messageCustomerIds: string[];
 };
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -148,9 +150,9 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
   const validPhone=canonicalPhone(input.phone,undefined,true);
   const direction = input.direction || 'INBOUND';
   if (direction === 'INBOUND') result.received++; else result.outboundEchoes++;
-  let delta:Pick<WhatsAppWebhookResult,'customerIds'|'matchedCustomers'|'duplicateMessages'|'ambiguous'|'createdCustomers'|'mediaMessageIds'>={customerIds:[],matchedCustomers:0,duplicateMessages:0,ambiguous:0,createdCustomers:0,mediaMessageIds:[]};
+  let delta:Pick<WhatsAppWebhookResult,'customerIds'|'matchedCustomers'|'duplicateMessages'|'ambiguous'|'createdCustomers'|'mediaMessageIds'|'messageCustomerIds'>={customerIds:[],matchedCustomers:0,duplicateMessages:0,ambiguous:0,createdCustomers:0,mediaMessageIds:[],messageCustomerIds:[]};
   await retryTransaction(()=>db.$transaction(async tx => {
-    delta={customerIds:[],matchedCustomers:0,duplicateMessages:0,ambiguous:0,createdCustomers:0,mediaMessageIds:[]};
+    delta={customerIds:[],matchedCustomers:0,duplicateMessages:0,ambiguous:0,createdCustomers:0,mediaMessageIds:[],messageCustomerIds:[]};
     // One short database lock serializes identity resolution across app instances.
     // No provider or AI requests run while holding this lock.
     await tx.$queryRaw(Prisma.sql`SELECT id FROM Setting WHERE id = 'system' FOR UPDATE`);
@@ -210,6 +212,7 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
       messageType: input.messageType, mediaUrl: input.mediaUrl?.startsWith('https://') ? input.mediaUrl : null, mimeType: input.mimeType, fileName: input.fileName, status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT',
       sentAt: input.sentAt, raw: JSON.stringify(input.raw) }, select: { id: true } });
     if (direction === 'INBOUND' && MEDIA_MESSAGE_TYPES.has(input.messageType)) delta.mediaMessageIds.push(stored.id);
+    delta.messageCustomerIds.push(customerId);
     await messageFacts(tx,customerId,input.sentAt,direction);
     if(direction==='INBOUND'&&input.providerOccurredAt){
       await tx.whatsAppConversation.updateMany({where:{id:linked.conversation.id,OR:[{lastCustomerMessageAt:null},{lastCustomerMessageAt:{lt:input.providerOccurredAt}}]},data:{lastCustomerMessageAt:input.providerOccurredAt}});
@@ -219,7 +222,7 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
       await tx.identityAudit.create({data:{entityType:'WHATSAPP_CONSENT',entityId:customerId,actorId:'SYSTEM',reason:'客户明确退订',detail:{messageId:input.id,provider:input.source}}});
     }
   }));
-  result.customerIds.push(...delta.customerIds);result.mediaMessageIds.push(...delta.mediaMessageIds);result.matchedCustomers+=delta.matchedCustomers;result.duplicateMessages+=delta.duplicateMessages;result.ambiguous+=delta.ambiguous;result.createdCustomers+=delta.createdCustomers;
+  result.customerIds.push(...delta.customerIds);result.mediaMessageIds.push(...delta.mediaMessageIds);result.messageCustomerIds.push(...delta.messageCustomerIds);result.matchedCustomers+=delta.matchedCustomers;result.duplicateMessages+=delta.duplicateMessages;result.ambiguous+=delta.ambiguous;result.createdCustomers+=delta.createdCustomers;
 }
 
 export async function applyWhatsAppStatus(id: string, status: string, gsId?: string,account?:{provider:string;accountId:string}) {
@@ -279,7 +282,7 @@ export function validateWhatsAppWebhook(input: unknown) {
 
 async function ingest(input: unknown): Promise<WhatsAppWebhookResult> {
   const result: WhatsAppWebhookResult = { customerIds: [], received: 0, outboundEchoes: 0, createdCustomers: 0,
-    matchedCustomers: 0, duplicateMessages: 0, ambiguous: 0, statusesUpdated: 0, mediaMessageIds: [] };
+    matchedCustomers: 0, duplicateMessages: 0, ambiguous: 0, statusesUpdated: 0, mediaMessageIds: [], messageCustomerIds: [] };
   const root = asObject(input);
   if (!root) throw new HttpError(400, 'Webhook 必须为 JSON 对象');
   if (root.object !== 'whatsapp_business_account') {

@@ -158,7 +158,7 @@ export async function listTemplates(user: Actor, input: unknown) {
   await accessible(customerId, user);
   if (!templatesConfigured()) return { status: 'NOT_CONNECTED' as const, templates: [], suggestion: null, fills: {} as Record<string, VariableFill[]> };
   const [templates, customer, setting] = await Promise.all([approvedTemplates(!!refresh), db.customer.findUniqueOrThrow({ where: { id: customerId },
-    select: { name: true, source: true, sourceDetail: true, productInterest: true, productModel: true, language: true, firstContactAt: true, lastOutboundAt: true,
+    select: { name: true, source: true, sourceDetail: true, productInterest: true, productModel: true, language: true, firstContactAt: true, lastOutboundAt: true, outreachNext: true,
       owner: { select: { name: true } },
       quotations: { where: { sentAt: { not: null } }, orderBy: { sentAt: 'desc' }, take: 1, select: { quoteNumber: true, sentAt: true } },
       orders: { where: { status: { not: 'CANCELLED' } }, orderBy: { orderDate: 'desc' }, take: 1, select: { orderNo: true, estimatedDelivery: true } } } }),
@@ -171,9 +171,14 @@ export async function listTemplates(user: Actor, input: unknown) {
     quote: quote ? { number: quote.quoteNumber, sentAt: new Intl.DateTimeFormat('zh-CN', { timeZone: setting?.timezone ?? 'Asia/Shanghai', month: 'numeric', day: 'numeric' }).format(quote.sentAt!) + ' 发出' } : null,
     order: order ? { number: order.orderNo, eta: order.estimatedDelivery ? english(order.estimatedDelivery) : '' } : null };
   const fills = Object.fromEntries(templates.map(t => [t.id, fillVariables(t, facts)]));
-  // Only a customer nobody has written to yet gets a greeting picked for them.
-  const greeting = !customer.firstContactAt && !customer.lastOutboundAt ? firstTouchTemplate(customer, templates) : null;
-  return { status: 'CONNECTED' as const, templates, suggestion: greeting ? { templateId: greeting.id } : null, fills };
+  // The script the rotation assigned for the next touch wins when it is a registered template: salespeople do not
+  // pick, so the test stays fair. Otherwise only a customer nobody has written to yet gets a greeting picked for them.
+  const assigned = customer.outreachNext ? await db.outreachAssignment.findFirst({ where: { customerId, position: customer.outreachNext, touchId: null },
+    orderBy: { assignedAt: 'desc' }, select: { script: { select: { code: true, templateName: true } } } }) : null;
+  const rotated = assigned?.script.templateName ? templates.find(t => t.name === assigned.script.templateName) : undefined;
+  const greeting = rotated ?? (!customer.firstContactAt && !customer.lastOutboundAt ? firstTouchTemplate(customer, templates) : null);
+  return { status: 'CONNECTED' as const, templates, suggestion: greeting ? { templateId: greeting.id } : null, fills,
+    outreach: assigned ? { position: customer.outreachNext, scriptCode: assigned.script.code, templateId: rotated?.id ?? null } : null };
 }
 
 export const templateSendSchema = z.object({ customerId: z.string().trim().min(1).max(191), templateId: z.string().trim().min(1).max(100),
@@ -195,11 +200,13 @@ export async function sendTemplateMessage(input: unknown, user: Actor) {
   const provider = 'gupshup', providerAccountId = gupshupSource()!, source = normalizeWhatsApp(providerAccountId);
   const destination = await recipientNumber(customer, provider, providerAccountId);
   if (customer.whatsappOptInStatus === 'OPTED_OUT') throw new HttpError(409, '客户已明确退订，请先人工核对后续沟通许可');
+  // Outside the window a template is a touch: 24 hours apart, at most two before the customer answers, none after a stop.
+  await (await import('./outreach-engine-service')).outreachSendGuard(v.customerId, 'TEMPLATE');
 
   let message;
   try {
     message = await db.whatsAppMessage.create({ data: { customerId: v.customerId, requestId: v.requestId, waId: destination, source: provider, providerAccountId,
-      sourcePhone: canonicalPhone(source, undefined, true), destinationPhone: canonicalPhone(destination, undefined, true), direction: 'OUTBOUND', sender: source, content,
+      sourcePhone: canonicalPhone(source, undefined, true), destinationPhone: canonicalPhone(destination, undefined, true), direction: 'OUTBOUND', sender: source, sentById: user.id, content,
       messageType: 'TEMPLATE', status: 'PENDING', sentAt: new Date(), raw: JSON.stringify({ template: { id: template.id, name: template.name, language: template.language } }) } });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

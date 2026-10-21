@@ -87,6 +87,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
   const destination = await recipientNumber(customer, provider, providerAccountId);
   await requireOpenWindow(customerId,user,{provider,accountId:providerAccountId});
   if(customer.whatsappOptInStatus==='OPTED_OUT')throw new HttpError(409,'客户已明确退订，请先人工核对后续沟通许可');
+  await (await import('./outreach-engine-service')).outreachSendGuard(customerId,'FREE');
   const mediaOrigin=process.env.PUBLIC_APP_URL?.replace(/\/$/,'')||origin;
   if(asset && !mediaOrigin)throw new HttpError(503,'附件发送需要可访问的应用地址');
   const kind=asset?mediaKind(asset.mimeType):'text';
@@ -96,7 +97,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
   try {
     message = await db.whatsAppMessage.create({ data: { customerId, requestId, waId: destination, source: provider,providerAccountId,
       sourcePhone:canonicalPhone(source,undefined,true),destinationPhone:canonicalPhone(destination,undefined,true),
-      direction: 'OUTBOUND', sender: source, content, mediaUrl, mimeType:asset?.mimeType, fileName:asset?.fileName, messageType: kind.toUpperCase(), status: 'PENDING', sentAt: new Date(), raw: '{}' } });
+      direction: 'OUTBOUND', sender: source, sentById: user.id, content, mediaUrl, mimeType:asset?.mimeType, fileName:asset?.fileName, messageType: kind.toUpperCase(), status: 'PENDING', sentAt: new Date(), raw: '{}' } });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       const duplicate = await db.whatsAppMessage.findUniqueOrThrow({ where: { requestId } });
@@ -203,5 +204,7 @@ export async function recordAcceptedOutbound(input: { messageId: string; custome
   }));
   await replayWhatsAppReceipts(provider,providerAccountId,providerMessageId);
   await syncCustomerWorkflow(customerId);
+  // The touch record (number, script, sender) exists as soon as the send is accepted; the AI reads it afterwards.
+  await (await import('./outreach-engine-service')).outreachAfterSend(customerId);
   return db.whatsAppMessage.findUniqueOrThrow({where:{id:saved.id}});
 }

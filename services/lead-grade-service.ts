@@ -7,7 +7,7 @@ import { purchases } from '@/lib/constants';
 import { callDeepSeek, deepSeekConfigured } from './deepseek-customer-service';
 
 const GRADE_PROMPT = `你是一家中国家具工厂外贸团队的线索评级助手。我们做 B2B 出口（沙发、床垫、压缩卷包沙发等），客户是海外批发商、进口商、经销商、家具店 / 零售商、品牌、电商卖家，以及酒店、工程、室内设计客户；个人自用的买家不是我们的目标客户。每款起订量线上 ${GRADE_B_MIN_QUANTITY} 件、线下 ${GRADE_A_MIN_QUANTITY} 件。
-评级原则：采购身份是第一道门槛，过了身份再看体量和下单时间。
+评级原则：采购身份是第一道门槛，过了身份再看体量和下单时间。表单选了会来广交会的，按 A（个人自用除外）。数量按「套」填写时，6 套及以上算有体量。
 C 一般：没有企业采购身份——选了个人自用（即使要整柜：自用却要整柜不合常理，按 C）、选了「其他」、或者看不出身份。数量再大也是 C；
 A 优质：有企业采购身份（上面任何一种），并且有体量（首单或每款 ≥ ${GRADE_A_MIN_QUANTITY} 件、区间下限 ≥ ${GRADE_A_MIN_QUANTITY}、整柜或多个货柜、多家门店）且没有说暂不下单；或者有身份、没填数量但 1 个月内下单；
 B 良好：有企业采购身份，但体量偏小或不明、下单时间不近，或者说还在看看；
@@ -77,6 +77,9 @@ function withAi(rule: GradeResult, ai: GradeResult): GradeResult {
  * reviewGradesWithAi() asks the AI again later. A lead nobody can contact, or Meta's test lead, is D without the AI.
  */
 export async function gradeLead(customerId: string, options: { ai?: boolean; timeoutMs?: number } = {}): Promise<GradeResult | null> {
+  // A grade a person set (by hand, or by confirming the AI's suggestion from a reply) is never overwritten.
+  const set = await db.customer.findUnique({ where: { id: customerId }, select: { leadGrade: true, leadGradeReason: true, leadGradeSource: true } });
+  if (set?.leadGradeSource === 'HUMAN' && set.leadGrade) return { grade: set.leadGrade as GradeResult['grade'], reason: set.leadGradeReason, source: 'RULE' };
   const input = await gradeInput(customerId);
   if (!input) return null;
   let result = ruleGrade(input);

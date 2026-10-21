@@ -9,6 +9,7 @@ import { canonicalPhone } from '@/lib/contact-identity';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { e164, storedE164, exactCustomerPhone, matchPhone, sourceKey, webBatch, type WebMessage } from '@/lib/whatsapp-web-sync';
 import { exactCrossSourceMessage } from './whatsapp-dedup-service';
+import { afterResponse } from '@/lib/after-response';
 
 export const tokenInput = z.object({label:z.string().trim().min(1).max(80),accountPhone:z.string().max(32)}).strict();
 const customerSelect = {id:true,name:true,phone:true,whatsapp:true,whatsappNormalized:true,waId:true} as const;
@@ -81,6 +82,7 @@ export async function syncWebMessages(input:unknown,user:Actor,accountPhone:stri
   const list=await customers(user);
   const job=await db.syncJob.create({data:{provider:'WHATSAPP',jobType:'LOCAL_BRIDGE',status:'RUNNING',actorId:user.id}});
   let success=0,skipped=0,failed=0,unmatched=0;
+  const outreachIds=new Set<string>();
   const errors:{sourceMessageId?:string;message:string}[]=[];
   for(const m of messages){
     let crossDuplicate=false;
@@ -105,7 +107,7 @@ export async function syncWebMessages(input:unknown,user:Actor,accountPhone:stri
           status:match.status==='matched'?'IMPORTED':'PENDING',customerId:match.status==='matched'?match.customer.id:null}});
         if(match.status==='matched'&&!crossDuplicate){await tx.whatsAppMessage.create({data:{...dbMessage(m,key,accountPhone,match.customer.id),conversationId:linked.conversation.id}});await messageFacts(tx,match.customer.id,new Date(m.sentAt),m.direction);}
       }));
-      if(crossDuplicate)skipped++;else if(match.status==='matched')success++;else unmatched++;
+      if(crossDuplicate)skipped++;else if(match.status==='matched'){success++;outreachIds.add((match as {customer:{id:string}}).customer.id);}else unmatched++;
     }catch(error){
       if(error instanceof Prisma.PrismaClientKnownRequestError&&error.code==='P2002'){skipped++;continue;}
       failed++;errors.push({sourceMessageId:m.sourceMessageId,message:'消息保存失败'});
@@ -115,6 +117,8 @@ export async function syncWebMessages(input:unknown,user:Actor,accountPhone:stri
   const run=await db.whatsAppSyncRun.create({data:{userId:user.id,accountPhone,success,skipped,failed,unmatched,
     errors:JSON.stringify(errors.slice(0,30))},select:{id:true}});
   await db.syncJob.update({where:{id:job.id},data:{status:failed?'PARTIAL':'OK',completedAt:new Date(),processed:messages.length,succeeded:success,failed,detail:{unmatched,skipped},error:failed?'MESSAGE_SAVE_FAILED':null}});
+  // Phone sends become touch records (matched to scripts by DeepSeek) after the response; the scheduled sweep catches up otherwise.
+  if(outreachIds.size){const ids=[...outreachIds];afterResponse(async()=>(await import('./outreach-engine-service')).processOutreachQuietly(ids));}
   let analysis:unknown={status:'NOT_CONNECTED'};
   if(process.env.DEEPSEEK_API_KEY)try{analysis=await (await import('./customer-intelligence-service')).processPendingIntelligence({limit:3},user);}catch{analysis={status:'FAILED_RETRYABLE'};}
   return {runId:run.id,success,skipped,failed,unmatched,errors,analysis};
