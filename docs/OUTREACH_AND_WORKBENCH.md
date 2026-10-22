@@ -54,7 +54,8 @@
 | `services/outreach-ai-service.ts` | 两段 DeepSeek 提示词与调用、规则兜底 |
 | `services/outreach-review-service.ts` | 人工复核列表、改判与修改记录、等级建议确认、手动改等级 |
 | `services/outreach-analytics-service.ts` | 看板数据、等级矩阵、每周一结论、改判率、非标准话术占比 |
-| `services/workbench-service.ts` | 工作日历：三层重心、今日事项生成与顺延、时间块、重心信号、精力分配、周 / 月视图、预置数据 |
+| `services/workbench-service.ts` | 工作日历：三层重心、今日事项生成与顺延、时间块、重心信号、精力分配、预置数据（2026-10-22 起周 / 月视图改为每日复盘，见 §11） |
+| `services/daily-review-service.ts` | 每日复盘、明日安排、复盘记录、21:30 复盘提醒（§11） |
 | `app/api/outreach/**`、`app/api/workbench/**` | 路由（只鉴权 + 转发） |
 | `app/workbench/`、`app/outreach/`（含 `library`、`review`） | 页面 |
 | `components/workbench/*`、`components/outreach/*` | 界面 |
@@ -159,6 +160,8 @@
 | `FocusGoal` | 月重心 / 周重心：`level`（MONTH / WEEK）、`periodKey`（`2026-10` / 周一日期 `2026-10-19`）、`title`、`target`（目标值文字）、`progress`（0–100）、`parentId`（周重心必填，关联月重心）、`status`（周重心完成情况：未开始 / 进行中 / 已完成）、`category`、`sort`。每层每期最多 3 条（服务层校验）。全公司共用，管理员编辑 |
 | `WorkItem` | 日历事项：`userId`、`date`、`title`、`detail`、`kind`（`MANUAL` / `FOCUS` 周重心任务 / `FIXED` 固定事项 / `TIMEBLOCK` 时间块 / `EVENT` 重点事件）、`category`（`CONVERT` 转化 / `FRONTEND` 前端 / `DATA` 数据）、`focusId`、`startTime` / `endTime`、`endDate`（多日事件）、`pin`（1 放进三件事 / -1 移出 / 0 自动）、`status`、`doneAt`、`carryCount`、`originalDate`、`sourceKey`（固定事项、时间块去重：`@@unique([userId, date, sourceKey])`） |
 | `TimeBlock` | 每日时间块模板：`userId`、`startTime`、`endTime`、`title`、`category`、`weekdays`、`sort`、`active` |
+
+每日复盘新增的表和列见 §11.4（迁移 `20261022090000_daily_review`）。
 | `OutreachReport` | 每周一话术结论：`weekStart` UNIQUE、`lines` Json、`generatedAt` |
 
 ### 4.9 可调参数（`Setting.outreachConfig`，代码默认值）
@@ -207,7 +210,7 @@
 | `GET /api/outreach/review` | 销售看自己的，管理员看全部 | 人工复核列表 |
 | `POST /api/outreach/review/touch/[id]` · `.../reply/[id]` | 同上 | 改判，必填原因，写修改记录 |
 | `POST /api/outreach/grade` | 同上 | 确认 / 忽略等级建议、手动改等级 |
-| `GET /api/workbench?view=day|week|month&date=` | 管理员 | 日历数据 |
+| `GET /api/workbench` | 管理员 | 今天的数据（2026-10-22 起只有今天；复盘与记录的接口见 §11.5） |
 | `POST /api/workbench/plan` | 管理员 | 生成当天计划（固定事项、时间块、顺延，幂等），页面打开时调用 |
 | `POST /api/workbench/items` · `PATCH/DELETE /api/workbench/items/[id]` | 管理员 | 事项增改、完成、放进 / 移出三件事 |
 | `POST /api/workbench/focus` · `PATCH/DELETE /api/workbench/focus/[id]` | 管理员 | 月 / 周重心 |
@@ -247,6 +250,7 @@
 - 今日三件事的顺序：紧急事项（新线索超过 5 分钟未首回；A 类或高意向回复超过 2 小时未处理）→ 重心信号触发的事项 → 本周重心下当天的任务 → 固定事项（周一广告检查、周三查看话术测试进度、周五漏斗复盘与定下周重心、每月最后一个周五定下月重心）。可手动「放进三件事 / 移出」。
 - 没做完的事项第二天自动出现，显示「顺延 n 次」。
 - 周视图：周一到周日 7 列事项 + 本周重心 + 精力分配；月视图：日历格子，每格显示当天的重点事件（如广交会二期）与固定事项。
+- **2026-10-22 改版**：周 / 月视图换成「今天 · 复盘 · 记录」三页，见 §11。
 
 **话术效果看板**（按需求线框图）
 
@@ -341,7 +345,7 @@
 
 | 页面 | 地址 | 谁用 |
 | --- | --- | --- |
-| 工作日历（管理员首页） | `/workbench`（`?view=week` / `?view=month`） | 管理员 |
+| 工作日历（管理员首页） | `/workbench` 今天 · `/workbench/review` 复盘 · `/workbench/history` 记录（§11） | 管理员 |
 | 话术效果 | `/outreach` | 全员（话术明细里销售只看到自己的客户） |
 | 话术库 | `/outreach/library` | 全员查看，管理员维护与调参数 |
 | 人工复核 | `/outreach/review` | 销售看自己的客户，管理员看全部 |
@@ -361,3 +365,77 @@
 - 话术变量 `{国家}` 取客户档案里的国家字段，档案写的是中文时会带出中文国名，发送前请核对（复制话术时可见）。
 - 公司业务号在手机上（共存模式）发出的消息，系统分不出是谁按的发送，发送人记为客户负责人；本机同步（WhatsApp Web）按授权号码对应到业务员。
 - 「同一线索模板最多 2 条」从客户上一次有效回复之后计算；对话中、沉睡状态下发模板不算触达，不受这条限制。
+
+---
+
+## 11. 工作日历改版：每日复盘与明日安排（2026-10-22）
+
+> 需求来源：@老大 看了 `/workbench` 月视图后提出「太呆板，主要想做每日复盘和明日的工作安排，填写过的都要留痕，以便于效率和进步」。先出设计图审核，确认后开发。确认时补充的三条决定：**周末也计入完成率**（不定期单休）；**每晚 21:30 推送复盘提醒**；**复盘内容和明日规划都要留记录，只有自己能看**。
+
+### 11.1 需求理解
+
+每天形成一个闭环：早上打开工作台看到今天的三件事 → 白天勾选完成 → 晚上复盘（每件事完成 / 顺延 / 不做了及原因，复盘三问，精力和专注评分）并排好明天的三件事 → 第二天早上直接出现在首页。所有填写都留痕：复盘提交后仍可修改，但每次修改都记下改了什么、改之前、改之后；没复盘的日子由系统第二天按勾选记录；重心进度每次变化都记一笔。记录页按月回看每天做了什么、完成率、没做完的原因、改进有没有做到。
+
+### 11.2 对 LVANJU BOS 整体的影响
+
+只在管理工作空间的「工作台 · 工作日历」内部改动，不影响其他 OS 的边界。原来的日 / 周 / 月三视图换成今天 / 复盘 / 记录三页；三层重心、固定节奏、时间块、重心信号、预置数据全部保留并接到新页面。复盘属于个人数据：作用域固定为本人，其他管理员也看不到。
+
+### 11.3 涉及模块
+
+| 文件 | 变化 |
+| --- | --- |
+| `services/workbench-service.ts` | 今天的数据改为固定的三件事（`topOrder`）、紧急事项与重心信号单独返回、复盘状态和统计；`planDay` 先记下没复盘的日子，再顺延、排固定事项与时间块、定今天三件事；重心支持数字目标与进度记录；`stepFocus` |
+| `services/daily-review-service.ts`（新） | 复盘页数据、草稿 / 提交 / 提交后修改（留痕）、补写、休息、记录页、21:30 提醒 |
+| `lib/workbench.ts` | 复盘规则（连续复盘、完成率、修改对比、结果与原因、提醒时间），纯函数可测 |
+| `app/workbench/{page,review/page,history/page}.tsx` | 三个页面 |
+| `components/workbench/{WorkbenchToday,DailyReview,ReviewHistory,shared}.tsx` | 界面；删除 `WorkbenchCalendar.tsx` |
+| `app/api/workbench/{review,review/rest,history,focus/[id]/progress}` | 新接口（只鉴权 + 转发） |
+| `app/api/cron/{meta-leads,workflows}`、`app/api/workflows/sync` | 顺带发 21:30 复盘提醒 |
+| `app/workbench.css` | 新样式（`.bos-wb-*` / `.bos-dr-*` / `.bos-rec-*`），移除日历格子样式 |
+
+### 11.4 数据变化（迁移 `20261022090000_daily_review`，只加不改）
+
+| 表 / 列 | 说明 |
+| --- | --- |
+| `DailyReview`（新） | 每人每天一条，`@@unique([userId, date])`。`status`：`DRAFT` 草稿 / `SUBMITTED` 已提交 / `REST` 休息 / `MISSED` 没复盘（第二天开工时按勾选记下）。`items`（当天三件事和结果快照：完成 / 顺延 / 不做了、原因、补充）、`done` / `planned` / `carried` / `dropped`、`wins` / `problems` / `improvement`（复盘三问）、`lastImprovement`（上次的改进做到了吗：`YES` / `PARTLY` / `NO`）、`energy` / `focusLevel`（1–5）、`plan`（排好的明天）、`metrics`（当天数据存档）、`submittedAt`、`remindedAt` |
+| `DailyReviewRevision`（新） | 每次提交、修改、标为休息一行，只增不改：`kind`（`SUBMIT` / `EDIT` / `REST`）、`changes`（`[{ field, label, before, after }]`） |
+| `FocusProgressLog`（新） | 重心进度每次变化一行，只增不改：`focusId`、`userId`、`date`、`fromValue`、`toValue`、`target` |
+| `WorkItem.topOrder`（可空） | 当天三件事的位置 1–3；做完仍留在三件事里 |
+| `FocusGoal.targetValue`（可空）· `currentValue`（默认 0）· `unit`（默认空） | 数字目标，如「10 位」；填了目标数时进度 = 当前数 ÷ 目标数 |
+
+**同时修正的问题**：`WorkItem.status` 是 `VarChar(8)`，原代码删除系统排的事项（固定事项、时间块）时写入 9 个字符的 `DISMISSED`，MySQL 会报「值太长」导致删除失败（所以库里不存在这个值）。改为 `DROPPED`（不做了 / 已移除），不改列。
+
+受保护语义核对：不触碰 §1.1 任何约束；`WorkItem` 的 `@@unique([userId, date, sourceKey])` 去重保持；`Setting` 单例不新增列。
+
+### 11.5 API 变化
+
+| 接口 | 权限 | 说明 |
+| --- | --- | --- |
+| `GET /api/workbench` | 管理员 | 今天：重心、三件事、紧急事项、重心信号、时间块、其他事项、复盘状态、昨天完成、连续复盘、本周完成率。不再接受 `view` / `date`（只有本页面调用） |
+| `GET /api/workbench/review?date=` | 管理员（本人） | 某天的复盘（默认今天，可补写 30 天内） |
+| `POST /api/workbench/review` | 管理员（本人） | `{ date, submit, items[], lastImprovement, wins, problems, improvement, energy, focusLevel, plan[] }`：草稿 / 提交 / 提交后修改 |
+| `POST /api/workbench/review/rest` | 管理员（本人） | `{ date }` 标为休息 |
+| `GET /api/workbench/history?month=&q=` | 管理员（本人） | 复盘记录 |
+| `POST /api/workbench/focus/[id]/progress` | 管理员 | `{ delta: 1 | -1 }` 重心进度加一 / 减一 |
+| `POST /api/workbench/items`、`PATCH /api/workbench/items/[id]` | 管理员 | `pin: 1` 放进当天三件事（满 3 件返回 409），`pin: -1` 移出；改日期即移出原来那天的三件事 |
+| `PATCH /api/workbench/focus/[id]` | 管理员 | 新增可选 `targetValue` / `currentValue` / `unit`；进度变化写进度记录 |
+
+全部保持 `{success, data}` 信封；新增入参均可选。
+
+### 11.6 规则
+
+- **今天的三件事**：头天晚上复盘排好的（第 1–3 件）；没排的话，开工时按原来的顺序（重心任务 → 固定事项 → 手动，顺延多的优先）定下 3 件。紧急事项（新线索超时、高意向等回复）在三件事上方红色置顶，处理完自动消失；重心信号放在右侧「数据提醒」。
+- **复盘**：完成的默认「完成」，没做完的默认「顺延到明天」，可改「不做了」，并可选原因（时间不够 / 被打断 / 优先级变了 / 卡住了 / 其他）。同一件事顺延到第 2 次时提示拆小或放上午。顺延的事自动排进明天；明天前 3 件是三件事，其余进「其他事项」。草稿在停止输入 1.5 秒后自动保存。
+- **提交与留痕**：提交时把结果写回事项（完成留在今天；不做了标 `DROPPED`；顺延移到明天、顺延次数 +1），创建明天的新事项；当晚修改会重新套用并记录改动。过了当天，结果和明日安排锁定，原因、补充、复盘三问和评分仍可改，同样留痕。
+- **没复盘的日子**：第二天开工时系统把那天的三件事按勾选记为 `MISSED`（完成 / 不做了 / 顺延），记录页用虚线标出，30 天内可补写（结果保持系统记录）。
+- **完成率**：三件事完成数 ÷ 件数，统计已提交和系统记下的日子；**周末照常计入**；标为休息的日子不计入。
+- **连续复盘**：提交了复盘的日子连续计数；休息日不打断也不增加；没复盘（系统记下或草稿没提交）中断；什么都没有的一天（没标休息的单休）允许 1 天，连续 2 天中断。
+- **21:30 提醒**：每天 21:30 起（周末也发），给近 14 天用过工作台、当天还没提交也没标休息的管理员推一条手机通知，一天一次（`DailyReview.remindedAt` 记录已发），点开进复盘页。由每 5 分钟的 `/api/cron/meta-leads`、每小时的 `/api/cron/workflows` 和 CRM 打开时的同步顺带发出，不需要新增定时任务。手机需要在 CRM 里开启过通知。
+- **只有自己能看**：复盘、修改记录、复盘记录的所有查询都按当前登录人过滤，其他管理员（包括老板账号）看不到；销售角色无权访问工作日历。
+
+### 11.7 实施与验证
+
+- 测试：`tests/workbench.test.ts`（规则：连续复盘、完成率、修改对比；今天视图、开工排三件事、没复盘的日子被记下、删除系统事项）、`tests/daily-review.test.ts`（草稿、提交、明日安排、当晚修改留痕、第二天首页、补写、搜索、他人不可见、休息日、21:30 提醒只发一次、周末也发）。
+- 上线：部署即执行加性迁移 `20261022090000_daily_review`，无手工步骤；回滚应用版本时保留新表与新列即可。
+- 设计图与实现的差异：页头标题按 BOS 规范用页签名「工作日历」，日期与「昨天完成 · 连续复盘 · 本周完成率」放在描述里；记录页的时间范围用按月翻页（含与上月对比）代替「本周 / 本月 / 近 90 天 / 全部」切换，搜索覆盖全部时间；「今天的数据」只放 BOS 有数据来源的 4 项（新线索、平均首回、客户回复、发出报价），设计图里的「确认到厂」暂无数据来源，未做。
+
