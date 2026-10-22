@@ -468,7 +468,7 @@ export function focusSignals(input: SignalInput, config: OutreachConfig): FocusS
   if (done >= config.energyMinItems) {
     for (const category of keys(CATEGORIES)) {
       const actual = input.energy[category] / done * 100, target = config.energyTargets[category];
-      if (Math.abs(actual - target) > config.energyDeviationPoints) signals.push({ key: `energy:${category}`, category, href: '/workbench?view=week',
+      if (Math.abs(actual - target) > config.energyDeviationPoints) signals.push({ key: `energy:${category}`, category, href: '/workbench/history',
         title: '精力分配偏离', focus: `精力：${CATEGORIES[category]}${actual > target ? '偏多' : '偏少'}，回到 ${config.energyTargets.CONVERT} / ${config.energyTargets.FRONTEND} / ${config.energyTargets.DATA}`,
         detail: `本周已完成事项中${CATEGORIES[category]}占 ${actual.toFixed(0)}%，目标 ${target}%` });
     }
