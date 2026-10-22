@@ -22,6 +22,9 @@ export async function POST() {
       await checkAnomalies();
       await deliverDailyBrief();
       if (user.role !== 'ADMIN') return;
+      // The 21:30 reminder to review the day.
+      const { deliverReviewReminders } = await import('@/services/daily-review-service');
+      await deliverReviewReminders();
       const { gradeUngradedLeads, reviewGradesWithAi } = await import('@/services/lead-grade-service');
       await gradeUngradedLeads();
       await reviewGradesWithAi();
