@@ -6,6 +6,7 @@ import { dayKey, localDate } from '@/lib/time';
 import { CUSTOMER_TYPES, OPEN_STATUSES, PROSPECT_STATUSES, mailability, prospectStatusEnum, rankEmails, readRadarConfig, sendable, type ProspectStatus } from '@/lib/radar';
 import { deepSeekConfigured } from './deepseek-customer-service';
 import { verifierConfigured } from './radar-scoring-service';
+import { stopSequence } from './radar-queue-service';
 
 /** The radar's card wall and list (docs/CUSTOMER_RADAR_COLD_EMAIL.md §6). Administrators only: sales meet these companies once they reply. */
 
@@ -94,7 +95,25 @@ const action = z.discriminatedUnion('action', [
   z.object({ action: z.literal('contacted'), note: z.string().trim().max(500, '说明最多 500 字').default('') }),
   z.object({ action: z.literal('rescore') }),
   z.object({ action: z.literal('notes'), notes: z.string().trim().max(1000, '备注最多 1000 字') }),
+  z.object({ action: z.literal('erase') }),
 ], { errorMap: () => ({ message: '操作无效' }) });
+
+/**
+ * Forgets a company's contact details and every text about it. The addresses are blocked first (`reason`), so a
+ * company that asked to be forgotten is never mailed again; the company row stays for the counts.
+ */
+export async function eraseProspectData(prospectId: string, client: Prisma.TransactionClient, reason: 'MANUAL' | 'UNSUBSCRIBE') {
+  const emails = await client.radarEmail.findMany({ where: { prospectId } });
+  for (const e of emails) {
+    if (e.address.startsWith('erased-')) continue;
+    await client.radarSuppression.upsert({ where: { scope_value_reason: { scope: 'EMAIL', value: e.address, reason } }, update: {},
+      create: { scope: 'EMAIL', value: e.address, reason, note: reason === 'UNSUBSCRIBE' ? '对方要求删除数据' : '数据已按保留期限清理，保留禁发' } });
+    await client.radarEmail.update({ where: { id: e.id }, data: { address: `erased-${e.id}@invalid`, foundOn: '', verifyDetail: '' } });
+  }
+  await client.radarSend.updateMany({ where: { prospectId }, data: { toAddress: 'erased@invalid', body: '', opening: '', subject: '' } });
+  await client.radarReply.updateMany({ where: { prospectId }, data: { rawText: '', text: '', fromName: '', fromAddress: 'erased@invalid', subject: '', summary: '', extracted: Prisma.DbNull, aiRaw: Prisma.DbNull } });
+  await client.radarProspect.update({ where: { id: prospectId }, data: { siteText: null, siteFacts: Prisma.DbNull, notes: '', whatsapp: '', socials: Prisma.DbNull } });
+}
 
 /** Statuses a person may move a prospect out of by hand; once mail is queued the queue decides. */
 const HAND_STATUSES = ['NEW', 'NO_EMAIL', 'CONTACTED'];
@@ -123,6 +142,15 @@ export async function updateProspect(id: string, input: unknown, user: Actor) {
     await guarded(['EXCLUDED'], { status: mailability(p.emails) === 'NONE' ? 'NO_EMAIL' : 'NEW', statusAt: now, excludedReason: '' });
   } else if (v.action === 'contacted') {
     await guarded(['NEW', 'NO_EMAIL'], { status: 'CONTACTED', statusAt: now, ...(v.note ? { notes: [p.notes, v.note].filter(Boolean).join('\n').slice(0, 1000) } : {}) });
+  } else if (v.action === 'erase') {
+    // 对方要求删除数据: stop anything running, block the company, forget the details.
+    await db.$transaction(async tx => {
+      for (const seq of await tx.radarSequence.findMany({ where: { prospectId: id, status: { in: ['ACTIVE', 'PAUSED'] } }, select: { id: true } })) await stopSequence(tx, seq.id, 'STOPPED', 'ERASED', 'MANUAL');
+      if (p.domain) await tx.radarSuppression.upsert({ where: { scope_value_reason: { scope: 'DOMAIN', value: p.domain, reason: 'UNSUBSCRIBE' } }, update: { expiresAt: null },
+        create: { scope: 'DOMAIN', value: p.domain, reason: 'UNSUBSCRIBE', note: '对方要求删除数据', createdById: user.id } });
+      await eraseProspectData(id, tx, 'UNSUBSCRIBE');
+      await tx.radarProspect.update({ where: { id }, data: { status: p.customerId ? p.status : 'UNSUBSCRIBED', statusAt: now, excludedReason: '对方要求删除数据' } });
+    });
   } else if (v.action === 'rescore') {
     await db.radarProspect.update({ where: { id }, data: { scoredAt: null, scoreAttempts: 0, scoreError: '' } });
   } else {

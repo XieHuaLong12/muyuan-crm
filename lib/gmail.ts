@@ -7,9 +7,11 @@ import { createHash } from 'node:crypto';
  * PERMANENT (this message can never go, e.g. a malformed recipient).
  */
 
-export const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/gmail.readonly'];
+/** Sending, reading replies, and the domain's spam-report rate in Postmaster Tools. */
+export const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/postmaster.readonly'];
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me';
+const POSTMASTER = 'https://gmailpostmastertools.googleapis.com/v1/domains';
 
 export type GmailErrorKind = 'AUTH' | 'LIMIT' | 'TEMPORARY' | 'PERMANENT';
 export class GmailError extends Error {
@@ -122,4 +124,19 @@ export async function inboxHistory(token: string, startHistoryId: string) {
 export async function listInbox(token: string, query: string) {
   const body = await call<{ messages?: { id: string }[] }>(`${API}/messages?${new URLSearchParams({ q: query, labelIds: 'INBOX', maxResults: '200' })}`, { headers: auth(token) });
   return (body.messages ?? []).map(m => m.id);
+}
+
+/**
+ * Postmaster Tools: the share of a domain's mail to Gmail users that they reported as spam on one day (0–1), or null
+ * when Gmail has no data for that day — it only reports domains that send a large daily volume. The Google account
+ * must have verified the domain in Postmaster Tools (or been added there as a user); otherwise Google answers 403.
+ */
+export async function postmasterSpamRatio(token: string, domain: string, day: string) {
+  try {
+    const stats = await call<{ userReportedSpamRatio?: number }>(`${POSTMASTER}/${encodeURIComponent(domain)}/trafficStats/${day.replace(/-/g, '')}`, { headers: auth(token) });
+    return typeof stats.userReportedSpamRatio === 'number' ? stats.userReportedSpamRatio : null;
+  } catch (error) {
+    if (error instanceof GmailError && error.status === 404) return null;
+    throw error;
+  }
 }

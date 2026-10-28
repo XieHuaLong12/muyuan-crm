@@ -13,3 +13,10 @@ export function gmailMessage(m: { id: string; threadId: string; from: string; su
   ];
   return { id: m.id, threadId: m.threadId, payload: { mimeType: 'multipart/mixed', headers: Object.entries(headers).map(([name, value]) => ({ name, value })), parts } };
 }
+
+/** Runs with these environment variables set, then puts the previous values back. */
+export async function withEnv<T>(values: Record<string, string>, run: () => Promise<T>) {
+  const saved = { ...process.env };
+  Object.assign(process.env, values);
+  try { return await run(); } finally { for (const key of Object.keys(values)) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; } }
+}

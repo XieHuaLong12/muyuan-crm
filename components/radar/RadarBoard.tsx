@@ -136,6 +136,7 @@ export function RadarBoard({ data }: { data: RadarData }) {
           {row.scoreParts && <div className="bos-radar-parts">{(Object.keys(SCORE_MAX) as (keyof typeof SCORE_MAX)[]).map(key => <Part key={key} label={SCORE_LABELS[key]} value={row.scoreParts?.[key] ?? 0} max={SCORE_MAX[key]} />)}</div>}
           {row.aiReason && <p className="bos-radar-reason">{row.aiReason}</p>}
           <p className="bos-radar-reason">{row.keyword && `关键词「${row.keyword}」· `}{dateText(row.discoveredAt)} 入库{row.website && <> · <a href={row.website.startsWith('http') ? row.website : `https://${row.website}`} target="_blank" rel="noreferrer noopener">官网 <ExternalLink size={11} aria-hidden="true" /></a></>}</p>
+          <Button variant="ghost" disabled={busy === row.id} onClick={() => { if (window.confirm(`确定删除「${row.name}」的联系人和全部邮件正文？地址会永久留在禁发名单里，删除后不能恢复。${row.status === 'IN_BOS' ? '客户库里的客户档案不会改动，需要时在客户库里另外处理。' : ''}`)) void act(row, { action: 'erase' }, `${row.name} 的数据已删除，地址已永久禁发`); }}>对方要求删除数据</Button>
         </details>
         {actions(row)}
       </Card>)}</div>

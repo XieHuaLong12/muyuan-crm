@@ -119,8 +119,9 @@ tests/                  核心指标与边界单元测试
 | 管理员 | 任务 | 团队任务 `/tasks` |
 | 管理员 | 订单 | 订单 `/orders` · 产品库 `/products` · 报价单 `/products/quotes`（含报价设置）· 运费库 `/products/freight` · 利润 `/products/margin` |
 | 管理员 | 广告与线索 | 广告效果 `/analytics/ads` · 会话质量 · 丢单原因 · 数据质量 · 线索接入 `/growth/intake` |
+| 管理员 | 客户雷达 | 雷达客户 `/radar` · 发送队列 `/radar/queue` · 待复核 `/radar/review` · 模板 `/radar/templates` · 开发信效果 `/radar/stats` |
 | 管理员 | 团队 | 销售业绩与账号 `/team` · 目标 `/targets` · 沟通监督 `/communication` |
-| 管理员 | 设置 | 公司设置 `/settings` · 集成与接入 `/settings/integrations`（表单询盘、Meta、WhatsApp 与排查工具） |
+| 管理员 | 设置 | 公司设置 `/settings` · 集成与接入 `/settings/integrations`（表单询盘、Meta、WhatsApp 与排查工具）· 客户雷达 `/settings/radar`（发信邮箱、关键词 × 城市、国家与时段、发信规则、禁发名单） |
 | 销售 | 今日工作 | 今日跟进 `/sales`（待首联、到期跟进与到期待办，按截止时间排序）· 全部待办 `/tasks` |
 | 销售 | 消息 | WhatsApp 消息中心 `/messages`（自己负责的客户；「待首联」列出分配后还没联系的客户，点开即发首条模板） |
 | 销售 | 我的客户 | 客户列表与档案 `/customers` · 销售看板 `/crm` |
@@ -249,6 +250,16 @@ Supabase 可先作为托管 PostgreSQL 使用；Supabase Auth/RLS 不是自动�
 ## 下一步建议
 
 先加入每日数据库备份、员工停用与密码修改、软删除恢复、订单更正审计，再接入实际 Facebook/官网询盘。数据量增长后升级 PostgreSQL 与服务端分页，最后考虑报价单/PI和自动提醒。
+
+## 2026-10-28 更新：客户雷达（Google 地图 + 开发信）
+
+管理员的新分区「客户雷达」：VPS 上的爬虫按「关键词 × 城市」抓 Google 地图上的家具店、设计公司和批发商，推进雷达库；系统去重、跳过客户库已有的公司，DeepSeek 按官网评分（A、B、C 级），验证邮箱。管理员在卡片墙上选公司「加入发送队列」，系统用 3 个新域名的 Gmail 邮箱，按客户当地工作时段、预热加量、随机间隔发 3 封模板信；收到回复后先按规则筛掉退信和自动回复，其余由 DeepSeek 判断，有效回复推进客户库（来源「主动开发」），由负责的销售接手。「开发信效果」页每周看退信率、回复率和有效回复，比较模板版本。
+
+- 设计与上线步骤：[客户雷达设计文档](docs/CUSTOMER_RADAR_COLD_EMAIL.md)（第 9 节是代码之外要准备的事，第 10 节是各阶段的上线步骤）；指标口径见 [指标口径](docs/METRICS.md)；爬虫见 `extensions/radar-crawler/README.md`。
+- 红线（PROJECT_RULES §0.5.4）：「加入发送队列」就是人工发送这几封固定模板；AI 写的开头每一条都要人工通过，这条不能关；上线后两周内第 1 封整封审核，有效回复也先人工确认再推进客户库。
+- 环境变量：`RADAR_INGEST_SECRET`（爬虫密钥）、`EMAIL_VERIFY_PROVIDER` + `EMAIL_VERIFY_API_KEY`（邮箱验证）、`GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET`（连接发信邮箱）、`RADAR_SEND_ENABLED=true`（预热完成后才设，之前只排队不发信）。DeepSeek 沿用 `DEEPSEEK_API_KEY`。
+- 定时任务：Hostinger Cron 每分钟 `POST /api/cron/radar`（请求头 `x-cron-secret`，沿用 `META_SYNC_SECRET`），包括收信、发信、评分、验证、08:00 小结、投诉率和数据清理。
+- 升级只追加 3 个迁移：`20261028090000_radar_prospects`、`20261028120000_radar_sending`、`20261028150000_radar_replies`；雷达数据在独立的 `Radar*` 表里，客户表没有新列。回滚应用时保留新表和新列。
 
 ## 2026-09-26 更新：Meta 广告数据与表单目录同步
 

@@ -16,6 +16,7 @@ const radarTabs = [
   { href: '/radar/queue', label: '发送队列' },
   { href: '/radar/review', label: '待复核' },
   { href: '/radar/templates', label: '模板' },
+  { href: '/radar/stats', label: '开发信效果' },
 ] as const;
 
 /** Script effectiveness pages (docs/OUTREACH_AND_WORKBENCH.md); everyone sees them, only administrators edit the library. */

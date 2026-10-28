@@ -14,13 +14,9 @@ import { runSender } from '../services/radar-sender-service';
 import { connectMailbox, mailboxConnectUrl, updateMailbox } from '../services/radar-mailbox-service';
 import { addSuppression, listSuppressions } from '../services/radar-suppression-service';
 import { deleteTestCustomers } from './identity-test-cleanup';
+import { withEnv } from './radar-test-helpers';
 
 const actorOf = (u: { id: string; name: string; email: string; role: string }) => ({ id: u.id, name: u.name, email: u.email, role: u.role });
-async function withEnv<T>(values: Record<string, string>, run: () => Promise<T>) {
-  const saved = { ...process.env };
-  Object.assign(process.env, values);
-  try { return await run(); } finally { for (const key of Object.keys(values)) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; } }
-}
 const FR = DEFAULT_RADAR_CONFIG.countries.FR;
 const decodeQp = (text: string) => Buffer.from(text.replace(/=\r\n/g, '').replace(/=([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16))), 'latin1').toString('utf8');
 

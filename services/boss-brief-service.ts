@@ -228,7 +228,7 @@ async function makeBrief(now: Date, timeoutMs: number) {
  * Claims a once-a-day action (a pushed brief, a lead-drop alert) by its key, so the scheduled jobs and every open
  * CRM can call this freely: only the first caller of the day gets true.
  */
-async function claimOnce(key: string, date: string, timezone: string) {
+export async function claimOnce(key: string, date: string, timezone: string) {
   if (await db.dailyAdInsight.findUnique({ where: { reportKey: key }, select: { id: true } })) return false;
   try {
     await db.dailyAdInsight.create({ data: { reportKey: key, reportDate: new Date(`${date}T00:00:00Z`), timezone, evidence: {}, analysis: {}, model: 'marker' } });

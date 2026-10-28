@@ -13,14 +13,9 @@ import { runSender } from '../services/radar-sender-service';
 import { decideReply, pollInboxes, processReplies, reviewReplies, sweepSequences } from '../services/radar-inbox-service';
 import { pushReplyToBos } from '../services/radar-bos-service';
 import { deleteTestCustomers } from './identity-test-cleanup';
-import { gmailMessage } from './radar-test-helpers';
+import { gmailMessage, withEnv } from './radar-test-helpers';
 
 const actorOf = (u: { id: string; name: string; email: string; role: string }) => ({ id: u.id, name: u.name, email: u.email, role: u.role });
-async function withEnv<T>(values: Record<string, string>, run: () => Promise<T>) {
-  const saved = { ...process.env };
-  Object.assign(process.env, values);
-  try { return await run(); } finally { for (const key of Object.keys(values)) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; } }
-}
 const FR = DEFAULT_RADAR_CONFIG.countries.FR;
 
 test('radar replies: matched, screened, analysed, pushed into the customer center once; follow-ups stop; sequences end', async t => {
