@@ -1,0 +1,64 @@
+/* 客户雷达 · 开发信（docs/CUSTOMER_RADAR_COLD_EMAIL.md）。只用 BOS 既有 token 与状态色，不新增颜色变量。 */
+.bos .bos-radar{display:grid;gap:20px;min-width:0}
+.bos .bos-radar .bos-page-header{margin-bottom:0}
+.bos .bos-radar h2{font-size:17px}
+.bos .bos-radar-notice{display:flex;gap:8px;align-items:flex-start;padding:10px 14px;border-radius:12px;background:#faf1e6;color:#85521b;font-size:13px;line-height:1.6}
+.bos .bos-radar-notice a{text-decoration:underline}
+.bos .bos-radar-message{font-size:13px;color:var(--bos-green);background:#edf4ef;border-radius:12px;padding:10px 14px}
+.bos .bos-radar-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) minmax(0,1.6fr) auto;gap:12px;align-items:end}
+.bos .bos-radar-filters>label,.bos .bos-radar-field{display:grid;gap:4px;font-size:12px;color:#6e6e73;min-width:0}
+.bos .bos-radar-filters>.bos-radar-check{display:flex;align-items:center;gap:6px;min-height:40px;white-space:nowrap}
+.bos .bos-radar-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;font-size:13px;color:#6e6e73}
+.bos .bos-radar-toggle{display:inline-flex;border:1px solid var(--bos-border);border-radius:12px;padding:3px;background:#fff}
+.bos .bos-radar-toggle button{border:0;background:transparent;border-radius:9px;padding:6px 12px;font-size:13px;color:#6e6e73;display:inline-flex;align-items:center;gap:6px;transition:background .16s}
+.bos .bos-radar-toggle button[aria-pressed=true]{background:#edf4ef;color:var(--bos-green);font-weight:600}
+.bos .bos-radar-wall{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.bos .bos-radar-card{display:flex;flex-direction:column;gap:10px;padding:20px;transition:transform var(--motion-fast,200ms) var(--motion-ease,ease),box-shadow var(--motion-fast,200ms) var(--motion-ease,ease),opacity var(--motion-base,340ms) var(--motion-ease,ease)}
+.bos .bos-radar-card:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.05)}
+.bos .bos-radar-card.is-leaving{opacity:0;transform:translateY(-6px) scale(.96)}
+.bos .bos-radar-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bos .bos-radar-grade{display:inline-flex;align-items:baseline;gap:6px;font-weight:600;font-size:13px;color:var(--bos-primary)}
+.bos .bos-radar-grade b{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;background:#f1f1f3;font-size:14px}
+.bos .bos-radar-grade.is-a b{background:#edf4ef;color:var(--bos-green)}
+.bos .bos-radar-grade.is-b b{background:#f5f5f7;color:var(--bos-primary)}
+.bos .bos-radar-grade.is-c b{background:#f5f5f7;color:#86868b}
+.bos .bos-radar-grade small{font-weight:400;color:#86868b;font-size:12px}
+.bos .bos-radar-card h3{font-size:16px;line-height:1.4;overflow-wrap:anywhere}
+.bos .bos-radar-meta{font-size:13px;color:#6e6e73;line-height:1.6}
+.bos .bos-radar-products{font-size:13px;line-height:1.6;color:var(--bos-primary)}
+.bos .bos-radar-fact{font-size:13px;line-height:1.6;color:#3a3a3c;padding:8px 10px;border-radius:10px;background:#f5f5f7}
+.bos .bos-radar-contact{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;color:#3a3a3c;min-width:0}
+.bos .bos-radar-contact span{overflow-wrap:anywhere}
+.bos .bos-radar-contact svg{flex:none;color:#86868b}
+.bos .bos-radar-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:4px}
+.bos .bos-radar-card details{font-size:12px;color:#6e6e73}
+.bos .bos-radar-card summary{cursor:pointer;list-style-position:inside}
+.bos .bos-radar-parts{display:grid;grid-template-columns:auto 1fr auto;gap:4px 8px;align-items:center;margin-top:8px}
+.bos .bos-radar-parts i{display:block;height:6px;border-radius:3px;background:#f1f1f3;overflow:hidden}
+.bos .bos-radar-parts i span{display:block;height:100%;background:var(--bos-green);border-radius:3px}
+.bos .bos-radar-reason{margin-top:8px!important;line-height:1.6}
+.bos .bos-radar-error{color:#a44b36;font-size:12px}
+.bos .bos-radar-pager{display:flex;justify-content:center;align-items:center;gap:12px;font-size:13px;color:#6e6e73}
+.bos .bos-radar-table td{vertical-align:top}
+.bos .bos-radar-table td .bos-radar-actions{margin-top:0;padding-top:0;flex-wrap:nowrap}
+.bos .bos-radar-settings{display:grid;gap:16px}
+.bos .bos-radar-health{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px}
+.bos .bos-radar-health div{display:grid;gap:4px;font-size:13px;justify-items:start;align-content:start}
+.bos .bos-radar-health strong{font-size:14px}
+.bos .bos-radar-health small{color:#86868b;font-size:12px;overflow-wrap:anywhere}
+.bos .bos-radar-form{display:grid;gap:12px}
+.bos .bos-radar-form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.bos .bos-radar-form label,.bos .bos-radar-country label{display:grid;gap:4px;font-size:12px;color:#6e6e73;min-width:0;align-content:start}
+.bos .bos-radar-form textarea,.bos .bos-radar-country textarea{resize:vertical;line-height:1.6}
+.bos .bos-radar-hint{font-size:12px;color:#86868b;line-height:1.6}
+.bos .bos-radar-countries{display:grid;gap:12px}
+.bos .bos-radar-country{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:16px;border:1px solid var(--bos-border);border-radius:12px}
+.bos .bos-radar-country fieldset{grid-column:1/-1;border:0;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;min-width:0}
+.bos .bos-radar-country fieldset legend{font-size:12px;color:#6e6e73;padding:0;margin-bottom:6px}
+.bos .bos-radar-country .is-wide{grid-column:span 2}
+.bos .bos-radar-country-head{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bos .bos-radar-inline{display:inline-flex!important;align-items:center;gap:4px;font-size:13px!important;color:var(--bos-primary)!important}
+@media(max-width:1250px){.bos .bos-radar-filters{grid-template-columns:repeat(3,minmax(0,1fr))}.bos .bos-radar-health{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.bos .bos-radar-country{grid-template-columns:repeat(2,minmax(0,1fr))}.bos .bos-radar-country .is-wide{grid-column:1/-1}}
+@media(max-width:600px){.bos .bos-radar-filters,.bos .bos-radar-health,.bos .bos-radar-country{grid-template-columns:minmax(0,1fr)}.bos .bos-radar-wall{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.bos .bos-radar-card,.bos .bos-radar-card:hover,.bos .bos-radar-card.is-leaving{transition:none;transform:none}}

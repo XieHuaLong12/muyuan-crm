@@ -28,5 +28,7 @@ export async function deleteTestCustomers(args:{where:Prisma.CustomerWhereInput}
   await db.stageHistory.deleteMany({where:{customerId:{in:ids}}});
   await db.followUp.deleteMany({where:{customerId:{in:ids}}});
   await db.deal.deleteMany({where:{customerId:{in:ids}}});
+  // Radar prospects keep their own history; they only lose the link to a deleted test customer.
+  await db.radarProspect.updateMany({where:{customerId:{in:ids}},data:{customerId:null}});
   return db.customer.deleteMany({where:{id:{in:ids}}});
 }

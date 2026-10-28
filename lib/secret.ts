@@ -15,6 +15,12 @@ export function cronSecretValid(supplied: string | null | undefined) {
   return !!expected && !!supplied && safeEqual(supplied, expected);
 }
 
+/** The customer-radar crawler authenticates with the header x-radar-secret = RADAR_INGEST_SECRET (it holds no other key). */
+export function radarSecretValid(supplied: string | null | undefined) {
+  const expected = process.env.RADAR_INGEST_SECRET?.trim() || '';
+  return !!expected && !!supplied && safeEqual(supplied, expected);
+}
+
 const sealKey = () => {
   if (!process.env.AUTH_SECRET) throw new Error('AUTH_SECRET 未配置');
   return createHash('sha256').update(process.env.AUTH_SECRET).digest();

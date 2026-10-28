@@ -25,9 +25,9 @@ const isPage=(path:string)=>pageRoutes().some(route=>route.test(path));
 test('the sidebar is short: related pages are tabs of one section',()=>{
   assert.equal(workspaceHome('SALES'),'/sales');assert.equal(workspaceHome('ADMIN'),'/workbench');
   assert.deepEqual(workspaceNavigation('SALES').map(item=>item.label),['今日工作','消息','话术','我的客户','产品与报价','我的订单','我的业绩']);
-  assert.deepEqual(workspaceNavigation('ADMIN').map(item=>item.label),['工作台','经营总览','客户','消息','任务','订单','广告与线索','团队','设置']);
+  assert.deepEqual(workspaceNavigation('ADMIN').map(item=>item.label),['工作台','经营总览','客户','消息','任务','订单','广告与线索','客户雷达','团队','设置']);
   const salesPaths=workspaceNavigation('SALES').flatMap(item=>[item.href,...(item.tabs??[]).map(tab=>tab.href)]);
-  for(const path of ['/command-center','/growth','/analytics/ads','/finance','/settings','/team','/communication','/targets'])assert.equal(salesPaths.includes(path),false,path);
+  for(const path of ['/command-center','/growth','/analytics/ads','/finance','/settings','/team','/communication','/targets','/radar','/settings/radar'])assert.equal(salesPaths.includes(path),false,path);
   for(const role of ['SALES','ADMIN']){
     const sections=workspaceNavigation(role);
     assert.equal(new Set(sections.map(item=>item.icon)).size,sections.length,`${role} icons are distinct`);

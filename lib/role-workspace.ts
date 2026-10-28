@@ -1,7 +1,7 @@
 /** Administrators land on the work calendar's today view (the operations lead's workbench); sales on today's follow-ups. */
 export const workspaceHome = (role: string) => role === 'ADMIN' ? '/workbench' : '/sales';
 
-export type NavIcon = 'workbench' | 'scripts' | 'dashboard' | 'customers' | 'messages' | 'tasks' | 'orders' | 'growth' | 'team' | 'settings' | 'today' | 'products' | 'performance';
+export type NavIcon = 'workbench' | 'scripts' | 'dashboard' | 'customers' | 'messages' | 'tasks' | 'orders' | 'growth' | 'team' | 'settings' | 'today' | 'products' | 'performance' | 'radar';
 /** A page inside a section. `match` lists the path prefixes that belong to it (defaults to `href`). */
 export type NavTab = { href: string; label: string; match?: readonly string[] };
 /**
@@ -9,6 +9,11 @@ export type NavTab = { href: string; label: string; match?: readonly string[] };
  * section's pages share the analysis period (range / startDate / endDate), which is kept when switching tabs.
  */
 export type NavSection = { href: string; label: string; icon: NavIcon; tabs?: readonly NavTab[]; badge?: 'today' | 'pool' | 'messages'; keepPeriod?: boolean };
+
+/** Customer radar · cold e-mail (docs/CUSTOMER_RADAR_COLD_EMAIL.md): administrators only; sales meet these companies once they reply. */
+const radarTabs = [
+  { href: '/radar', label: '雷达客户' },
+] as const;
 
 /** Script effectiveness pages (docs/OUTREACH_AND_WORKBENCH.md); everyone sees them, only administrators edit the library. */
 const scriptTabs = [
@@ -48,6 +53,7 @@ const adminSections: readonly NavSection[] = [
     { href: '/analytics/data-quality', label: '数据质量' },
     { href: '/growth/intake', label: '线索接入' },
   ] },
+  { href: '/radar', label: '客户雷达', icon: 'radar', tabs: radarTabs },
   { href: '/team', label: '团队', icon: 'team', tabs: [
     { href: '/team', label: '销售业绩' },
     { href: '/targets', label: '目标' },
@@ -56,6 +62,7 @@ const adminSections: readonly NavSection[] = [
   { href: '/settings', label: '设置', icon: 'settings', tabs: [
     { href: '/settings', label: '公司设置' },
     { href: '/settings/integrations', label: '集成与接入', match: ['/settings/integrations', '/admin'] },
+    { href: '/settings/radar', label: '客户雷达' },
   ] },
 ];
 

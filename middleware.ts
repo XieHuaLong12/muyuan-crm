@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // Machine-to-machine endpoints authenticate with their own signatures, secrets or extension tokens.
-const EXEMPT_PREFIXES = ['/api/leads/webhook', '/api/meta/webhook', '/api/whatsapp/webhook', '/api/cron/', '/api/whatsapp/web-sync/'];
+const EXEMPT_PREFIXES = ['/api/leads/webhook', '/api/meta/webhook', '/api/whatsapp/webhook', '/api/cron/', '/api/whatsapp/web-sync/', '/api/radar/crawl/'];
 
 function trustedOrigin(req: NextRequest, origin: string) {
   try {

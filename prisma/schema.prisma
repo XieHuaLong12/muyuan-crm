@@ -131,6 +131,8 @@ model Customer {
  outreachTouches OutreachTouch[]
  outreachReplies OutreachReply[]
  outreachAssignments OutreachAssignment[]
+ // 客户雷达（docs/CUSTOMER_RADAR_COLD_EMAIL.md）：开发信有效回复推进过来的雷达客户
+ radarProspects RadarProspect[]
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -269,6 +271,8 @@ model Setting {
  outreachConfig Json?
  // 话术记录的起点：话术引擎第一次运行时写入。之前的消息只用来推算会话状态，不生成触达记录。
  outreachStartedAt DateTime?
+ // 客户雷达的可调参数（国家日历、预热加量、发信间隔、冷却期等），为空时用 lib/radar.ts 的默认值。
+ radarConfig Json?
 }
 
 model LeadSubmission {
@@ -1665,4 +1669,118 @@ model FocusProgressLog {
  createdAt DateTime @default(now())
  @@index([focusId, createdAt])
  @@index([date])
+}
+
+// ═══════════════════════════════════════════════════════════
+// 客户雷达 · 开发信（docs/CUSTOMER_RADAR_COLD_EMAIL.md）
+// 独立的获客数据域：爬到的公司、邮箱、发信与回复都在 Radar* 表里，不进 Customer；只有有效回复才建客户。
+// ═══════════════════════════════════════════════════════════
+
+// 关键词 × 城市：爬虫每天取最久没跑过的若干条，避免每天重复跑全量。
+model RadarSearch {
+ id String @id @default(cuid())
+ // ISO 国家代码：FR | AE | SA | AU
+ country String @db.VarChar(2)
+ city String @db.VarChar(120)
+ keyword String @db.VarChar(120)
+ active Boolean @default(true)
+ lastRunAt DateTime?
+ // 上次地图结果数 / 新入库数
+ lastFound Int @default(0)
+ lastNew Int @default(0)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ prospects RadarProspect[]
+ @@unique([country, city, keyword])
+ @@index([active, lastRunAt])
+}
+
+// 雷达客户：地图上找到的每家公司一行。按 placeKey 幂等入库，按域名、电话、公司名 + 城市去重。
+model RadarProspect {
+ id String @id @default(cuid())
+ // Google 地图商家编号
+ placeKey String @unique @db.VarChar(191)
+ name String @db.VarChar(300)
+ // 规范化的「公司名|城市」，去重用
+ nameCityKey String @db.VarChar(191)
+ country String @db.VarChar(2)
+ city String @default("") @db.VarChar(120)
+ // IANA 时区，按国家 + 城市从配置取，发信时段按它算
+ timezone String @db.VarChar(40)
+ address String @default("") @db.VarChar(500)
+ website String @default("") @db.VarChar(500)
+ // 规范化域名（去掉 www.）；免费邮箱和社媒域名为空
+ domain String @default("") @db.VarChar(191)
+ phone String @default("") @db.VarChar(40)
+ phoneE164 String? @db.VarChar(16)
+ whatsapp String @default("") @db.VarChar(40)
+ // { facebook, instagram, linkedin, tiktok, youtube }
+ socials Json?
+ mapsCategory String @default("") @db.VarChar(200)
+ rating Decimal? @db.Decimal(2, 1)
+ reviewCount Int?
+ // 官网首页、联系页、关于页的文字（截到 4000 字），给 AI 评分和写开头用
+ siteText String? @db.Text
+ // WHOLESALER 批发商 | IMPORTER 进口商 | FURNITURE_STORE 家具店 | MATTRESS_STORE 床垫店 | OTHER 其他 | UNRELATED 不相关；空 = 未评
+ customerType String @default("") @db.VarChar(16)
+ mainProducts String @default("") @db.VarChar(500)
+ aiReason String @default("") @db.VarChar(500)
+ // { type, category, scale, contactability, intent }：客户类型 40、品类匹配 20、规模 15、可联系度 15（规则算）、意向信号 10
+ scoreParts Json?
+ score Int?
+ // A | B | C；空 = 未评
+ grade String @default("") @db.VarChar(1)
+ // 1–2 条官网细节 [{ fact, quote }]，quote 必须是官网原文；个性化开头只能用这里的内容
+ siteFacts Json?
+ scoredAt DateTime?
+ scoreAttempts Int @default(0)
+ scoreError String @default("") @db.VarChar(300)
+ keyword String @default("") @db.VarChar(120)
+ searchId String?
+ search RadarSearch? @relation(fields: [searchId], references: [id], onDelete: SetNull)
+ discoveredAt DateTime @default(now())
+ // NEW 新发现 | NO_EMAIL 无邮箱 | CONTACTED 已联系（其他渠道）| EXCLUDED 已排除；发信相关状态见 lib/radar.ts
+ status String @default("NEW") @db.VarChar(16)
+ statusAt DateTime @default(now())
+ excludedReason String @default("") @db.VarChar(200)
+ notes String @default("") @db.VarChar(1000)
+ // 有效回复推进 BOS 后的客户
+ customerId String?
+ customer Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ emails RadarEmail[]
+ @@index([status, grade, score])
+ @@index([country, status])
+ @@index([domain])
+ @@index([phoneE164])
+ @@index([nameCityKey])
+ @@index([discoveredAt])
+ @@index([scoredAt])
+ @@index([customerId])
+}
+
+// 雷达客户的邮箱，每个地址一行，带验证结果与退信记录。
+model RadarEmail {
+ id String @id @default(cuid())
+ prospectId String
+ prospect RadarProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+ // 小写
+ address String @db.VarChar(191)
+ // DIRECT 直达（人名、achat@ 等采购地址）| GENERIC 通用（contact@、info@）
+ kind String @db.VarChar(8)
+ // WEBSITE 官网 | MAPS 地图 | REPLY 回信里给的新联系人 | MANUAL 手动
+ source String @default("WEBSITE") @db.VarChar(8)
+ // 在哪个网页找到的（GDPR：记录数据来源）
+ foundOn String @default("") @db.VarChar(500)
+ // 空 = 未验证 | VALID 有效 | RISKY 风险（全收、临时邮箱）| INVALID 无效 | UNKNOWN 验证失败，稍后重试
+ verifyStatus String @default("") @db.VarChar(8)
+ verifyDetail String @default("") @db.VarChar(200)
+ verifiedAt DateTime?
+ verifyAttempts Int @default(0)
+ bouncedAt DateTime?
+ createdAt DateTime @default(now())
+ @@unique([prospectId, address])
+ @@index([address])
+ @@index([verifyStatus])
 }
