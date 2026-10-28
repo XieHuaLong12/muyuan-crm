@@ -62,3 +62,43 @@
 @media(max-width:760px){.bos .bos-radar-country{grid-template-columns:repeat(2,minmax(0,1fr))}.bos .bos-radar-country .is-wide{grid-column:1/-1}}
 @media(max-width:600px){.bos .bos-radar-filters,.bos .bos-radar-health,.bos .bos-radar-country{grid-template-columns:minmax(0,1fr)}.bos .bos-radar-wall{grid-template-columns:minmax(0,1fr)}}
 @media(prefers-reduced-motion:reduce){.bos .bos-radar-card,.bos .bos-radar-card:hover,.bos .bos-radar-card.is-leaving{transition:none;transform:none}}
+/* 第 2 阶段：确认框、发送队列、待复核、模板、发信邮箱 */
+/* The dialog borrows the .bos scope for its tokens, not the page-root layout (full height, flex, grey background). */
+.dialog-content.bos.bos-radar-dialog{width:min(620px,94vw);min-height:0;display:block;background:var(--bos-card)}
+.bos .bos-radar-confirm{display:grid;gap:14px;font-size:14px;line-height:1.7}
+.bos .bos-radar-confirm-lead{font-size:16px}
+.bos .bos-radar-confirm fieldset{border:1px solid var(--bos-border);border-radius:12px;padding:10px 12px;margin:0;display:grid;gap:6px}
+.bos .bos-radar-confirm legend{font-size:12px;color:#6e6e73;padding:0 4px}
+.bos .bos-radar-confirm-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:6px;border-top:1px solid var(--bos-border)}
+.bos .bos-radar-boxes{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.bos .bos-radar-box{display:grid;gap:8px;padding:18px 20px}
+.bos .bos-radar-box strong{overflow-wrap:anywhere;font-size:14px}
+.bos .bos-radar-progress{height:6px;border-radius:3px;background:#f1f1f3;overflow:hidden}
+.bos .bos-radar-progress span{display:block;height:100%;background:var(--bos-green);border-radius:3px}
+.bos .bos-radar-tabs{display:flex;flex-wrap:wrap;gap:6px}
+.bos .bos-radar-tabs a{padding:7px 14px;border-radius:10px;font-size:13px;color:#6e6e73;border:1px solid var(--bos-border);background:#fff;transition:background .16s}
+.bos .bos-radar-tabs a[aria-current=page]{background:#edf4ef;color:var(--bos-green);font-weight:600;border-color:transparent}
+.bos .bos-radar-preview-row td{background:#fafafa}
+.bos .bos-radar-preview{display:grid;gap:10px;max-width:760px}
+.bos .bos-radar-preview label,.bos .bos-radar-review-card label.bos-radar-field{display:grid;gap:4px;font-size:12px;color:#6e6e73}
+.bos .bos-radar-mail{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;font-size:13px;line-height:1.7;padding:12px 14px;border-radius:10px;background:#f5f5f7;color:var(--bos-primary);margin:0}
+.bos .bos-radar-review{display:grid;gap:12px}
+.bos .bos-radar-review-card{display:grid;gap:10px}
+.bos .bos-radar-facts{display:grid;gap:6px;padding:10px 12px;border-radius:10px;border:1px solid var(--bos-border);font-size:13px}
+.bos .bos-radar-facts>span{font-size:12px;color:#6e6e73}
+.bos .bos-radar-facts small{display:block;color:#6e6e73;margin-top:2px}
+.bos .bos-radar-template-edit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.bos .bos-radar-template-text{max-width:460px}
+.bos .bos-radar-template-text span{white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;line-height:1.6}
+.bos .bos-radar-template-text strong{display:block;font-size:13px;margin-bottom:4px}
+.bos .bos-radar-checks{margin:0;padding-left:18px;font-size:12px;line-height:1.7;color:#85521b}
+.bos .bos-radar-checks .is-error{color:#a44b36}
+.bos .bos-radar-status{width:auto;padding:6px 26px 6px 10px;font-size:12px}
+.bos .bos-radar-connect{display:flex;flex-wrap:wrap;align-items:end;gap:12px}
+.bos .bos-radar-connect label{display:grid;gap:4px;font-size:12px;color:#6e6e73}
+.bos .bos-radar-connect .is-disabled{opacity:.5;pointer-events:none}
+.bos .bos-radar-wide{grid-column:1/-1}
+@media(max-width:1100px){.bos .bos-radar-template-edit{grid-template-columns:minmax(0,1fr)}}
+/* Radios and checkboxes keep their own size (the legacy globals.css makes inputs full width). */
+.bos .bos-radar-inline input,.bos .bos-radar-check input,.bos .bos-radar-table td>input{width:auto;flex:none;margin:0}
+.bos .bos-radar-toolbar>span{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}

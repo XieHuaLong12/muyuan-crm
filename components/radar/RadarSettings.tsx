@@ -6,6 +6,7 @@ import { Badge, Button, Card, EmptyState, Header, Table } from '@/components/ui/
 import { api, dateTimeText } from '@/lib/client';
 import type { CountryConfig, RadarConfig } from '@/lib/radar';
 import type { radarSettings } from '@/services/radar-config-service';
+import { MailboxSettings } from './MailboxSettings';
 
 type Jsonify<T> = T extends Date ? string : T extends (infer U)[] ? Jsonify<U>[] : T extends object ? { [K in keyof T]: Jsonify<T[K]> } : T;
 type Data = Jsonify<Awaited<ReturnType<typeof radarSettings>>>;
@@ -40,7 +41,7 @@ const RULES: { key: keyof RadarConfig; label: string; hint: string; step?: numbe
 ];
 
 /** 设置 · 客户雷达: what the crawler works through, each country's sending hours, and the sending rules. */
-export function RadarSettings({ data }: { data: Data }) {
+export function RadarSettings({ data, notice }: { data: Data; notice?: { connected?: string; error?: string } }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -51,6 +52,7 @@ export function RadarSettings({ data }: { data: Data }) {
   const [rules, setRules] = useState<RadarConfig>(data.config as RadarConfig);
   const [ramp, setRamp] = useState(data.config.rampLevels.join(', '));
   const [follow, setFollow] = useState(data.config.followUpWorkdays.join(', '));
+  const [catalog, setCatalog] = useState(data.config.catalogUrls);
 
   async function run(task: () => Promise<string>) {
     setBusy(true); setError(''); setMessage('');
@@ -63,7 +65,7 @@ export function RadarSettings({ data }: { data: Data }) {
   });
   const saveConfig = () => run(async () => {
     const numbers = (text: string) => text.split(/[\s,，]+/).filter(Boolean).map(Number);
-    const config = { ...rules, rampLevels: numbers(ramp), followUpWorkdays: numbers(follow),
+    const config = { ...rules, rampLevels: numbers(ramp), followUpWorkdays: numbers(follow), catalogUrls: { fr: catalog.fr.trim(), en: catalog.en.trim() },
       countries: Object.fromEntries(countries.map(c => [c.code.trim().toUpperCase(), fromForm(c)])) };
     await api('radar/settings', 'PUT', config);
     return '设置已保存，立即生效';
@@ -73,6 +75,8 @@ export function RadarSettings({ data }: { data: Data }) {
   const h = data.health;
   return <div className="bos-radar bos-radar-settings">
     <Header title="客户雷达" description="爬虫要跑的关键词和城市、各国家的发送时段和节假日、发信规则。改动保存后立即生效。" />
+    {notice?.connected && <p className="bos-radar-message" role="status">已连接发信邮箱 {notice.connected}</p>}
+    {notice?.error && <p className="bos-sales-error" role="alert">连接发信邮箱失败：{notice.error}</p>}
     {message && <p className="bos-radar-message" role="status">{message}</p>}
     {error && <p className="bos-sales-error" role="alert">{error}</p>}
 
@@ -85,8 +89,12 @@ export function RadarSettings({ data }: { data: Data }) {
         <div><strong>AI 评分</strong>{h.deepSeek ? <Badge tone="green">DeepSeek 已配置</Badge> : <Badge tone="warning">未配置 DEEPSEEK_API_KEY</Badge>}<small>没有配置时新客户保持「待评分」</small></div>
         <div><strong>邮箱验证</strong>{h.verifier ? <Badge tone="green">{h.verifierName} 已配置</Badge> : <Badge tone="warning">未配置</Badge>}<small>EMAIL_VERIFY_PROVIDER（millionverifier / zerobounce）与 EMAIL_VERIFY_API_KEY；只验证 A、B 级，每家最多 2 个地址</small></div>
         <div><strong>定时任务</strong>{h.cron ? <Badge tone="green">已配置密钥</Badge> : <Badge tone="warning">未配置 META_SYNC_SECRET</Badge>}<small>Hostinger Cron 每分钟 POST /api/cron/radar，请求头 x-cron-secret</small></div>
+        <div><strong>Gmail 授权</strong>{h.gmail ? <Badge tone="green">已配置</Badge> : <Badge tone="warning">未配置</Badge>}<small>GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET</small></div>
+        <div><strong>真实发信</strong>{h.sending ? <Badge tone="green">已开启</Badge> : <Badge tone="warning">未开启</Badge>}<small>RADAR_SEND_ENABLED=true 时才真正发信；没开时队列照常排，不发出</small></div>
       </div>
     </Card>
+
+    <MailboxSettings data={data} />
 
     <Card className="bos-radar-form">
       <h2>关键词 × 城市</h2>
@@ -136,6 +144,8 @@ export function RadarSettings({ data }: { data: Data }) {
       <div className="bos-radar-form-grid">
         <label><span>预热加量表（每邮箱每天）</span><input className="bos-input" value={ramp} onChange={e => setRamp(e.target.value)} /></label>
         <label><span>第 2、3 封各等几个工作日</span><input className="bos-input" value={follow} onChange={e => setFollow(e.target.value)} /></label>
+        <label><span>法语目录链接 {'{目录链接}'}</span><input className="bos-input" type="url" value={catalog.fr} placeholder="https://www.lvanju.com/fr/catalogue" onChange={e => setCatalog({ ...catalog, fr: e.target.value })} /></label>
+        <label><span>英语目录链接 {'{目录链接}'}</span><input className="bos-input" type="url" value={catalog.en} placeholder="https://www.lvanju.com/catalogue" onChange={e => setCatalog({ ...catalog, en: e.target.value })} /></label>
         {RULES.map(r => <label key={r.key}><span>{r.label}</span><input className="bos-input" type="number" min={0} step={r.step ?? 1} value={rules[r.key] as number}
           onChange={e => setRules({ ...rules, [r.key]: Number(e.target.value) })} />{r.hint && <small className="bos-radar-hint">{r.hint}</small>}</label>)}
         <label className="bos-radar-inline"><input type="checkbox" checked={rules.fairInvitation} onChange={e => setRules({ ...rules, fairInvitation: e.target.checked })} />使用广交会邀请版模板</label>

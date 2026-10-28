@@ -111,12 +111,13 @@ jobs:
           mv prisma/migrations/20261021090000_outreach_and_workbench /tmp/identity-ci-migrations/
           mv prisma/migrations/20261022090000_daily_review /tmp/identity-ci-migrations/
           mv prisma/migrations/20261028090000_radar_prospects /tmp/identity-ci-migrations/
+          mv prisma/migrations/20261028120000_radar_sending /tmp/identity-ci-migrations/
           pnpm exec prisma migrate deploy
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "13"
           mysql -h127.0.0.1 -uroot -proot muyuan_reuse -e "INSERT INTO User (id,name,email,passwordHash) VALUES ('reuse-sentinel','Existing user','existing@example.com','preserve-me')"
           mv /tmp/identity-ci-migrations/* prisma/migrations/
           pnpm exec prisma migrate deploy
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "27"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "28"
           # 分配池、联系方式规范键、任务执行人与线索分配方式（20261009024647_assignment_pool_and_corrections）
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND ((table_name='Customer' AND column_name IN ('pendingAssignment','contactKeysAt')) OR (table_name='Task' AND column_name='assigneeId') OR (table_name='Setting' AND column_name='leadAssignMode'))")" = "4"
           # 广告线索实时入库：来源、提交时间、重试退避、表单补拉水位与广告线索首联分钟数（20261009035838_meta_lead_realtime_intake）
@@ -140,6 +141,9 @@ jobs:
           # 客户雷达：关键词 × 城市、雷达客户、客户邮箱三张新表与雷达设置列（20261028090000_radar_prospects）
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('RadarSearch','RadarProspect','RadarEmail')")" = "3"
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND table_name='Setting' AND column_name='radarConfig'")" = "1"
+          # 客户雷达发信：发信邮箱、模板、序列、发送记录、禁发名单五张新表与发送暂停 / 上线时间列（20261028120000_radar_sending）
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('RadarMailbox','RadarTemplate','RadarSequence','RadarSend','RadarSuppression')")" = "5"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND table_name='Setting' AND column_name IN ('radarPausedAt','radarLaunchedAt')")" = "2"
           echo "reused-deployment upgrade path OK"
 
       - name: Seed test database

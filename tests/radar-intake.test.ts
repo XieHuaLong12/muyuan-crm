@@ -21,12 +21,15 @@ async function withEnv<T>(values: Record<string, string>, run: () => Promise<T>)
 
 test('radar intake: keyword plan, deduplicated ingest, existing customers skipped, scoring, e-mail checks, card wall', async t => {
   const tag = randomUUID().replace(/-/g, '').slice(0, 8);
+  // Phone numbers unique to this run: deduplication by phone spans every prospect in the database.
+  const digits = String(Date.now()).slice(-6), local = `04 78 ${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 6)}`, other = `04 79 ${digits.slice(0, 2)} ${digits.slice(2, 4)} ${digits.slice(4, 6)}`;
+  const e164 = (national: string) => `+33${national.replace(/\s/g, '').slice(1)}`;
   const setting = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { radarConfig: true } });
   const admin = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } });
   const sales = await db.user.create({ data: { name: `Radar ${tag}`, email: `radar-${tag}@example.com`, role: 'SALES', passwordHash: hashPassword('x') } });
   const boss = actorOf(admin), seller = actorOf(sales);
   const bos = await db.customer.create({ data: { name: `Radar BOS ${tag}`, companyName: `BOS Shop ${tag}`, ownerId: admin.id, email: `buyer@bos-${tag}.fr`,
-    emailNormalized: `buyer@bos-${tag}.fr`, phone: '+33478009999', phoneE164: '+33478009999', contactKeysAt: new Date() } });
+    emailNormalized: `buyer@bos-${tag}.fr`, phone: e164(other), phoneE164: e164(other), contactKeysAt: new Date() } });
   const jobIds: string[] = [];
   try {
     await saveRadarConfig({ ...DEFAULT_RADAR_CONFIG, searchesPerDay: 500 }, boss);
@@ -52,11 +55,11 @@ test('radar intake: keyword plan, deduplicated ingest, existing customers skippe
     await assert.rejects(ingestProspects({ places: [{ placeKey: 'x', name: 'x' }] }), /缺少国家/);
     const site = `Bienvenue chez Meubles Dupont ${tag}. Nos 3 magasins à Lyon proposent canapés et literie depuis 1985.`;
     const batch = { searchId: lyon.id, places: [
-      { placeKey: `p1-${tag}`, name: `Meubles Dupont ${tag}`, city: `Lyon${tag}`, website: `https://www.shop1-${tag}.fr/`, phone: '04 78 00 00 01', category: 'Magasin de meubles',
+      { placeKey: `p1-${tag}`, name: `Meubles Dupont ${tag}`, city: `Lyon${tag}`, website: `https://www.shop1-${tag}.fr/`, phone: local, category: 'Magasin de meubles',
         rating: '4,6', reviewCount: 120, siteText: site, socials: { facebook: 'https://facebook.com/dupont', evil: 'javascript:alert(1)' },
         emails: [{ address: `mailto:Achat@Shop1-${tag}.fr`, foundOn: `https://www.shop1-${tag}.fr/contact` }, { address: `contact@shop1-${tag}.fr` }, { address: 'logo@2x.png' }] },
       { placeKey: `p2-${tag}`, name: `Dupont Literie ${tag}`, city: `Lyon${tag}`, website: `shop1-${tag}.fr`, emails: [{ address: `info@shop1-${tag}.fr` }] },
-      { placeKey: `p3-${tag}`, name: `Phone Twin ${tag}`, city: `Lyon${tag}`, phone: '04 78 00 99 99' },
+      { placeKey: `p3-${tag}`, name: `Phone Twin ${tag}`, city: `Lyon${tag}`, phone: other },
       { placeKey: `p4-${tag}`, name: `Domain Twin ${tag}`, city: `Lyon${tag}`, website: `https://bos-${tag}.fr` },
       { placeKey: `p5-${tag}`, name: `Restaurant ${tag}`, city: `Lyon${tag}`, category: 'Restaurant' },
       { placeKey: `p6-${tag}`, name: `Meubles Dupont ${tag} S.A.R.L.`, city: `Lyon${tag}` },
@@ -72,7 +75,7 @@ test('radar intake: keyword plan, deduplicated ingest, existing customers skippe
     const byKey = async (key: string) => db.radarProspect.findUniqueOrThrow({ where: { placeKey: `${key}-${tag}` }, include: { emails: { orderBy: { address: 'asc' } } } });
     const p1 = await byKey('p1');
     assert.equal(p1.domain, `shop1-${tag}.fr`);
-    assert.equal(p1.phoneE164, '+33478000001');
+    assert.equal(p1.phoneE164, e164(local));
     assert.equal(Number(p1.rating), 4.6);
     assert.deepEqual(p1.socials, { facebook: 'https://facebook.com/dupont' }, 'only real social links are kept');
     assert.deepEqual(p1.emails.map(e => [e.address, e.kind]), [[`achat@shop1-${tag}.fr`, 'DIRECT'], [`contact@shop1-${tag}.fr`, 'GENERIC'], [`info@shop1-${tag}.fr`, 'GENERIC']],

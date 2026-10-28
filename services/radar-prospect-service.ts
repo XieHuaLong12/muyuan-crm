@@ -57,6 +57,7 @@ export async function listProspects(user: Actor, query: Record<string, string | 
     db.radarProspect.count({ where: { scoredAt: null, status: { in: [...OPEN_STATUSES] } } }),
     db.radarProspect.groupBy({ by: ['status'], _count: { _all: true } }),
   ]);
+  const queue = await db.radarSend.count({ where: { status: { in: ['PREPARING', 'REVIEW', 'QUEUED', 'SENDING'] } } });
   const config = readRadarConfig(setting.radarConfig);
   const todayCount = (grade?: string) => today.filter(g => grade === undefined || g.grade === grade).reduce((sum, g) => sum + g._count._all, 0);
   return {
@@ -64,7 +65,7 @@ export async function listProspects(user: Actor, query: Record<string, string | 
     total,
     pageSize: RADAR_PAGE_SIZE,
     countries: Object.fromEntries(Object.entries(config.countries).map(([code, c]) => [code, c.name])),
-    summary: { todayNew: todayCount(), todayA: todayCount('A'), todayB: todayCount('B'), unscored,
+    summary: { todayNew: todayCount(), todayA: todayCount('A'), todayB: todayCount('B'), unscored, queue,
       byStatus: Object.fromEntries(byStatus.map(s => [s.status, s._count._all])) as Partial<Record<ProspectStatus, number>> },
     health: { deepSeek: deepSeekConfigured(), verifier: verifierConfigured(), ingest: !!process.env.RADAR_INGEST_SECRET?.trim() },
     rows: rows.map(p => {

@@ -13,6 +13,9 @@ export type NavSection = { href: string; label: string; icon: NavIcon; tabs?: re
 /** Customer radar · cold e-mail (docs/CUSTOMER_RADAR_COLD_EMAIL.md): administrators only; sales meet these companies once they reply. */
 const radarTabs = [
   { href: '/radar', label: '雷达客户' },
+  { href: '/radar/queue', label: '发送队列' },
+  { href: '/radar/review', label: '待复核' },
+  { href: '/radar/templates', label: '模板' },
 ] as const;
 
 /** Script effectiveness pages (docs/OUTREACH_AND_WORKBENCH.md); everyone sees them, only administrators edit the library. */

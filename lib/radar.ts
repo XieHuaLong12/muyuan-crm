@@ -83,6 +83,11 @@ export const radarConfigSchema = z.object({
   loseProbability: z.number().min(0).max(0.5),
   fairInvitation: z.boolean(),
   retentionMonths: z.number().int().min(1).max(60),
+  /** {目录链接}: the catalogue page on the company site, per template language; empty until someone fills it in. */
+  catalogUrls: z.object({
+    fr: z.union([z.literal(''), z.string().trim().url('目录链接要以 https:// 开头').max(300)]),
+    en: z.union([z.literal(''), z.string().trim().url('目录链接要以 https:// 开头').max(300)]),
+  }),
 }).refine(c => c.intervalMin <= c.intervalMax, { message: '最短间隔不能大于最长间隔', path: ['intervalMax'] });
 export type RadarConfig = z.infer<typeof radarConfigSchema>;
 export type CountryConfig = z.infer<typeof countrySchema>;
@@ -118,6 +123,7 @@ export const DEFAULT_RADAR_CONFIG: RadarConfig = {
   loseProbability: 0.1,
   fairInvitation: false,
   retentionMonths: 12,
+  catalogUrls: { fr: '', en: '' },
 };
 
 /** Stored settings over the defaults; a value that no longer validates falls back to the defaults as a whole. */

@@ -3,8 +3,11 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, requireAdmin } from '@/lib/auth';
 import { radarConfigSchema, readRadarConfig } from '@/lib/radar';
+import { gmailConfigured } from '@/lib/gmail';
 import { deepSeekConfigured } from './deepseek-customer-service';
 import { verifierConfigured } from './radar-scoring-service';
+import { listMailboxes } from './radar-mailbox-service';
+import { listSuppressions } from './radar-suppression-service';
 
 /** 设置 · 客户雷达: tunable rules and the keyword × city table the crawler works through. Administrators only. */
 
@@ -20,14 +23,18 @@ const searchPatch = z.object({ active: z.boolean() });
 
 export async function radarSettings(user: Actor) {
   requireAdmin(user, '只有管理员可以修改客户雷达设置');
-  const [setting, searches, lastCrawl] = await Promise.all([
+  const [setting, searches, lastCrawl, mailboxes, suppressions] = await Promise.all([
     db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { radarConfig: true } }),
     db.radarSearch.findMany({ orderBy: [{ country: 'asc' }, { city: 'asc' }, { keyword: 'asc' }], include: { _count: { select: { prospects: true } } } }),
     db.syncJob.findFirst({ where: { provider: 'RADAR', jobType: 'CRAWL' }, orderBy: { startedAt: 'desc' } }),
+    listMailboxes(user),
+    listSuppressions(user),
   ]);
   return {
     config: readRadarConfig(setting.radarConfig),
     searches: searches.map(({ _count, ...s }) => ({ ...s, prospects: _count.prospects })),
+    mailboxes,
+    suppressions,
     lastCrawl: lastCrawl && { status: lastCrawl.status, startedAt: lastCrawl.startedAt, completedAt: lastCrawl.completedAt, found: lastCrawl.processed, created: lastCrawl.succeeded, error: lastCrawl.error },
     health: {
       deepSeek: deepSeekConfigured(),
@@ -35,6 +42,8 @@ export async function radarSettings(user: Actor) {
       verifierName: process.env.EMAIL_VERIFY_PROVIDER?.trim() || 'millionverifier',
       ingest: !!process.env.RADAR_INGEST_SECRET?.trim(),
       cron: !!process.env.META_SYNC_SECRET?.trim(),
+      gmail: gmailConfigured(),
+      sending: process.env.RADAR_SEND_ENABLED === 'true',
     },
   };
 }
