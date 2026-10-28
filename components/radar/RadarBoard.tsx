@@ -130,6 +130,7 @@ export function RadarBoard({ data }: { data: RadarData }) {
         {row.fact && <p className="bos-radar-fact">“{row.fact}”</p>}
         <Contact row={row} />
         {row.status === 'EXCLUDED' && row.excludedReason && <p className="bos-radar-meta">{row.excludedReason}</p>}
+        {row.customerId && <p className="bos-radar-meta"><Link href={`/customers/${row.customerId}`}>在客户库中查看 →</Link></p>}
         {row.scoreError && !row.scoredAt && <p className="bos-radar-error">评分失败：{row.scoreError}</p>}
         <details><summary>评分与来源</summary>
           {row.scoreParts && <div className="bos-radar-parts">{(Object.keys(SCORE_MAX) as (keyof typeof SCORE_MAX)[]).map(key => <Part key={key} label={SCORE_LABELS[key]} value={row.scoreParts?.[key] ?? 0} max={SCORE_MAX[key]} />)}</div>}

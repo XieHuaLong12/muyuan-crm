@@ -2,15 +2,16 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { openSecret } from '@/lib/secret';
 import { GmailError, accessToken, getMessage, headerOf, sendMessage } from '@/lib/gmail';
-import { rankEmails, sendable } from '@/lib/radar';
-import { DAY_MS, nextCapLevel, pickNext, randomGap, type QueueItem } from '@/lib/radar-schedule';
-import { buildMessage, mailBody, replySubject, type MailLanguage } from '@/lib/radar-mail';
+import { rankEmails, sendable, type RadarConfig } from '@/lib/radar';
+import { DAY_MS, addWorkdays, nextCapLevel, pickNext, randomGap, type QueueItem } from '@/lib/radar-schedule';
+import { buildMessage, greetingFor, mailBody, renderTemplate, replySubject, type MailLanguage } from '@/lib/radar-mail';
 import { retryTransaction } from '@/lib/transaction-retry';
 import { findBosCustomer } from './radar-bos-service';
 import { mailboxStates, pauseMailbox } from './radar-mailbox-service';
 import { notifyAdmins } from './radar-notify-service';
 import { lockKey, prepareOpenings, stopSequence } from './radar-queue-service';
 import { suppress, suppressionFor } from './radar-suppression-service';
+import { pickTemplate } from './radar-template-service';
 
 /**
  * The radar's sender (docs/CUSTOMER_RADAR_COLD_EMAIL.md §7.1), run every minute by /api/cron/radar. Each mailbox sends
@@ -110,8 +111,30 @@ export async function restartWithNextEmail(tx: Prisma.TransactionClient, sequenc
   return restarted.id;
 }
 
+/**
+ * The next mail of the sequence, queued as soon as this one went out: due the configured number of working days later
+ * in the recipient's calendar, in the same thread. It never leaves if the company answers first — an unhandled reply
+ * holds the company and a handled one stops the sequence. Follow-ups are fixed templates without an AI opening.
+ */
+async function queueFollowUp(tx: Prisma.TransactionClient, send: Claimed, sentAt: Date, config: RadarConfig) {
+  const country = config.countries[send.prospect.country];
+  const wait = config.followUpWorkdays[send.step - 1];
+  if (send.step >= 3 || !country || !wait) return;
+  const language = send.sequence.language as MailLanguage;
+  const template = await pickTemplate(tx, language, send.step + 1, send.sequence.variant === 'FAIR' ? 'FAIR' : 'STANDARD');
+  if (!template) return;
+  const first = send.step === 1 ? send : await tx.radarSend.findFirst({ where: { sequenceId: send.sequenceId, step: 1 }, select: { subject: true } });
+  const values = { greeting: greetingFor(language), company: send.prospect.name, city: send.prospect.city, opening: '', catalogUrl: config.catalogUrls[language] };
+  await tx.radarSend.create({ data: {
+    sequenceId: send.sequenceId, step: send.step + 1, prospectId: send.prospectId, emailId: send.emailId, toAddress: send.toAddress, templateId: template.id, templateCode: template.code,
+    subject: replySubject(first?.subject ?? send.subject).slice(0, 300), body: renderTemplate(template.body, values), openingSource: 'NONE', status: 'QUEUED',
+    dueAt: addWorkdays(sentAt, wait, country, send.prospect.timezone), grade: send.grade, score: send.score, risky: send.risky,
+  } }).catch(error => { if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error; });
+}
+
 /** Sends one claimed mail through Gmail and records the outcome. Returns what happened. */
-async function deliver(send: Claimed, box: Box, now: Date, maxFailures: number): Promise<'SENT' | 'RETRY' | 'FAILED' | 'PAUSED'> {
+async function deliver(send: Claimed, box: Box, now: Date, config: RadarConfig): Promise<'SENT' | 'RETRY' | 'FAILED' | 'PAUSED'> {
+  const maxFailures = config.maxConsecutiveFailures;
   let token: string;
   try { token = await accessToken(openSecret(box.credential ?? '')); }
   catch (error) { return mailboxProblem(send, box, error); }
@@ -132,6 +155,7 @@ async function deliver(send: Claimed, box: Box, now: Date, maxFailures: number):
     await tx.radarProspect.updateMany({ where: { id: send.prospectId, status: 'QUEUED' }, data: { status: 'IN_SEQUENCE', statusAt: now } });
     await tx.radarMailbox.update({ where: { id: box.id }, data: { consecutiveFailures: 0 } });
     await tx.setting.updateMany({ where: { id: 'system', radarLaunchedAt: null }, data: { radarLaunchedAt: now } });
+    await queueFollowUp(tx, send, now, config);
   }));
   return 'SENT';
 }
@@ -191,7 +215,9 @@ export async function runSender(now = new Date(), random = Math.random) {
     where: { status: 'QUEUED', dueAt: { lte: now }, OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }], sequence: { status: 'ACTIVE' } },
     include: { prospect: { select: { timezone: true, country: true } }, sequence: { select: { mailboxId: true } } }, take: 1000,
   });
-  const items: QueueItem[] = waiting.filter(s => config.countries[s.prospect.country]).map(s => ({
+  // A reply not handled yet holds its company: no follow-up goes out before we know what the reply said.
+  const held = new Set((await db.radarReply.findMany({ where: { processedAt: null, screen: 'NONE', prospectId: { in: waiting.map(w => w.prospectId) } }, select: { prospectId: true } })).map(r => r.prospectId));
+  const items: QueueItem[] = waiting.filter(s => config.countries[s.prospect.country] && !held.has(s.prospectId)).map(s => ({
     id: s.id, step: s.step, dueAt: s.dueAt, pinnedAt: s.pinnedAt, grade: s.grade, score: s.score, createdAt: s.createdAt, risky: s.risky,
     timezone: s.prospect.timezone, country: config.countries[s.prospect.country], mailboxId: s.sequence.mailboxId,
   }));
@@ -213,7 +239,7 @@ export async function runSender(now = new Date(), random = Math.random) {
       result.cancelled++;
       continue;
     }
-    const outcome = await deliver(send, state.box, now, config.maxConsecutiveFailures);
+    const outcome = await deliver(send, state.box, now, config);
     if (outcome === 'SENT') result.sent++; else if (outcome === 'RETRY') result.retried++; else if (outcome === 'FAILED') result.failed++; else result.paused++;
   }
   return result;

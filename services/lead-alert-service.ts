@@ -6,7 +6,8 @@ import { gradeLead } from './lead-grade-service';
 import { sendPush, type PushMessage } from './push-service';
 
 type Tx = Prisma.TransactionClient;
-export type LeadAlertKind = 'NEW' | 'ASSIGNED' | 'REPEAT';
+/** EMAIL_REPLY: a company already in the customer center answered a cold e-mail (customer radar); goes to the owner. */
+export type LeadAlertKind = 'NEW' | 'ASSIGNED' | 'REPEAT' | 'EMAIL_REPLY';
 
 /**
  * Written in the same transaction that creates or assigns the lead, so an alert can never be lost or sent for a
@@ -64,6 +65,8 @@ export async function deliverLeadAlerts(options: { gradeTimeoutMs?: number } = {
         href: c.pendingAssignment ? '/customers?assign=pending' : `/customers/${c.id}`, tag: `lead:${c.id}` } });
     } else if (alert.kind === 'REPEAT' && alert.recipientId) {
       outbox.push({ to: [alert.recipientId], message: { title: `老客户再次留资${grade ? ` · ${grade}` : ''}`, body: details, urgent: true, href: `/customers/${c.id}`, tag: `repeat:${c.id}` } });
+    } else if (alert.kind === 'EMAIL_REPLY' && alert.recipientId) {
+      outbox.push({ to: [alert.recipientId], message: { title: '客户回复了开发信', body: details, urgent: true, href: `/customers/${c.id}`, tag: `email-reply:${c.id}:${alert.id}` } });
     } else if (alert.kind === 'ASSIGNED' && alert.recipientId) {
       assignedTo.set(alert.recipientId, [...(assignedTo.get(alert.recipientId) ?? []), c.id]);
     }

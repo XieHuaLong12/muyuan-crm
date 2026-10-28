@@ -131,8 +131,9 @@ model Customer {
  outreachTouches OutreachTouch[]
  outreachReplies OutreachReply[]
  outreachAssignments OutreachAssignment[]
- // 客户雷达（docs/CUSTOMER_RADAR_COLD_EMAIL.md）：开发信有效回复推进过来的雷达客户
+ // 客户雷达（docs/CUSTOMER_RADAR_COLD_EMAIL.md）：开发信有效回复推进过来的雷达客户与回复
  radarProspects RadarProspect[]
+ radarReplies RadarReply[]
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -1330,7 +1331,7 @@ model LeadAlert {
  id String @id @default(cuid())
  customerId String
  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
- // NEW 新线索（推给管理员）| ASSIGNED 分配给销售 | REPEAT 老客户再次留资（推给负责人）| OVERDUE A/B 线索首联超时（已提醒的记录）
+ // NEW 新线索（推给管理员）| ASSIGNED 分配给销售 | REPEAT 老客户再次留资（推给负责人）| OVERDUE A/B 线索首联超时（已提醒的记录）| EMAIL_REPLY 已有客户回复了开发信（推给负责人）
  kind String @db.VarChar(16)
  recipientId String?
  createdAt DateTime @default(now())
@@ -1756,6 +1757,7 @@ model RadarProspect {
  emails RadarEmail[]
  sequences RadarSequence[]
  sends RadarSend[]
+ replies RadarReply[]
  @@index([status, grade, score])
  @@index([country, status])
  @@index([domain])
@@ -1827,6 +1829,7 @@ model RadarMailbox {
  updatedAt DateTime @updatedAt
  sequences RadarSequence[]
  sends RadarSend[]
+ replies RadarReply[]
 }
 
 // 开发信模板：编号 = 语言-封次-版本（FR-1-A）。发出过一次后内容锁定，要改必须新建版本。
@@ -1885,6 +1888,7 @@ model RadarSequence {
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
  sends RadarSend[]
+ replies RadarReply[]
  @@index([status])
  @@index([prospectId])
 }
@@ -1935,6 +1939,7 @@ model RadarSend {
  lastError String @default("") @db.VarChar(500)
  // SUPPRESSED 禁发 | REPLIED 已回复 | IN_BOS 已在 BOS | SEQUENCE_STOPPED 序列已停止 | MANUAL 人工取消
  cancelReason String @default("") @db.VarChar(24)
+ replies RadarReply[]
  approvedById String?
  approvedAt DateTime?
  createdAt DateTime @default(now())
@@ -1964,4 +1969,78 @@ model RadarSuppression {
  updatedAt DateTime @updatedAt
  @@unique([scope, value, reason])
  @@index([value])
+}
+
+// 回复：发信邮箱收到、匹配到雷达客户的每封来信。按 [mailboxId, providerMessageId] 幂等；只有判为有效的才推进 BOS 建客户。
+model RadarReply {
+ id String @id @default(cuid())
+ mailboxId String
+ mailbox RadarMailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+ // Gmail 邮件编号
+ providerMessageId String @db.VarChar(32)
+ threadId String @default("") @db.VarChar(32)
+ // 这封回复的 RFC Message-ID：推进 BOS 的唯一标识
+ messageId String @default("") @db.VarChar(255)
+ prospectId String
+ prospect RadarProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+ sequenceId String?
+ sequence RadarSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
+ // 回复归属：回复前最后发出的那一封
+ sendId String?
+ send RadarSend? @relation(fields: [sendId], references: [id], onDelete: SetNull)
+ // THREAD 同一线程 | HEADER 邮件头 | ADDRESS 发件人地址 | DOMAIN 发件人域名
+ matchedBy String @db.VarChar(8)
+ fromAddress String @db.VarChar(191)
+ fromName String @default("") @db.VarChar(191)
+ subject String @default("") @db.VarChar(300)
+ receivedAt DateTime
+ // 完整纯文本存档；text 为去掉引用部分的正文
+ rawText String @db.MediumText
+ text String @db.Text
+ // 规则预筛：HARD_BOUNCE 硬退信 | SOFT_BOUNCE 软退信 | AUTO_REPLY 自动回复 | NONE 交给 AI
+ screen String @db.VarChar(12)
+ // QUOTE 要报价/样品 | INTERESTED 有兴趣/要资料 | QUESTION 业务提问 | REFERRAL 转介绍 | NOT_INTERESTED 不感兴趣 | UNSUBSCRIBE 退订 | AUTO_REPLY 自动回复 | BOUNCE 退信 | UNRELATED 无关或推销 | UNCLEAR 无法判断；空 = 还没判
+ aiCategory String @default("") @db.VarChar(16)
+ // 最终分类（人工改判后以此为准）
+ category String @default("") @db.VarChar(16)
+ valid Boolean?
+ confidence Decimal? @db.Decimal(3, 2)
+ // 中文摘要：销售不看原文也知道客户要什么
+ summary String @default("") @db.VarChar(500)
+ // HIGH | MEDIUM | LOW
+ intent String @default("") @db.VarChar(8)
+ // { contactName, title, phone, whatsapp, email, products, quantity, targetPrice, timeline }
+ extracted Json?
+ // 自动回复里对方回来的日期
+ returnDate DateTime?
+ complaint Boolean @default(false)
+ aiRaw Json?
+ analyzedAt DateTime?
+ analyzeAttempts Int @default(0)
+ analyzeError String @default("") @db.VarChar(300)
+ // NONE 无需 | PENDING 待复核 | CONFIRMED 已确认 | CORRECTED 已改判
+ reviewStatus String @default("NONE") @db.VarChar(12)
+ reviewedById String?
+ reviewedAt DateTime?
+ reviewNote String @default("") @db.VarChar(300)
+ // NONE | PENDING | PUSHED | FAILED | ATTACHED（已进 BOS 的客户再来信，直接挂在原客户下）
+ pushStatus String @default("NONE") @db.VarChar(12)
+ pushAttempts Int @default(0)
+ pushError String @default("") @db.VarChar(300)
+ pushedAt DateTime?
+ customerId String?
+ customer Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+ // 每周抽查：CORRECT | WRONG
+ sampledAt DateTime?
+ sampleVerdict String @default("") @db.VarChar(8)
+ processedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([mailboxId, providerMessageId])
+ @@index([prospectId, receivedAt])
+ @@index([reviewStatus, receivedAt])
+ @@index([pushStatus])
+ @@index([processedAt])
+ @@index([messageId])
+ @@index([customerId])
 }

@@ -26,6 +26,8 @@ const decodeQp = (text: string) => Buffer.from(text.replace(/=\r\n/g, '').replac
 
 test('radar sending: enqueue with checks, openings reviewed, one mail per mailbox slot, pre-send stop, failures, recovery', async t => {
   const tag = randomUUID().replace(/-/g, '').slice(0, 8);
+  // Template codes unique to this run (FR-1-A1F3 / FR-1-B1F3): the codes are unique across the whole library.
+  const v = tag.slice(0, 3).toUpperCase(), codeA = `FR-1-A${v}`, codeB = `FR-1-B${v}`;
   const setting = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { radarConfig: true, radarPausedAt: true, radarLaunchedAt: true } });
   await db.setting.update({ where: { id: 'system' }, data: { radarPausedAt: null, radarLaunchedAt: null } });
   const admin = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } });
@@ -49,9 +51,9 @@ test('radar sending: enqueue with checks, openings reviewed, one mail per mailbo
     // ── Templates ──
     await saveRadarConfig({ ...DEFAULT_RADAR_CONFIG, catalogUrls: { fr: '', en: '' } }, boss);
     const body = '{称呼}\n\n{个性化开头}\n\nNous fabriquons des canapés compressés pour des magasins comme {公司名}. Catalogue : {目录链接}\n\nVoulez-vous nos prix de gros ?';
-    const a = await createTemplate({ code: `fr-1-a`, subject: 'Canapés compressés pour {公司名}', body }, boss);
-    await createTemplate({ code: 'FR-1-B', subject: 'Canapés pour {城市}', body: '{称呼}\n\n{个性化开头}\n\nPetite question : vendez-vous des canapés ?' }, boss);
-    await assert.rejects(createTemplate({ code: 'FR-1-A', subject: 'x', body: 'y' }, boss), (e: { status?: number }) => e.status === 409);
+    const a = await createTemplate({ code: codeA.toLowerCase(), subject: 'Canapés compressés pour {公司名}', body }, boss);
+    await createTemplate({ code: codeB, subject: 'Canapés pour {城市}', body: '{称呼}\n\n{个性化开头}\n\nPetite question : vendez-vous des canapés ?' }, boss);
+    await assert.rejects(createTemplate({ code: codeA, subject: 'x', body: 'y' }, boss), (e: { status?: number }) => e.status === 409);
     await assert.rejects(createTemplate({ code: 'FR-4-A', subject: 'x', body: 'y' }, boss), /语言-封次-版本/);
     await assert.rejects(createTemplate({ code: 'FR-1-C', subject: 'x', body: '{客户名}' }, boss), /不认识的变量/);
     await assert.rejects(createTemplate({ code: 'FR-1-C', subject: 'x', body: 'y' }, seller), (e: { status?: number }) => e.status === 403);
@@ -97,7 +99,7 @@ test('radar sending: enqueue with checks, openings reviewed, one mail per mailbo
     const ids = [pA.id, pB.id, pC.id, pU.id, pS.id, pK.id];
 
     let preview = await previewEnqueue({ ids }, boss);
-    assert.deepEqual(preview.skipped.find(s => s.reason === 'NO_CATALOG')?.count, 4, 'FR-1-A uses {目录链接}: fill it in first');
+    assert.deepEqual(preview.skipped.find(s => s.reason === 'NO_CATALOG')?.count, 4, 'version A uses {目录链接}: fill it in first');
     await saveRadarConfig({ ...DEFAULT_RADAR_CONFIG, catalogUrls: { fr: 'https://www.lvanju.com/fr/catalogue', en: '' } }, boss);
     preview = await previewEnqueue({ ids }, boss);
     assert.equal(preview.selected, 6);
@@ -127,7 +129,7 @@ test('radar sending: enqueue with checks, openings reviewed, one mail per mailbo
     assert.equal((await enqueueProspects({ ids: [pA.id] }, boss)).skipped[0].reason, 'IN_SEQUENCE', 'one running sequence per company');
     const sendA = await db.radarSend.findFirstOrThrow({ where: { prospectId: pA.id }, include: { sequence: true } });
     const sendB = await db.radarSend.findFirstOrThrow({ where: { prospectId: pB.id }, include: { sequence: true } });
-    assert.deepEqual([sendA.templateCode, sendB.templateCode], ['FR-1-A', 'FR-1-B'], 'the two versions alternate');
+    assert.deepEqual([sendA.templateCode, sendB.templateCode], [codeA, codeB], 'the two versions alternate');
     assert.deepEqual([sendA.status, sendA.openingSource, sendA.opening], ['REVIEW', 'AI', deepSeek]);
     assert.equal(sendA.subject, `Canapés compressés pour alpha ${tag}`);
     assert.match(sendA.body, /^Bonjour,\n\nVos 3 magasins à Lyon mettent en avant les canapés\.\n\nNous fabriquons .* Catalogue : https:\/\/www\.lvanju\.com\/fr\/catalogue/s);
@@ -287,7 +289,7 @@ test('radar sending: enqueue with checks, openings reviewed, one mail per mailbo
     await db.radarProspect.deleteMany({ where: { id: { in: prospects.map(p => p.id) } } });
     await db.radarSuppression.deleteMany({ where: { value: { contains: tag } } });
     await db.radarMailbox.deleteMany({ where: { address: { contains: tag } } });
-    await db.radarTemplate.deleteMany({ where: { code: { in: ['FR-1-A', 'FR-1-B'] }, sends: { none: {} } } });
+    await db.radarTemplate.deleteMany({ where: { code: { in: [codeA, codeB] }, sends: { none: {} } } });
     await db.radarMailbox.updateMany({ where: { id: { in: otherBoxes.map(b => b.id) } }, data: { status: 'ACTIVE' } });
     for (const x of otherTemplates) await db.radarTemplate.updateMany({ where: { id: x.id }, data: { status: x.status } });
     await db.setting.update({ where: { id: 'system' }, data: { radarPausedAt: setting.radarPausedAt, radarLaunchedAt: setting.radarLaunchedAt } });

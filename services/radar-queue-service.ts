@@ -258,6 +258,7 @@ const sendAction = z.discriminatedUnion('action', [
   z.object({ action: z.literal('cancel') }),
   z.object({ action: z.literal('confirmSent') }),
   z.object({ action: z.literal('confirmNotSent') }),
+  z.object({ action: z.literal('retry') }),
 ], { errorMap: () => ({ message: '操作无效' }) });
 
 const unfilled = (text: string) => /\{[^{}\n]{1,20}\}/.test(text);
@@ -308,6 +309,9 @@ export async function updateSend(id: string, input: unknown, user: Actor) {
       const anySent = await tx.radarSend.count({ where: { sequenceId: send.sequenceId, status: { in: ['SENT', 'BOUNCED'] } } });
       await tx.radarProspect.updateMany({ where: { id: send.prospectId, status: { in: ['QUEUED', 'IN_SEQUENCE'] } }, data: { status: anySent ? 'NO_REPLY' : 'NEW', statusAt: new Date() } });
     }));
+  } else if (v.action === 'retry') {
+    if (send.sequence.status !== 'ACTIVE') throw new HttpError(409, '这家公司的序列已经停止，不能重发');
+    await guarded(['FAILED'], { status: 'QUEUED', attempts: 0, nextAttemptAt: null, mailboxId: null, lastError: '' });
   } else if (v.action === 'confirmSent') {
     await guarded(['UNKNOWN'], { status: 'SENT', sentAt: send.updatedAt, lastError: '人工确认已发出' });
   } else {

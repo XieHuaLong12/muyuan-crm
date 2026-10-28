@@ -67,6 +67,7 @@ export function QueueBoard({ data }: { data: Data }) {
             <Button variant="ghost" onClick={() => expand(row)} aria-expanded={open === row.id}>{open === row.id ? '收起' : '预览'}</Button>
             {row.status === 'REVIEW' && <Link className="bos-button bos-button-ghost" href="/radar/review">去审核</Link>}
             {['PREPARING', 'REVIEW', 'QUEUED'].includes(row.status) && <Button variant="ghost" disabled={busy} onClick={() => act(row, { action: row.pinned ? 'unpin' : 'pin' }, row.pinned ? '已取消插队' : '已插到最前，仍然遵守间隔和限额')}>{row.pinned ? '取消插队' : '插队'}</Button>}
+            {row.status === 'FAILED' && <Button disabled={busy} onClick={() => act(row, { action: 'retry' }, '已重新排队')}>重发</Button>}
             {['PREPARING', 'REVIEW', 'QUEUED', 'FAILED'].includes(row.status) && <Button variant="ghost" disabled={busy} onClick={() => act(row, { action: 'cancel' }, `已取消发给 ${row.prospect.name} 的信，这家公司的序列停止`)}>取消</Button>}
             {row.status === 'UNKNOWN' && <><Button disabled={busy} onClick={() => act(row, { action: 'confirmSent' }, '已记为发出')}>已确认发出</Button>
               <Button variant="ghost" disabled={busy} onClick={() => act(row, { action: 'confirmNotSent' }, '已重新排队')}>确认未发出</Button></>}
