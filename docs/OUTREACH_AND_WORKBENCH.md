@@ -151,7 +151,7 @@
 
 - `WhatsAppMessage.sentById String?`：BOS 发送人。历史消息为空，不回填。
 - `Setting.outreachConfig Json?`：可调参数（见 4.9），为空时用代码默认值。
-- `Setting.outreachStartedAt DateTime?`：话术记录的起点。第一次运行引擎时写入；之前的历史消息只用来推算会话状态，不生成触达记录、不调用 DeepSeek、不生成跟进任务。
+- `Setting.outreachStartedAt DateTime?`：话术记录的起点。第一次运行引擎时写入；之前的历史消息只用来推算会话状态，不生成触达记录、不调用 DeepSeek、不生成跟进任务。2026-10-29 起旧客户（2026-10-01 前询盘）同样不记录，见第 12 节。
 
 ### 4.8 工作日历
 
@@ -439,3 +439,58 @@
 - 上线：部署即执行加性迁移 `20261022090000_daily_review`，无手工步骤；回滚应用版本时保留新表与新列即可。
 - 设计图与实现的差异：页头标题按 BOS 规范用页签名「工作日历」，日期与「昨天完成 · 连续复盘 · 本周完成率」放在描述里；记录页的时间范围用按月翻页（含与上月对比）代替「本周 / 本月 / 近 90 天 / 全部」切换，搜索覆盖全部时间；「今天的数据」只放 BOS 有数据来源的 4 项（新线索、平均首回、客户回复、发出报价），设计图里的「确认到厂」暂无数据来源，未做。
 
+
+## 12. 新客户 / 旧客户分开（2026-10-29）
+
+> 需求来源：老大「为了创建数据的准确性……从十月份之前的客户挪到旧客户数据中，现在新进来的客户进入到新客户数据中，我要测试话术是否会影响我们的销售沟通，先把之前的客户独立开来」。确认的决定：**分界日期 2026 年 10 月 1 日**；**新客户、旧客户分两页**；主要目的是测出适合的话术，话术之后在话术库补充。
+
+### 12.1 需求理解
+
+话术测试要一份干净的数据：10 月 1 日之前进来的客户大多已经聊过、报过价，他们的回复反映的是之前的沟通，不是话术本身，混在一起会让话术排名失真。所以旧客户退出话术测试和每天的工作清单，但照常可以聊天、报价、下单，历史数据都保留。
+
+不新建数据库、不搬数据：按**询盘日期**（没有询盘日期时按建档时间）判断，早于 2026-10-01 00:00（北京时间）的是旧客户。之后再导入的旧线索自动归旧客户；旧客户再次来消息仍是旧客户。规则只有一处：`lib/customer-group.ts`。
+
+### 12.2 对 LVANJU BOS 整体的影响
+
+| 范围 | 新客户 | 旧客户 |
+| --- | --- | --- |
+| 客户列表 | 「新客户」页 `/customers` | 「旧客户」页 `/customers/legacy`，页头说明不参与话术测试、不进今日工作 |
+| 话术引擎 | 照旧：分配话术、记触达和回复、DeepSeek 判定、自动跟进任务 | 不分配话术、不写新的触达和回复记录、不调用 DeepSeek、不建跟进任务；已有的话术跟进任务在下次计算时关闭 |
+| 话术效果 / 人工复核 / 周一结论 / 非标准话术占比 / 改判率 | 只算新客户 | 以前写下的触达记录保留，不计入任何数字 |
+| 今日工作、待首联、跟进队列、顶栏「今日待办」、待分配提醒与顶栏线索提示、工作台紧急事项、老板简报的待分配 A/B 线索、每日复盘的「客户回复」 | 只算新客户 | 不出现 |
+| 消息中心 | 照旧 | 会话照常显示，带「旧客户」标签；不进「待首联」；聊天窗口的话术条显示「旧客户不参与话术测试」 |
+| 发送保护（客户要求停止联系、两次模板间隔 24 小时、模板上限） | 照旧 | 照旧（这是防骚扰，不是测试） |
+| 看板、订单、报价、成交、业绩、财务、驾驶舱 | 不变，新旧客户都算 | 不变 |
+
+### 12.3 涉及模块
+
+| 文件 | 变化 |
+| --- | --- |
+| `lib/customer-group.ts`（新） | 分界时间、`isLegacyCustomer`、`currentCustomers` / `legacyCustomers` 查询条件 |
+| `services/outreach-engine-service.ts` | 旧客户不记录、不开新一轮（`recorded` / `fresh`）、不排 AI 判定；定时补算只看新客户，另外把还挂着话术跟进任务的旧客户算一遍以关闭任务；打开聊天不给旧客户分配话术；返回 `legacy` |
+| `services/outreach-analytics-service.ts`、`outreach-review-service.ts`、`daily-review-service.ts` | 统计、复核、复盘数据只取新客户 |
+| `services/bos-sales-service.ts`（`queueFilters`）、`sales-team-service.ts`、`notification-service.ts`、`boss-brief-service.ts`、`workbench-service.ts` | 工作队列与计数只取新客户 |
+| `services/customer-list-service.ts` | 列表参数 `group`（`current` 默认 / `legacy` / `all`），页签计数按所在页；有筛选时返回另一页符合的数量 `otherTotal` |
+| `services/inbox-service.ts` | 会话和聊天返回 `legacy` |
+| `app/customers/legacy/page.tsx`（新）、`components/workspace.tsx`、`components/customer-list.tsx`、`lib/role-workspace.ts` | 旧客户页、页头说明、导航页签「新客户 / 旧客户」 |
+| `components/messages/*`、`components/customer-detail.tsx` | 「旧客户」标签与说明 |
+
+### 12.4 数据变化
+
+无迁移、无新环境变量、不改任何已有数据。分组由已有的 `Customer.inquiryAt` / `createdAt` 计算。
+
+### 12.5 API 变化
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/customers` | 新增可选参数 `group`：不传 = 新客户（客户列表默认页），`legacy` = 旧客户，`all` = 全部（消息中心「发起新会话」搜索用）。新增出参 `otherTotal`：带筛选时另一页符合同样筛选的客户数，列表据此提示「旧客户里还有 N 位符合当前筛选」，从看板、团队页带筛选跳过来时不会漏看 |
+| `GET /api/inbox/conversations`、`GET /api/inbox/thread` | 会话与客户新增 `legacy` |
+| `GET /api/outreach/next` | 新增 `legacy`；旧客户 `script` 为空 |
+
+全部保持 `{success, data}` 信封，只增不减。
+
+### 12.6 实施与验证
+
+- 测试：`tests/customer-group.test.ts`（分界时间与北京时间零点、没有询盘日期按建档时间；两页列表与 `otherTotal`；今日工作、待首联只算新客户；旧客户打开聊天不分配话术、发出话术不记触达不建任务、遗留的话术任务被关闭、旧的触达记录保留但不计入话术效果、话术触达列表和人工复核；消息中心旧客户带标签）、`tests/role-workspace.test.ts`（导航页签）。
+- 上线：无手工步骤。部署后旧客户遗留的话术跟进任务由每 5 分钟的定时补算逐批关闭。
+- 以后要调整分界日期，只改 `lib/customer-group.ts` 的 `NEW_CUSTOMERS_FROM`。

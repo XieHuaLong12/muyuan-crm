@@ -5,9 +5,13 @@ import { Actor, HttpError, scope } from '@/lib/auth';
 import { dayKey, localDate, periodRange, type Period } from '@/lib/time';
 import { contactNumber } from '@/lib/phone-country';
 import { CUSTOMER_SORT_KEYS } from '@/lib/customer-columns';
+import { customerGroupWhere } from '@/lib/customer-group';
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).or(z.literal('')).default('');
 export const customerListQuery = z.object({
+  // 新客户 (current) and 旧客户 (legacy) are separate pages; each lists only its own group (lib/customer-group.ts).
+  // `all` is for pickers that search every customer, such as starting a chat.
+  group: z.enum(['current', 'legacy', 'all']).default('current'),
   q: z.string().trim().max(100).default(''),
   stage: z.string().trim().max(32).default(''),
   country: z.string().trim().max(100).default(''),
@@ -43,8 +47,12 @@ function inquiryWindow(range: Prisma.DateTimeFilter): Prisma.CustomerWhereInput 
   return { OR: [{ inquiryAt: range }, { inquiryAt: null, createdAt: range }] };
 }
 
+const groupWhere = (group: CustomerListQuery['group']): Prisma.CustomerWhereInput => group === 'all' ? {} : customerGroupWhere(group);
+/** Filters that narrow the list (not the page, sort or group): links from dashboards set them. */
+const NARROWING = ['q', 'stage', 'country', 'source', 'owner', 'product', 'from', 'to', 'wonFrom', 'wonTo', 'qualified', 'behavior', 'period', 'assign', 'grade'] as const;
+
 function listWhere(user: Actor, q: CustomerListQuery, timezone: string): Prisma.CustomerWhereInput {
-  const and: Prisma.CustomerWhereInput[] = [scope(user)];
+  const and: Prisma.CustomerWhereInput[] = [scope(user), groupWhere(q.group)];
   const today = dayKey(new Date(), timezone);
   if (q.stage === 'pending') and.push({ nextFollowUpAt: { lt: localDate(`${nextDay(today)}T00:00`, timezone) } });
   else if (q.stage) and.push({ stage: q.stage });
@@ -90,12 +98,16 @@ export async function customerList(user: Actor, input: unknown) {
   const { timezone } = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { timezone: true } });
   const where = listWhere(user, q, timezone);
   const skip = (q.page - 1) * q.pageSize;
-  const [total, countries, pool, grades] = await Promise.all([
+  const group = groupWhere(q.group);
+  // A dashboard link (a stage, an owner, a period) counts both groups; say how many of them sit on the other page.
+  const other = q.group === 'all' || !NARROWING.some(key => q[key]) ? null : q.group === 'legacy' ? 'current' : 'legacy';
+  const [total, otherTotal, countries, pool, grades] = await Promise.all([
     db.customer.count({ where }),
-    db.customer.groupBy({ by: ['country'], where: { ...scope(user), country: { not: '' } }, orderBy: { country: 'asc' } }),
-    user.role === 'ADMIN' ? db.customer.count({ where: { deletedAt: null, pendingAssignment: true } }) : Promise.resolve(0),
-    // A / B / C tabs: how many of the user's customers each automatic form grade holds, whatever the other filters.
-    db.customer.groupBy({ by: ['leadGrade'], where: { ...scope(user), leadGrade: { in: [...GRADE_TABS] } }, _count: { _all: true } }),
+    other ? db.customer.count({ where: listWhere(user, { ...q, group: other }, timezone) }) : Promise.resolve(0),
+    db.customer.groupBy({ by: ['country'], where: { AND: [scope(user), group, { country: { not: '' } }] }, orderBy: { country: 'asc' } }),
+    user.role === 'ADMIN' ? db.customer.count({ where: { AND: [{ deletedAt: null, pendingAssignment: true }, group] } }) : Promise.resolve(0),
+    // A / B / C tabs: how many of the page's customers each automatic form grade holds, whatever the other filters.
+    db.customer.groupBy({ by: ['leadGrade'], where: { AND: [scope(user), group, { leadGrade: { in: [...GRADE_TABS] } }] }, _count: { _all: true } }),
   ]);
   let rows;
   if (q.sort === 'priority' || q.sort === 'inquiryAt') {
@@ -122,7 +134,7 @@ export async function customerList(user: Actor, input: unknown) {
     rows = await db.customer.findMany({ where, include, orderBy: [orderBy, { id: 'asc' }], skip, take: q.pageSize });
   }
   return {
-    rows: rows.map(c => ({ ...c, contact: contactNumber(c) })), total, page: q.page, pageSize: q.pageSize, countries: countries.map(c => c.country), pool,
+    rows: rows.map(c => ({ ...c, contact: contactNumber(c) })), total, otherTotal, page: q.page, pageSize: q.pageSize, countries: countries.map(c => c.country), pool,
     grades: Object.fromEntries(GRADE_TABS.map(grade => [grade, grades.find(g => g.leadGrade === grade)?._count._all ?? 0])) as Record<(typeof GRADE_TABS)[number], number>,
   };
 }

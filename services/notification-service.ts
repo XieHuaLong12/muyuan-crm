@@ -7,6 +7,7 @@ import { firstContactFocus } from './sales-team-service';
 import { TEST_LEAD_NOTE } from './meta-lead-service';
 import { todayWorkCounts } from './bos-sales-service';
 import { unreadConversationCount, unreadMessagesSince } from './inbox-service';
+import { currentCustomers } from '@/lib/customer-group';
 
 export type NotificationItem = {
   id: string;
@@ -45,9 +46,9 @@ export async function notificationFeed(user: Actor) {
       orderBy: { assignedAt: 'desc' }, take: 20,
       include: { customer: { select: { id: true, name: true, country: true, assignedAt: true, firstContactDueAt: true, leadGrade: true, leadGradeReason: true } } },
     }),
-    admin ? db.customer.findMany({ where: { deletedAt: null, pendingAssignment: true, createdAt: { gte: since } }, orderBy: { createdAt: 'desc' }, take: 20,
+    admin ? db.customer.findMany({ where: { deletedAt: null, pendingAssignment: true, createdAt: { gte: since }, AND: [currentCustomers] }, orderBy: { createdAt: 'desc' }, take: 20,
       select: { id: true, name: true, country: true, source: true, productInterest: true, createdAt: true, leadGrade: true, leadGradeReason: true } }) : Promise.resolve([]),
-    admin ? db.customer.findFirst({ where: { deletedAt: null, pendingAssignment: true }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }) : Promise.resolve(null),
+    admin ? db.customer.findFirst({ where: { deletedAt: null, pendingAssignment: true, AND: [currentCustomers] }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }) : Promise.resolve(null),
     admin ? db.metaLeadEvent.findMany({ where: { status: 'FAILED', createdAt: { gte: since }, OR: [{ error: { contains: 'AMBIGUOUS' } }, { error: { contains: '缺少可确认' } }] },
       orderBy: { createdAt: 'desc' }, take: 10, select: { leadgenId: true, error: true, createdAt: true } }) : Promise.resolve([]),
     // Salespeople see one number for today's work: the same count as the first tab of /sales.

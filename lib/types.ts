@@ -6,6 +6,6 @@ export type CustomerIntelligence={id:string;customerId:string;score:number;prior
 export type Settings={companyName:string;currency:string;timezone:string;leadAssignMode?:string;adLeadFirstContactMinutes?:number};
 export type Bootstrap={user:User;users:User[];settings:Settings;webhookConfigured:boolean;deepseekConfigured?:boolean};
 export type Target={id:string;periodKey:string;periodType:string;year:number;month:number|null;week:number|null;targetRevenue:string;manual:boolean;currency:string};
-export type CustomerPage={rows:Customer[];total:number;page:number;pageSize:number;countries:string[];pool:number;grades?:Record<'A'|'B'|'C',number>};
+export type CustomerPage={rows:Customer[];total:number;/** Customers on the other page (新客户 / 旧客户) matching the same filters. */otherTotal?:number;page:number;pageSize:number;countries:string[];pool:number;grades?:Record<'A'|'B'|'C',number>};
 /** The list's side preview (GET customers/:id/preview): the newest three follow-ups plus totals. */
 export type CustomerPreview=Customer&{followUps:NonNullable<Customer['followUps']>;followUpCount:number;submissionCount:number};

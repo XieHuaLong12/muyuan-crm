@@ -11,6 +11,7 @@ import {
   reviewStreak, weekday, type ReviewItem,
 } from '@/lib/workbench';
 import { nonStandardShares } from './outreach-analytics-service';
+import { currentCustomers } from '@/lib/customer-group';
 
 /**
  * 工作台 for the operations lead (docs/OUTREACH_AND_WORKBENCH.md): the month focus (3 at most), the week focus (3 at
@@ -64,10 +65,11 @@ export async function urgentItems(now: Date, config: OutreachConfig): Promise<Ca
   const active = { deletedAt: null, stage: { notIn: [...TERMINAL_STAGES] } } satisfies Prisma.CustomerWhereInput;
   const uncontacted = { firstContactAt: null, contactedAt: null, lastOutboundAt: null, lastFollowUpAt: null } satisfies Prisma.CustomerWhereInput;
   const late = new Date(now.getTime() - config.firstReplyMinutes * 60_000), week = new Date(now.getTime() - 7 * DAY);
-  const leadWhere: Prisma.CustomerWhereInput = { ...active, ...uncontacted, OR: [{ firstContactDueAt: { lt: now } }, { pendingAssignment: true, createdAt: { lt: late, gte: week } }] };
+  // 新客户 only: 旧客户 are worked from their own page (lib/customer-group).
+  const leadWhere: Prisma.CustomerWhereInput = { ...active, ...uncontacted, OR: [{ firstContactDueAt: { lt: now } }, { pendingAssignment: true, createdAt: { lt: late, gte: week } }], AND: [currentCustomers] };
   const waiting = new Date(now.getTime() - config.hotReplyHours * HOUR);
   const hotWhere: Prisma.CustomerWhereInput = { ...active, lastInboundAt: { lt: waiting, gte: new Date(now.getTime() - 14 * DAY) }, OR: [{ leadGrade: 'A' }, { bestReplyQuality: 'HIGH' }],
-    AND: [{ OR: [{ lastOutboundAt: null }, { lastInboundAt: { gt: db.customer.fields.lastOutboundAt } }] }, { OR: [{ lastFollowUpAt: null }, { lastInboundAt: { gt: db.customer.fields.lastFollowUpAt } }] }] };
+    AND: [currentCustomers, { OR: [{ lastOutboundAt: null }, { lastInboundAt: { gt: db.customer.fields.lastOutboundAt } }] }, { OR: [{ lastFollowUpAt: null }, { lastInboundAt: { gt: db.customer.fields.lastFollowUpAt } }] }] };
   const [leads, leadCount, hot, hotCount] = await Promise.all([
     db.customer.findMany({ where: leadWhere, select: { name: true }, orderBy: { createdAt: 'asc' }, take: 5 }), db.customer.count({ where: leadWhere }),
     db.customer.findMany({ where: hotWhere, select: { name: true }, orderBy: { lastInboundAt: 'asc' }, take: 5 }), db.customer.count({ where: hotWhere }),
@@ -85,7 +87,7 @@ export async function signalInput(userId: string, now: Date, tz: string, config:
   const matureEnd = now.getTime() - DAY;
   const window = (end: number) => ({ start: end - 7 * DAY, end });
   const windows = [0, 1, 2, 3, 4].map(i => window(matureEnd - i * 7 * DAY));
-  const touches = await db.outreachTouch.findMany({ where: { code: 'T0', judgeStatus: { not: 'VOID' }, replied24h: { not: null }, customer: { deletedAt: null },
+  const touches = await db.outreachTouch.findMany({ where: { code: 'T0', judgeStatus: { not: 'VOID' }, replied24h: { not: null }, customer: { AND: [{ deletedAt: null }, currentCustomers] },
     sentAt: { gte: new Date(windows[4].start), lt: new Date(matureEnd) } }, select: { sentAt: true, replied24h: true } });
   const rate = (w: { start: number; end: number }) => {
     const rows = touches.filter(t => t.sentAt.getTime() >= w.start && t.sentAt.getTime() < w.end);

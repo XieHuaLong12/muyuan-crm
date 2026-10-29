@@ -6,6 +6,7 @@ import { bosDateRange,opportunityStage } from '@/lib/bos';
 import { TERMINAL_STAGES } from '@/lib/constants';
 import { STALE_QUOTE_DAYS } from '@/lib/metrics';
 import { buyerLabel, isBusinessBuyer } from '@/lib/lead-grade';
+import { currentCustomers } from '@/lib/customer-group';
 
 export const salesQuery=z.object({queue:z.enum(['new','today','waiting','high','recent']).default('today'),q:z.string().trim().max(100).default(''),page:z.coerce.number().int().min(1).max(10000).default(1)});
 type Queue=z.infer<typeof salesQuery>['queue'];
@@ -22,12 +23,14 @@ const RESTATED_TASKS=['first-contact:','follow:'];
  * it, so a salesperson sees the same "today" number everywhere.
  */
 export function queueFilters(end:Date):Record<Queue,Prisma.CustomerWhereInput>{
+ // 旧客户 (lib/customer-group) have their own page and stay out of every work queue and count.
+ const current=(where:Prisma.CustomerWhereInput):Prisma.CustomerWhereInput=>({AND:[currentCustomers,where]});
  return {
-  new:{...ACTIVE,...PENDING_FIRST_CONTACT},
-  today:{...ACTIVE,OR:[PENDING_FIRST_CONTACT,{nextFollowUpAt:{lt:end}},openTaskDueBefore(end)]},
-  waiting:{...ACTIVE,lastInboundAt:{not:null},AND:[{OR:[{lastOutboundAt:null},{lastInboundAt:{gt:db.customer.fields.lastOutboundAt}}]},{OR:[{lastFollowUpAt:null},{lastInboundAt:{gt:db.customer.fields.lastFollowUpAt}}]}]},
-  high:{...ACTIVE,OR:[{aiScore:{gte:80}},{aiIntent:'HIGH'}]},
-  recent:{},
+  new:current({...ACTIVE,...PENDING_FIRST_CONTACT}),
+  today:current({...ACTIVE,OR:[PENDING_FIRST_CONTACT,{nextFollowUpAt:{lt:end}},openTaskDueBefore(end)]}),
+  waiting:current({...ACTIVE,lastInboundAt:{not:null},AND:[{OR:[{lastOutboundAt:null},{lastInboundAt:{gt:db.customer.fields.lastOutboundAt}}]},{OR:[{lastFollowUpAt:null},{lastInboundAt:{gt:db.customer.fields.lastFollowUpAt}}]}]}),
+  high:current({...ACTIVE,OR:[{aiScore:{gte:80}},{aiIntent:'HIGH'}]}),
+  recent:current({}),
  };
 }
 /** Today's work whose deadline has already passed. */
