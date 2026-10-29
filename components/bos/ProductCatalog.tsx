@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { Package,Layers3,AlertTriangle,ArrowUpRight,FilePlus2 } from 'lucide-react';
+import { Package,Layers3,AlertTriangle,ArrowUpRight,FilePlus2,PackagePlus } from 'lucide-react';
 import { Header,Card,Table,Badge,EmptyState,Typography } from '@/components/ui/bos';
 
 /**
@@ -31,6 +31,7 @@ export type CatalogData = {
   pageSize: number;
   total: number;
   libraryTotal: number;
+  draftCount: number;
   reviewCount: number;
   reviewBreakdown: { math: number; source: number; missing: number };
   tree: {
@@ -57,14 +58,17 @@ function buildUrl(query: CatalogData['query'], patch: Partial<CatalogData['query
   return text ? `/products?${text}` : '/products';
 }
 
-export function ProductCatalog({ data }: { data: CatalogData }) {
+const STATUS_TEXT: Record<string, string> = { ACTIVE: '已上架', DRAFT: '待上架', ARCHIVED: '已下架' };
+
+/** canManage：管理员可新增产品、上架 / 下架。 */
+export function ProductCatalog({ data, canManage = false }: { data: CatalogData; canManage?: boolean }) {
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
 
   return (
     <>
       <Header
         title="产品库"
-        description={`${data.total} 个型号 · 价格与包装以报价表为准（FOB）`}
+        description={`${data.total} 个型号 · 价格与包装以报价表和产品库录入为准`}
         actions={
           <>
             <span className="bos-lang-switch" role="group" aria-label="语言">
@@ -75,6 +79,16 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
               <AlertTriangle size={15} />
               待核对 {data.reviewCount}
             </Link>
+            {canManage && data.draftCount > 0 && data.query.status !== 'DRAFT' && (
+              <Link href={buildUrl(data.query, { status: 'DRAFT', review: 'ALL', page: 1 })} className="bos-button">
+                待上架 {data.draftCount}
+              </Link>
+            )}
+            {canManage && (
+              <Link href="/products/new" className="bos-button">
+                <PackagePlus size={15} /> 新增产品
+              </Link>
+            )}
             <Link href="/products/quotes/new" className="bos-button bos-button-primary">
               <FilePlus2 size={15} /> 新建报价
             </Link>
@@ -153,9 +167,9 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
                 />
               </label>
               <select name="status" aria-label="状态" defaultValue={data.query.status}>
-                <option value="ACTIVE">在售</option>
-                <option value="DRAFT">草稿</option>
-                <option value="ARCHIVED">归档</option>
+                <option value="ACTIVE">已上架</option>
+                <option value="DRAFT">待上架</option>
+                <option value="ARCHIVED">已下架</option>
                 <option value="ALL">全部状态</option>
               </select>
               <button className="bos-button" type="submit">筛选</button>
@@ -201,8 +215,8 @@ export function ProductCatalog({ data }: { data: CatalogData }) {
                     {product.startingPrice && <small>{product.startingPrice.incoterm}</small>}
                   </td>
                   <td>
-                    <Badge tone={product.status === 'ACTIVE' ? 'green' : 'neutral'}>
-                      {product.status === 'ACTIVE' ? '在售' : product.status === 'DRAFT' ? '草稿' : '归档'}
+                    <Badge tone={product.status === 'ACTIVE' ? 'green' : product.status === 'DRAFT' ? 'warning' : 'neutral'}>
+                      {STATUS_TEXT[product.status] ?? product.status}
                     </Badge>
                   </td>
                 </tr>

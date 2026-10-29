@@ -22,6 +22,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { parsePacking, parseGrossWeight, cbmNeedsReview } from '../lib/product-packing';
 import { applyCatalog2026 } from './catalog-2026.mjs';
+import { applyProducts2026 } from './products-2026';
 
 // 本机开发时读 .env；生产环境（Hostinger 等）没有 .env，环境变量由平台注入。
 // 不要在这里用 `node --env-file=.env`：文件不存在时 node 会直接退出，导致静默失败。
@@ -681,13 +682,20 @@ async function main() {
     where: { code: { in: ['COMPRESSED_SOFA', 'COMPRESSED_BED'] }, products: { none: {} } },
   });
 
+  // 2026 新品（压缩床垫、智能电动床垫）与 M-801、C 系列的规格补全，与已上线的库走同一段代码
+  await applyProducts2026(db, message => console.log(`Product OS：${message}`));
+
   const categoryTotal = await db.productCategory.count();
   const cnyPrices = await db.productPrice.count({ where: { currency: 'CNY' } });
   console.log(
     `Product OS seed 完成：${products.length} 个型号、${variantTotal} 个变体、` +
       `${cartonTotal} 条纸箱记录，其中 ${flaggedTotal} 个变体标记为待核对。`,
   );
-  console.log(`Product OS：分类 ${categoryTotal} 个（两层），人民币价格 ${cnyPrices} 条。`);
+  const [productTotal, variantTotalAll] = await Promise.all([
+    db.product.count({ where: { deletedAt: null } }),
+    db.productVariant.count({ where: { deletedAt: null } }),
+  ]);
+  console.log(`Product OS：产品库合计 ${productTotal} 个型号、${variantTotalAll} 个变体；分类 ${categoryTotal} 个（两层），人民币价格 ${cnyPrices} 条。`);
   if (missingImages.length) {
     console.log(`Product OS：以下型号暂无产品图，需补充：${missingImages.join('、')}`);
   }

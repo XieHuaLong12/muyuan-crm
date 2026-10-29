@@ -140,6 +140,20 @@ try {
     console.warn('Product OS: 图册校正未完成：', error instanceof Error ? error.message : error);
   }
 
+  // 2026 新品：压缩床垫 M-803 等 6 款、智能电动床垫 7 款整套新增，M-801 与 C-301 ~ C-306 按新规格补全。
+  // 只新增缺的型号；已有字段只改仍是旧种子值的，人工改过的保留并在日志列出（prisma/products-2026.ts）。
+  try {
+    const tsxCli = 'node_modules/tsx/dist/cli.mjs';
+    if (fs.existsSync(tsxCli)) {
+      const run = spawnSync(process.execPath, [tsxCli, 'prisma/products-2026-run.ts'], { stdio: 'inherit', env: process.env });
+      if (run.error || run.status !== 0) {
+        console.warn(`Product OS: 2026 新品导入未完成（${run.error?.message ?? `退出码 ${run.status}`}）。`);
+      }
+    }
+  } catch (error) {
+    console.warn('Product OS: 2026 新品导入未完成：', error instanceof Error ? error.message : error);
+  }
+
   // 产品主图补登记：已有产品库不再跑种子，新增的图片文件（public/products/<型号>.jpg）在这里登记。
   // 只为「有图片文件、但还没有主图记录」的型号新建 HERO 记录；不改动已有图片记录和任何人工资料。
   try {

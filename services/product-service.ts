@@ -125,7 +125,7 @@ export async function productList(user: Actor, input: unknown = {}) {
     ...(query.review === 'NEEDS_REVIEW' ? { variants: { some: { needsReview: true, deletedAt: null } } } : {}),
   };
 
-  const [rows, total, categories, reviewCount, mathCount, sourceCount, missingCount, libraryTotal] = await Promise.all([
+  const [rows, total, categories, reviewCount, mathCount, sourceCount, missingCount, libraryTotal, draftCount] = await Promise.all([
     db.product.findMany({
       where,
       include: {
@@ -148,6 +148,8 @@ export async function productList(user: Actor, input: unknown = {}) {
     db.productVariant.count({ where: { needsReview: true, deletedAt: null, reviewNote: { startsWith: '[资料缺失]' } } }),
     // 未经过滤的总数，用于区分「产品库为空」与「筛选无结果」
     db.product.count({ where: { deletedAt: null } }),
+    // 待上架（新建或资料不全的自动上架型号），默认列表只显示已上架
+    db.product.count({ where: { deletedAt: null, status: 'DRAFT' } }),
   ]);
 
   const lang = query.lang;
@@ -156,6 +158,7 @@ export async function productList(user: Actor, input: unknown = {}) {
     pageSize: PAGE_SIZE,
     total,
     libraryTotal,
+    draftCount,
     reviewCount,
     reviewBreakdown: { math: mathCount, source: sourceCount, missing: missingCount },
     tree: categories.map(root => ({
@@ -227,6 +230,9 @@ export async function productDetail(user: Actor, id: string, input: unknown = {}
     nameEn: product.nameEn,
     nameCn: product.nameCn,
     status: product.status,
+    listingMode: product.listingMode,
+    descriptionCn: product.descriptionCn,
+    descriptionEn: product.descriptionEn,
     lengthLabel: product.lengthLabel,
     lang,
     category: {

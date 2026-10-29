@@ -177,9 +177,10 @@ function variantDims(v: {
   lengthCm: number | null; widthCm: number | null; heightCm: number | null;
   secondaryLengthCm: number | null; secondaryWidthCm: number | null; secondaryHeightCm: number | null; bedSizeCm: string;
 }, language: QuoteLanguage) {
-  if (!v.lengthCm || !v.widthCm || !v.heightCm) return '';
+  if (!v.lengthCm || !v.widthCm) return '';
   const labels = QUOTE_LABELS[language];
-  const main = `${v.lengthCm}×${v.widthCm}×${v.heightCm}`;
+  // 资料只给长 × 宽时（如智能电动床垫未给厚度）只写两项
+  const main = v.heightCm ? `${v.lengthCm}×${v.widthCm}×${v.heightCm}` : `${v.lengthCm}×${v.widthCm}`;
   if (v.secondaryLengthCm && v.secondaryWidthCm && v.secondaryHeightCm) {
     return `${main} / ${labels.inner} ${v.secondaryLengthCm}×${v.secondaryWidthCm}×${v.secondaryHeightCm}`;
   }
@@ -191,7 +192,7 @@ function materialText(materials: { nameEn: string; nameCn: string }[], language:
   const english = materials.map(m => m.nameEn).filter(Boolean);
   const chinese = materials.map(m => m.nameCn).filter(Boolean);
   if (language === 'zh' && chinese.length === materials.length && chinese.length) return chinese.join(' + ');
-  return english.length ? english.join(' ') : chinese.join(' + ');
+  return english.length ? english.join(' + ') : chinese.join(' + ');
 }
 
 export type CatalogVariant = {
