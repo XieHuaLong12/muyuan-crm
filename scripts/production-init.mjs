@@ -229,6 +229,20 @@ try {
     console.warn('Orders backfill skipped:', error instanceof Error ? error.message : error);
   }
 
+  // 有效口径：客户在我们第一条消息之后回复才算已回复、有效。把此前因广告自动消息等被系统标为已回复的客户改回来。
+  // 只改系统自己设的「已回复」，每条写阶段历史；可重复运行，改完后每次部署只做只读检查。
+  try {
+    const tsxCli = 'node_modules/tsx/dist/cli.mjs';
+    if (fs.existsSync(tsxCli)) {
+      const run = spawnSync(process.execPath, [tsxCli, 'prisma/requalify-replies.ts'], { stdio: 'inherit', env: process.env });
+      if (run.error || run.status !== 0) {
+        console.warn(`有效口径调整未完成（${run.error?.message ?? `退出码 ${run.status}`}）。请运行 pnpm db:requalify-replies。`);
+      }
+    }
+  } catch (error) {
+    console.warn('有效口径调整未完成：', error instanceof Error ? error.message : error);
+  }
+
   // Meta Lead Ads 环境自检：只报告「是否配置」，**绝不打印变量值**
   {
     const vars = [

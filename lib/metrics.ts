@@ -15,6 +15,16 @@ export function inquiryIn(period: Period): Prisma.CustomerWhereInput {
   return { OR: [{ inquiryAt: within(period) }, { inquiryAt: null, createdAt: within(period) }] };
 }
 
+/**
+ * A reply starts with our first message: the customer wrote after it. What they send before it (an ad's prefilled
+ * text, an auto message, their own first question) is not a reply, so it does not make them 已回复 or 有效. A customer
+ * already at 已联系 without a recorded first message was contacted before the records began.
+ */
+export function repliedAfterContact(customer: { stage: string; contactedAt: Date | null; lastInboundAt: Date | null }) {
+  if (!customer.lastInboundAt) return false;
+  return customer.contactedAt ? customer.lastInboundAt > customer.contactedAt : customer.stage === 'CONTACTED';
+}
+
 /** Qualified: not marked invalid, and either marked qualified by sales or already quoted or further. */
 export const QUALIFIED: Prisma.CustomerWhereInput = { stage: { not: 'INVALID' }, OR: [{ isQualified: true }, { stage: { in: [...ADVANCED_STAGES] } }] };
 export function isQualified(customer: { stage: string; isQualified: boolean | null }) {

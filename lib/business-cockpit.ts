@@ -31,6 +31,33 @@ export function cockpitSelection(query: { range?: string; startDate?: string; en
  return { range, start: localDate(`${startKey}T00:00`, timezone), end: localDate(`${shift(endKey, 1)}T00:00`, timezone), startKey, endKey, label, trend, trendStartKey };
 }
 
+export type TrendBucket = { start: string; end: string; label: string };
+/**
+ * The chart's time slots for a selected period: days, weeks (Monday to Sunday) or months, following `selection.trend`,
+ * as inclusive local day keys. Today's chart covers the last seven days.
+ */
+export function trendBuckets(selection: Pick<CockpitSelection, 'trend' | 'trendStartKey' | 'endKey'>): TrendBucket[] {
+ const buckets: TrendBucket[] = [];
+ let cursor = selection.trendStartKey;
+ while (cursor <= selection.endKey) {
+  const next = selection.trend === 'day' ? shift(cursor, 1) : selection.trend === 'week' ? shift(cursor, 7 - ((new Date(`${cursor}T12:00:00Z`).getUTCDay() + 6) % 7)) : `${Number(cursor.slice(5, 7)) === 12 ? Number(cursor.slice(0, 4)) + 1 : cursor.slice(0, 4)}-${String(Number(cursor.slice(5, 7)) % 12 + 1).padStart(2, '0')}-01`;
+  const end = shift(next, -1) < selection.endKey ? shift(next, -1) : selection.endKey;
+  const label = selection.trend === 'month' ? `${cursor.slice(0, 4) === selection.endKey.slice(0, 4) ? '' : `${cursor.slice(0, 4)}/`}${Number(cursor.slice(5, 7))}月` : `${Number(cursor.slice(5, 7))}/${Number(cursor.slice(8, 10))}`;
+  buckets.push({ start: cursor, end, label });
+  cursor = next;
+ }
+ return buckets;
+}
+/** Index of the bucket holding a local day key, -1 outside the chart. */
+export const bucketIndex = (buckets: TrendBucket[], key: string) => buckets.findIndex(bucket => key >= bucket.start && key <= bucket.end);
+
+/** The selected period up to now, and the period of the same length just before it (for 比上期). */
+export function periodPair(selection: { start: Date; end: Date }, now: Date) {
+ const end = new Date(Math.min(now.getTime(), selection.end.getTime()));
+ const previousStart = new Date(selection.start.getTime() - Math.max(0, end.getTime() - selection.start.getTime()));
+ return { current: { start: selection.start, end }, previous: { start: previousStart, end: selection.start } };
+}
+
 export function rate(part: number, total: number): number | null { return total > 0 ? Math.round(part / total * 1000) / 10 : null; }
 export function changeRate(current: number, previous: number): number | null { return previous > 0 ? Math.round((current - previous) / previous * 100) : null; }
 

@@ -1,8 +1,10 @@
 import { Prisma } from '@prisma/client';
+import { db } from '@/lib/db';
 import { canonicalPhone, identityKey } from '@/lib/contact-identity';
 import { resolveActiveContact } from './contact-identity-service';
 import { contactedFeedback, qualifiedFeedback } from './advertising-feedback-service';
 import { stageQualifies } from '@/lib/constants';
+import { repliedAfterContact } from '@/lib/metrics';
 
 export async function ensureConversation(tx: Prisma.TransactionClient, input: {
   provider: string; accountId: string; peerId: string; phone?: string | null; name?: string;
@@ -39,21 +41,60 @@ export async function ensureConversation(tx: Prisma.TransactionClient, input: {
   return { contact, conversation, customerId, status };
 }
 
-/** Historical imports preserve min first facts and max last facts, even when delivered out of order. */
+/**
+ * Historical imports preserve min first facts and max last facts, even when delivered out of order. The customer is
+ * 已回复 (and so 有效) once they write after our first message (repliedAfterContact); an earlier message, such as the
+ * text an ad fills in, leaves the stage alone. Either order of arrival ends in the same stage.
+ */
 export async function messageFacts(tx: Prisma.TransactionClient, customerId: string, at: Date, direction: string) {
   const c = await tx.customer.findUniqueOrThrow({ where: { id: customerId } });
   const last = (value: Date | null) => value && value > at ? value : at;
   const first = (value: Date | null) => value && value < at ? value : at;
   const inbound = direction.toUpperCase() === 'INBOUND';
-  const stage=c.stageSource!=='HUMAN'&&['NEW','CONTACTED'].includes(c.stage)?inbound?'REPLIED':c.stage==='NEW'?'CONTACTED':c.stage:null;
+  const facts = { stage: c.stage, contactedAt: inbound ? c.contactedAt : first(c.contactedAt), lastInboundAt: inbound ? last(c.lastInboundAt) : c.lastInboundAt };
+  const stage=c.stageSource!=='HUMAN'&&['NEW','CONTACTED'].includes(c.stage)?repliedAfterContact(facts)?'REPLIED':facts.contactedAt?'CONTACTED':c.stage:null;
   await tx.customer.update({ where: { id: customerId }, data: {
     ...(stage&&stage!==c.stage?{stage,stageSource:'SYSTEM',...(stageQualifies(stage)?{isQualified:true}:{})}:{}),
     lastContactAt: last(c.lastContactAt), lastWhatsAppAt: last(c.lastWhatsAppAt),
     ...(inbound ? { firstReplyAt: first(c.firstReplyAt), lastInboundAt: last(c.lastInboundAt) } : { contactedAt: first(c.contactedAt), lastOutboundAt: last(c.lastOutboundAt) }),
   } });
   if(stage&&stage!==c.stage)await tx.stageHistory.create({data:{customerId,fromStage:c.stage,toStage:stage,changedBy:c.ownerId,note:'SYSTEM: 已入库 WhatsApp 消息事实'}});
-  // A customer who writes back is valid from now on (已回复 and later stages).
+  // A customer who answers us is valid from now on (已回复 and later stages).
   if(stage&&stage!==c.stage&&stageQualifies(stage)&&c.isQualified!==true)await qualifiedFeedback(tx,customerId,at);
   if(!inbound)await contactedFeedback(tx,customerId,at);
   await tx.customerIntelligence.upsert({ where: { customerId }, create: { customerId, productsJson: '[]', analysisPending: true }, update: { analysisPending: true } });
+}
+
+const EARLY_MESSAGE_NOTE = 'SYSTEM: 有效口径调整，客户在我们第一条消息之前发来的消息不算回复';
+
+/**
+ * Before the rule above, any message from the customer made them 已回复 and 有效, including the text an ad fills in
+ * before we ever wrote. This takes those customers back to where the messages leave them (已联系, or 新线索 when we
+ * have not written yet) and 待判断. Only the system's own 已回复 is touched: a person's stage, a later stage and a real
+ * reply all stay. A LeadQualified event not yet sent to Meta is cancelled, and its key freed so a real reply later
+ * reports again; one already sent cannot be recalled and is only counted. Each change leaves a stage history entry,
+ * so running it again finds nothing more to do.
+ */
+export async function requalifyEarlyMessages() {
+  const candidates = await db.customer.findMany({ where: { deletedAt: null, stage: 'REPLIED', stageSource: 'SYSTEM' },
+    select: { id: true, ownerId: true, contactedAt: true, lastInboundAt: true,
+      stageHistory: { where: { toStage: 'REPLIED' }, orderBy: { changedAt: 'desc' }, take: 1, select: { fromStage: true } } } });
+  let moved = 0, cancelled = 0, alreadySent = 0;
+  for (const c of candidates) {
+    const before = c.stageHistory[0]?.fromStage ?? 'NEW';
+    if (repliedAfterContact({ stage: before, contactedAt: c.contactedAt, lastInboundAt: c.lastInboundAt })) continue;
+    const stage = c.contactedAt ? 'CONTACTED' : 'NEW';
+    await db.$transaction(async tx => {
+      const changed = await tx.customer.updateMany({ where: { id: c.id, stage: 'REPLIED', stageSource: 'SYSTEM' }, data: { stage, isQualified: null } });
+      if (!changed.count) return;
+      moved++;
+      await tx.stageHistory.create({ data: { customerId: c.id, fromStage: 'REPLIED', toStage: stage, changedBy: c.ownerId, note: EARLY_MESSAGE_NOTE } });
+      const eventId = `qualified:${c.id}:v1`;
+      const unsent = await tx.advertisingFeedback.updateMany({ where: { eventId, status: { in: ['PENDING', 'FAILED', 'NOT_CONNECTED'] } },
+        data: { eventId: `${eventId}:revoked`, status: 'BUSINESS_CANCELLED' } });
+      cancelled += unsent.count;
+      if (!unsent.count && await tx.advertisingFeedback.count({ where: { eventId } })) alreadySent++;
+    });
+  }
+  return { checked: candidates.length, moved, cancelled, alreadySent };
 }

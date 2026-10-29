@@ -27,7 +27,7 @@ test('the sidebar is short: related pages are tabs of one section',()=>{
   assert.deepEqual(workspaceNavigation('SALES').map(item=>item.label),['今日工作','消息','话术','我的客户','产品与报价','我的订单','我的业绩']);
   assert.deepEqual(workspaceNavigation('ADMIN').map(item=>item.label),['工作台','经营总览','客户','消息','任务','订单','广告与线索','团队','设置']);
   const salesPaths=workspaceNavigation('SALES').flatMap(item=>[item.href,...(item.tabs??[]).map(tab=>tab.href)]);
-  for(const path of ['/command-center','/growth','/analytics/ads','/finance','/settings','/team','/communication','/targets'])assert.equal(salesPaths.includes(path),false,path);
+  for(const path of ['/command-center','/command-center/customers','/command-center/messages','/growth','/analytics/ads','/finance','/settings','/team','/communication','/targets'])assert.equal(salesPaths.includes(path),false,path);
   for(const role of ['SALES','ADMIN']){
     const sections=workspaceNavigation(role);
     assert.equal(new Set(sections.map(item=>item.icon)).size,sections.length,`${role} icons are distinct`);
@@ -71,6 +71,8 @@ test('detail pages and tools highlight the section they belong to',()=>{
   assert.deepEqual(at('/settings/integrations/whatsapp','ADMIN'),['设置','集成与接入']);
   assert.deepEqual(at('/admin/integration-debug','ADMIN'),['设置','集成与接入']);
   assert.deepEqual(at('/command-center/analysis','ADMIN'),['经营总览','来源与国家']);
+  assert.deepEqual(at('/command-center/customers','ADMIN'),['经营总览','客户分析']);
+  assert.deepEqual(at('/command-center/messages','ADMIN'),['经营总览','消息分析']);
   assert.equal(activeWorkspaceLink('/growth/intake','ADMIN'),'/analytics/ads');
   assert.equal(activeWorkspace('/login','ADMIN'),null);
 });
