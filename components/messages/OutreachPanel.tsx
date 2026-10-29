@@ -42,9 +42,12 @@ export function OutreachBar({ view, timezone, canTemplate, onUseTemplate }: { vi
     <div className="bos-outreach-bar-head">
       <MessageSquareQuote size={16} aria-hidden="true" />
       <span>{view.stateLabel} · 下一条 <strong>{view.nextLabel}</strong>{view.nextTouchAt ? ` · 计划 ${dateTime(view.nextTouchAt, timezone)}` : ''}</span>
-      {view.script ? <span className="bos-outreach-chip">系统分配 {view.script.code}（{view.script.statusLabel}）</span> : <span className="bos-outreach-chip is-muted">话术库暂无可分配的话术</span>}
+      {view.script ? <span className="bos-outreach-chip">系统分配 {view.script.code}（{view.script.statusLabel}）</span>
+        : <span className="bos-outreach-chip is-muted">{view.noScript === 'GRADE_D' ? 'D 类线索不分配话术' : '话术库还没有可用的话术'}</span>}
     </div>
     {view.script && <p className="bos-outreach-script">{view.script.rendered}</p>}
+    {view.noScript === 'GRADE_D' && <p className="bos-outreach-missing">D 类是 Meta 测试线索或没有联系方式，不分配话术。判断有误的话，在右侧把客户等级改为 A / B / C，马上分配。</p>}
+    {view.noScript === 'LIBRARY_EMPTY' && <p className="bos-outreach-missing">话术库里还没有「测试中」或「胜出」的 {view.nextLabel} 话术。添加后，还没发过消息的客户打开聊天就会自动分配。<Link href="/outreach/library">去话术库</Link></p>}
     <div className="bos-outreach-bar-actions">
       {view.script?.templateName && canTemplate && <button type="button" className="is-primary" onClick={onUseTemplate}><LayoutTemplate size={14} aria-hidden="true" />用这条模板发送</button>}
       {view.script && <button type="button" onClick={copy}>{copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}{copied ? '已复制' : '复制话术（手机发送）'}</button>}

@@ -278,3 +278,51 @@ test('outreach with DeepSeek: phone messages matched, unsure ones reviewed, repl
     await db.setting.update({ where: { id: 'system' }, data: { outreachStartedAt: setting.outreachStartedAt, outreachConfig: setting.outreachConfig === null ? Prisma.DbNull : setting.outreachConfig } });
   }
 });
+
+test('every customer we have not written to gets a T0 script: customers who wrote first, other grades, other languages', async () => {
+  const tag = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase(), marker = `Icebreak${tag}`;
+  const setting = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { outreachStartedAt: true, outreachConfig: true } });
+  await db.setting.update({ where: { id: 'system' }, data: { outreachStartedAt: new Date('2026-01-01T00:00:00Z'), outreachConfig: {} } });
+  const admin = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } });
+  const boss = actorOf(admin);
+  let n = 0;
+  const lead = (data: Record<string, unknown> = {}) => {
+    const phone = `+336${String(Date.now()).slice(-6)}${String(++n).padStart(2, '0')}`;
+    return db.customer.create({ data: { name: `${marker} Lead${n}`, ownerId: admin.id, source: 'FACEBOOK', leadGrade: 'B', whatsapp: phone, phone, phoneE164: phone,
+      whatsappNormalized: phone.slice(1), contactKeysAt: new Date(), assignedAt: new Date(), ...data } });
+  };
+  const inbound = (customerId: string, hoursAgo: number, content: string) => db.whatsAppMessage.create({ data: { customerId, direction: 'INBOUND', content,
+    sentAt: new Date(Date.now() - hoursAgo * HOUR), raw: '{}', source: 'gupshup', status: 'RECEIVED' } });
+  try {
+    // Before the library has a usable T0, the chat says so instead of leaving the salesperson guessing.
+    const early = await lead();
+    const usable = await db.outreachScript.count({ where: { position: 'T0', status: { in: ['TESTING', 'WINNER'] } } });
+    if (!usable) {
+      const view = await outreachNextView({ customerId: early.id }, boss);
+      assert.deepEqual([view.next, view.script, view.noScript], ['T0', null, 'LIBRARY_EMPTY']);
+      await db.outreachAssignment.deleteMany({ where: { customerId: early.id } });
+    }
+
+    // Only an A-grade English script: a B lead, a French lead and a lead who wrote first all get it.
+    const script = await createScript({ code: `T0-IB${tag}1`, position: 'T0', grades: ['A'], language: 'en', content: 'Hi {客户名}, do you sell in stores or online?' }, boss);
+    const wroteFirst = await lead();
+    await inbound(wroteFirst.id, 2, 'Hello, I saw your ad. Price for 20 sofas?');
+    const french = await lead({ language: 'Français' });
+    for (const customer of [early, wroteFirst, french]) {
+      const view = await outreachNextView({ customerId: customer.id }, boss);
+      assert.deepEqual([view.state, view.next, view.script?.code, view.noScript], ['ICEBREAK', 'T0', script.code, null], customer.name);
+      assert.ok(view.script?.rendered.startsWith(`Hi ${marker}`), 'ready to copy, with the name filled in');
+    }
+    const assignment = await db.outreachAssignment.findFirstOrThrow({ where: { customerId: wroteFirst.id, position: 'T0' } });
+    assert.deepEqual([assignment.grade, assignment.language], ['B', 'en'], 'the statistics still count it under the customer\'s grade');
+
+    // A D lead (Meta test lead or no contact) gets none, and the chat says how to fix a wrong grade.
+    const invalid = await lead({ leadGrade: 'D' });
+    const view = await outreachNextView({ customerId: invalid.id }, boss);
+    assert.deepEqual([view.next, view.script, view.noScript], ['T0', null, 'GRADE_D']);
+  } finally {
+    await deleteTestCustomers({ where: { name: { startsWith: marker } } });
+    await db.outreachScript.deleteMany({ where: { code: { startsWith: `T0-IB${tag}` } } });
+    await db.setting.update({ where: { id: 'system' }, data: { outreachStartedAt: setting.outreachStartedAt, outreachConfig: setting.outreachConfig ?? Prisma.DbNull } });
+  }
+});

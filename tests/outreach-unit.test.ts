@@ -101,19 +101,34 @@ test('a refusal makes the lead dormant; a stop request stops all outreach', () =
   assert.equal(later.state, 'STOPPED', 'nothing leaves STOPPED on its own');
 });
 
+test('a customer who wrote first still gets T0: our first message is the icebreak, their answer to it breaks the ice', () => {
+  const lead = inn(0, 'Hello, I saw your ad');
+  const waiting = derive([lead], 1);
+  assert.deepEqual([waiting.state, waiting.next, waiting.touches.length], ['ICEBREAK', 'T0', 0], 'nothing sent yet, so T0 is next');
+  const first = out(0.2, 'Hi! Which market do you sell to?');
+  const sent = derive([lead, first], 1);
+  assert.deepEqual(sent.touches.map(t => [t.code, t.windowOpen]), [['T0', true]], 'our first message is T0, sent inside the 24-hour window');
+  assert.deepEqual([sent.state, sent.next], ['ICEBREAK', 'T1'], 'no answer yet: the follow-ups go on');
+  const reply = inn(2, 'We sell online in Dubai');
+  const talking = derive([lead, first, reply], 3);
+  assert.deepEqual([talking.state, talking.touches[0].replyKey, talking.touches[0].replied24h, talking.firstAnsweredTouch], ['CONVERSING', reply.id, true, first.id]);
+  assert.equal(derive([inn(0, 'Stop')], 1).state, 'STOPPED', 'a customer asking to stop gets nothing, even before we wrote');
+});
+
 test('72 hours after the customer last wrote, the conversation is silent: R1–R3, then dormant', () => {
-  const lead = inn(0, 'Hello, I saw your ad'), answer = out(0.2, 'Hi! Which market do you sell to?');
-  assert.equal(derive([lead, answer], 1).touches.length, 0, 'a customer who wrote first is a conversation, our answer is no touch');
-  const silent = derive([lead, answer], 80);
+  const t0 = out(-1, 'Hi! Which market do you sell to?'), lead = inn(0, 'Hello, we have a shop'), answer = out(0.2, 'Great, here is our catalogue');
+  const talking = derive([t0, lead, answer], 1);
+  assert.deepEqual([talking.state, talking.touches.map(t => t.code)], ['CONVERSING', ['T0']], 'in a conversation our messages are no touch');
+  const silent = derive([t0, lead, answer], 80);
   assert.deepEqual([silent.state, silent.next, silent.cycle], ['SILENT', 'R1', 1]);
   assert.equal(silent.nextTouchAt?.getTime(), at(72).getTime(), 'R1 on the day the silence starts');
   const r1 = out(80), back = inn(90, 'Yes please send prices');
-  const revived = derive([lead, answer, r1, back], 91);
-  assert.deepEqual(revived.touches.map(t => [t.kind, t.code, t.cycle, t.replyKey]), [['REVIVE', 'R1', 1, back.id]]);
+  const revived = derive([t0, lead, answer, r1, back], 91);
+  assert.deepEqual(revived.touches.filter(t => t.kind === 'REVIVE').map(t => [t.code, t.cycle, t.replyKey]), [['R1', 1, back.id]]);
   assert.equal(revived.state, 'CONVERSING');
-  const again = derive([lead, answer, r1, back], 200);
+  const again = derive([t0, lead, answer, r1, back], 200);
   assert.deepEqual([again.state, again.next, again.cycle], ['SILENT', 'R1', 2], 'a second silence starts a new round');
-  const exhausted = derive([lead, answer, out(80), out(150), out(250)], 250 + 7 * 24 + 1);
+  const exhausted = derive([t0, lead, answer, out(80), out(150), out(250)], 250 + 7 * 24 + 1);
   assert.equal(exhausted.state, 'DORMANT');
 });
 
