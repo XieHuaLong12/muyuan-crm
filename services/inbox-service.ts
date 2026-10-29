@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { Actor, HttpError, requireAdmin, scope } from '@/lib/auth';
 import { gupshupSource } from '@/lib/gupshup';
 import { canonicalPhone } from '@/lib/contact-identity';
+import { isLegacyCustomer } from '@/lib/customer-group';
 import { accessible } from './customer-service';
 import { listWhatsAppMessages } from './whatsapp-message-service';
 import { serviceWindow } from './whatsapp-window-service';
@@ -120,6 +121,8 @@ async function windows(customerIds: string[]) {
 export type InboxConversation = {
   id: string; name: string; companyName: string; country: string; countryCode: string; stage: string; owner: { id: string; name: string };
   lastMessageAt: Date; unread: number; awaiting: boolean; firstContactOverdue: boolean;
+  /** 旧客户 (lib/customer-group.ts): chats as usual, outside script testing. */
+  legacy: boolean;
   lastMessage: { preview: string; direction: string; status: string } | null;
   window: { status: 'OPEN' | 'CLOSED' | 'UNKNOWN'; expiresAt: Date | null };
 };
@@ -171,7 +174,7 @@ export async function inboxConversations(user: Actor, input: unknown): Promise<I
   const page = rows.slice(0, PAGE_SIZE), ids = page.map(row => row.customerId);
   const [customers, live] = await Promise.all([
     ids.length ? db.customer.findMany({ where: { AND: [scope(user), { id: { in: ids } }] }, select: { id: true, name: true, companyName: true, country: true, countryCode: true, stage: true,
-      firstContactDueAt: true, firstContactAt: true, owner: { select: { id: true, name: true } },
+      firstContactDueAt: true, firstContactAt: true, inquiryAt: true, createdAt: true, owner: { select: { id: true, name: true } },
       whatsappMessages: { orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { content: true, direction: true, messageType: true, status: true, fileName: true } } } }) : [],
     windows(ids),
   ]);
@@ -185,6 +188,7 @@ export async function inboxConversations(user: Actor, input: unknown): Promise<I
       stage: customer.stage, owner: customer.owner, lastMessageAt: row.lastMessageAt, unread: Number(row.unread),
       awaiting: !row.lastOutboundAt || row.lastMessageAt > row.lastOutboundAt,
       firstContactOverdue: !customer.firstContactAt && !!customer.firstContactDueAt && customer.firstContactDueAt < now,
+      legacy: isLegacyCustomer(customer),
       lastMessage: last ? { preview: preview(last), direction: last.direction, status: last.status } : null,
       window: { status: window.conversationWindowStatus, expiresAt: window.conversationWindowExpiresAt } }];
   });
@@ -280,7 +284,7 @@ export async function inboxThread(user: Actor, input: unknown) {
     listWhatsAppMessages(customerId, user, before),
     db.customer.findUniqueOrThrow({ where: { id: customerId }, select: { id: true, name: true, companyName: true, country: true, countryCode: true, city: true,
       whatsapp: true, phone: true, phoneE164: true, language: true, stage: true, source: true, purchaseType: true, productInterest: true, productModel: true,
-      quantity: true, inquiryAt: true, whatsappOptInStatus: true, owner: { select: { id: true, name: true } },
+      quantity: true, inquiryAt: true, createdAt: true, whatsappOptInStatus: true, owner: { select: { id: true, name: true } },
       aiSummary: true, aiNextAction: true, aiLastAnalyzedAt: true, leadGrade: true, leadGradeReason: true } }),
     db.task.findFirst({ where: { customerId, deletedAt: null, status: { not: 'DONE' } }, orderBy: { dueDate: 'asc' }, select: { id: true, title: true, dueDate: true } }),
     db.stageHistory.findMany({ where: { customerId }, orderBy: { changedAt: 'desc' }, take: 4, select: { id: true, fromStage: true, toStage: true, changedAt: true, note: true } }),
@@ -288,7 +292,7 @@ export async function inboxThread(user: Actor, input: unknown) {
   const messages = chat.messages.map(message => ({ id: message.id, direction: message.direction, messageType: message.messageType, content: message.content,
     status: message.status, source: message.source, sentAt: message.sentAt, fileName: message.fileName, mimeType: message.mimeType,
     attachmentMetadata: message.attachmentMetadata, mediaHref: messageMediaHref(message) }));
-  return { customer, nextTask: task, stageEvents: events, messages, nextCursor: chat.nextCursor,
+  return { customer: { ...customer, legacy: isLegacyCustomer(customer) }, nextTask: task, stageEvents: events, messages, nextCursor: chat.nextCursor,
     window: { status: chat.conversationWindowStatus, expiresAt: chat.conversationWindowExpiresAt, lastCustomerMessageAt: chat.lastCustomerMessageAt },
     sending: { configured: chat.configured, businessNumber: gupshupSource(), templates: templatesConfigured(), optedOut: customer.whatsappOptInStatus === 'OPTED_OUT' },
     // AI drafts, translation and summaries need DeepSeek; the chat shows why when it is missing.

@@ -17,6 +17,12 @@ const scriptTabs = [
   { href: '/outreach/review', label: '人工复核' },
 ] as const;
 
+/** 新客户 / 旧客户 (lib/customer-group.ts): two pages of the customer list. A customer profile opens under 新客户. */
+const customerTabs = [
+  { href: '/customers', label: '新客户' },
+  { href: '/customers/legacy', label: '旧客户' },
+] as const;
+
 const adminSections: readonly NavSection[] = [
   { href: '/workbench', label: '工作台', icon: 'workbench', tabs: [
     { href: '/workbench', label: '工作日历' },
@@ -28,7 +34,7 @@ const adminSections: readonly NavSection[] = [
     { href: '/finance', label: '财务' },
   ] },
   { href: '/customers', label: '客户', icon: 'customers', badge: 'pool', tabs: [
-    { href: '/customers', label: '客户列表' },
+    ...customerTabs,
     { href: '/sales', label: '跟进队列' },
     { href: '/crm', label: '销售看板' },
   ] },
@@ -67,7 +73,7 @@ const salesSections: readonly NavSection[] = [
   { href: '/messages', label: '消息', icon: 'messages', badge: 'messages' },
   { href: '/outreach/review', label: '话术', icon: 'scripts', tabs: [scriptTabs[2], scriptTabs[0], scriptTabs[1]] },
   { href: '/customers', label: '我的客户', icon: 'customers', tabs: [
-    { href: '/customers', label: '客户列表' },
+    ...customerTabs,
     { href: '/crm', label: '销售看板' },
   ] },
   { href: '/products', label: '产品与报价', icon: 'products', tabs: [

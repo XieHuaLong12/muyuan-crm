@@ -16,6 +16,7 @@ import { lockCustomer } from './contact-identity-service';
 import { automatedTask, resolveRule } from './workflow-service';
 import { deepSeekConfigured } from './deepseek-customer-service';
 import { firstNameOf, productLineOf } from './whatsapp-template-service';
+import { currentCustomers, isLegacyCustomer, legacyCustomers } from '@/lib/customer-group';
 
 /**
  * The outreach engine: for one customer, from the messages alone, which groups were touches (T0–T4, R1–R3), which
@@ -118,7 +119,7 @@ function resolveScript(group: MessageGroup, code: Position, language: string, sc
     judgeReason: deepSeekConfigured() ? '等待 DeepSeek 识别话术' : '未配置 DeepSeek，请人工选择话术' };
 }
 
-export type Reconciled = { state: string; next: Position | ''; cycle: number; nextTouchAt: Date | null; pendingAi: number; derivation: Derivation };
+export type Reconciled = { state: string; next: Position | ''; cycle: number; nextTouchAt: Date | null; pendingAi: number; derivation: Derivation; legacy: boolean };
 
 /**
  * Recompute one customer inside a transaction that holds the customer row (lock order as everywhere: Customer, then
@@ -127,7 +128,7 @@ export type Reconciled = { state: string; next: Position | ''; cycle: number; ne
 async function reconcileIn(tx: Tx, customerId: string, now: Date, setup: { config: OutreachConfig; startedAt: Date }): Promise<Reconciled | null> {
   await lockCustomer(tx, customerId);
   const customer = await tx.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, ownerId: true, leadGrade: true, language: true, stage: true,
-    deletedAt: true, createdAt: true, updatedAt: true, whatsappOptInStatus: true, outreachState: true, outreachNext: true, outreachDueAt: true, replyScriptCode: true, bestReplyQuality: true } });
+    deletedAt: true, createdAt: true, inquiryAt: true, updatedAt: true, whatsappOptInStatus: true, outreachState: true, outreachNext: true, outreachDueAt: true, replyScriptCode: true, bestReplyQuality: true } });
   if (!customer || customer.deletedAt) return null;
   const { config, startedAt } = setup;
   const [{ messages, meta }, scripts, touchRows, replyRows] = await Promise.all([
@@ -140,7 +141,10 @@ async function reconcileIn(tx: Tx, customerId: string, now: Date, setup: { confi
   const storedReplies = new Map(replyRows.map(r => [r.groupKey, r]));
   const verdicts = new Map(groups.filter(g => g.direction === 'INBOUND').map(g => [g.key, verdictFor(g, storedReplies.get(g.key), scripts)]));
   const derivation = deriveOutreach(groups, key => verdicts.get(key) ?? null, config, now);
-  const recorded = (at: Date) => at.getTime() >= startedAt.getTime();
+  // 旧客户 (lib/customer-group) are not part of the script test: no records, no rotation, no tasks, no AI. Their state
+  // is still derived, so a stop request is honoured; records made before the split stay and are filtered out of the stats.
+  const legacy = isLegacyCustomer(customer);
+  const recorded = (at: Date) => !legacy && at.getTime() >= startedAt.getTime();
   const language = customerScriptLanguage(customer.language);
 
   // Replies: one row per customer group since the start; a group that grew is judged again (unless a person judged it).
@@ -213,12 +217,12 @@ async function reconcileIn(tx: Tx, customerId: string, now: Date, setup: { confi
   if (stopNow) await tx.identityAudit.create({ data: { entityType: 'WHATSAPP_CONSENT', entityId: customerId, actorId: 'SYSTEM', reason: '回复判定：客户要求停止联系' } });
 
   // The next touch: a script from the rotation and a follow-up task, for rounds that started after records began.
-  const fresh = freshRound(derivation, customer.createdAt, startedAt);
+  const fresh = !legacy && freshRound(derivation, customer.createdAt, startedAt);
   if (derivation.next && fresh) await assignScript(tx, { id: customerId, leadGrade: customer.leadGrade, language: customer.language }, derivation.next, derivation.cycle, config);
   await syncFollowUpTask(tx, customer, derivation, fresh);
 
-  const pendingAi = await tx.outreachTouch.count({ where: { customerId, judgeStatus: 'PENDING' } }) + await tx.outreachReply.count({ where: { customerId, judgeStatus: 'PENDING' } });
-  return { state: derivation.state, next: derivation.next, cycle: derivation.cycle, nextTouchAt: derivation.nextTouchAt, pendingAi, derivation };
+  const pendingAi = legacy ? 0 : await tx.outreachTouch.count({ where: { customerId, judgeStatus: 'PENDING' } }) + await tx.outreachReply.count({ where: { customerId, judgeStatus: 'PENDING' } });
+  return { state: derivation.state, next: derivation.next, cycle: derivation.cycle, nextTouchAt: derivation.nextTouchAt, pendingAi, derivation, legacy };
 }
 
 /** Rounds that began before records started (old leads, old silences) get no rotation and no new tasks. */
@@ -316,13 +320,16 @@ export async function outreachSweep(limit = 40, now = new Date()) {
   await outreachSetup();
   const staleClaim = new Date(now.getTime() - STALE_CLAIM_MS);
   const pendingWhere = { judgeStatus: 'PENDING', OR: [{ judgedAt: null }, { judgedAt: { lt: staleClaim } }] };
-  const [due, touches, replies, never] = await Promise.all([
-    db.customer.findMany({ where: { deletedAt: null, outreachDueAt: { lte: now } }, select: { id: true }, orderBy: { outreachDueAt: 'asc' }, take: limit }),
-    deepSeekConfigured() ? db.outreachTouch.findMany({ where: pendingWhere, select: { customerId: true }, distinct: ['customerId'], take: limit }) : [],
-    deepSeekConfigured() ? db.outreachReply.findMany({ where: pendingWhere, select: { customerId: true }, distinct: ['customerId'], take: limit }) : [],
-    db.customer.findMany({ where: { deletedAt: null, outreachState: '' }, select: { id: true }, orderBy: { createdAt: 'desc' }, take: limit }),
+  // 新客户 only; 旧客户 are visited once more while they still hold an open follow-up task, which closes it.
+  const [due, touches, replies, never, leftover] = await Promise.all([
+    db.customer.findMany({ where: { AND: [currentCustomers, { deletedAt: null, outreachDueAt: { lte: now } }] }, select: { id: true }, orderBy: { outreachDueAt: 'asc' }, take: limit }),
+    deepSeekConfigured() ? db.outreachTouch.findMany({ where: { ...pendingWhere, customer: currentCustomers }, select: { customerId: true }, distinct: ['customerId'], take: limit }) : [],
+    deepSeekConfigured() ? db.outreachReply.findMany({ where: { ...pendingWhere, customer: currentCustomers }, select: { customerId: true }, distinct: ['customerId'], take: limit }) : [],
+    db.customer.findMany({ where: { AND: [currentCustomers, { deletedAt: null, outreachState: '' }] }, select: { id: true }, orderBy: { createdAt: 'desc' }, take: limit }),
+    db.customer.findMany({ where: { AND: [legacyCustomers, { deletedAt: null, tasks: { some: { deletedAt: null, status: { not: 'DONE' }, automationKey: { startsWith: 'outreach:' } } } }] },
+      select: { id: true }, take: limit }),
   ]);
-  const ids = [...new Set([...due.map(c => c.id), ...touches.map(t => t.customerId), ...replies.map(r => r.customerId), ...never.map(c => c.id)])].slice(0, limit * 2);
+  const ids = [...new Set([...due.map(c => c.id), ...touches.map(t => t.customerId), ...replies.map(r => r.customerId), ...never.map(c => c.id), ...leftover.map(c => c.id)])].slice(0, limit * 2);
   let processed = 0;
   for (const id of ids) {
     try { await processOutreach(id, { now }); processed++; }
@@ -363,8 +370,8 @@ export async function outreachNextView(input: unknown, user: Actor) {
   await accessible(customerId, user);
   const result = await reconcileOutreach(customerId);
   if (!result) throw new HttpError(404, '客户不存在或无访问权限');
-  // Opening the chat is the salesperson starting this touch: the script is assigned now even for older leads.
-  const assignment = result.next && (result.state === 'ICEBREAK' || result.state === 'SILENT')
+  // Opening the chat is the salesperson starting this touch: the script is assigned now even for older leads (never for 旧客户).
+  const assignment = !result.legacy && result.next && (result.state === 'ICEBREAK' || result.state === 'SILENT')
     ? await retryTransaction(() => db.$transaction(async tx => {
       await lockCustomer(tx, customerId);
       const c = await tx.customer.findUniqueOrThrow({ where: { id: customerId }, select: { id: true, leadGrade: true, language: true } });
@@ -385,6 +392,7 @@ async function outreachView(customerId: string, result: Reconciled, assignment: 
   const facts = { firstName: firstNameOf(c.name), country: c.country, product: productLineOf(c.sourceDetail, c.productInterest, c.productModel), owner: c.owner.name };
   const waitUntil = d.lastTouchAt && (d.state === 'ICEBREAK' || d.state === 'SILENT') ? new Date(d.lastTouchAt.getTime() + config.minTouchGapHours * HOUR) : null;
   return {
+    legacy: result.legacy,
     state: result.state, stateLabel: OUTREACH_STATES[result.state as keyof typeof OUTREACH_STATES] ?? '—',
     next: result.next, nextLabel: result.next ? POSITION_LABELS[result.next] : '', nextTouchAt: result.nextTouchAt,
     script: script ? { id: script.id, code: script.code, status: script.status, statusLabel: SCRIPT_STATUSES[script.status as keyof typeof SCRIPT_STATUSES] ?? script.status,

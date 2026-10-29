@@ -7,6 +7,7 @@ import { inquiryIn, moneyByCurrency, overdueTasks, staleQuotes, type Money } fro
 import { queueFilters } from './bos-sales-service';
 import { callDeepSeek, deepSeekConfigured } from './deepseek-customer-service';
 import { sendPush } from './push-service';
+import { currentCustomers } from '@/lib/customer-group';
 
 /**
  * The boss assistant: a short morning brief (yesterday's results, what is at risk right now, this month's progress
@@ -56,7 +57,7 @@ export async function briefFacts(now = new Date()): Promise<BriefFacts> {
     db.deal.findMany({ where: { customer: live, dealDate: { gte: month.start, lt: month.end } }, select: { currency: true, dealAmount: true } }),
     db.salesTarget.findUnique({ where: { periodKey: `MONTH-${Number(date.slice(0, 4))}-${Number(date.slice(5, 7))}` }, select: { currency: true, targetRevenue: true } }),
     db.customer.count({ where: { AND: [live, filters.new, { leadGrade: { in: GOOD }, firstContactDueAt: { lt: now } }] } }),
-    db.customer.count({ where: { ...live, pendingAssignment: true, leadGrade: { in: GOOD }, stage: { notIn: LOSS_STAGES.concat('WON') } } }),
+    db.customer.count({ where: { ...live, pendingAssignment: true, leadGrade: { in: GOOD }, stage: { notIn: LOSS_STAGES.concat('WON') }, AND: [currentCustomers] } }),
     db.quotation.groupBy({ by: ['customerId'], where: staleQuotes(now, live) }),
     db.customer.count({ where: { AND: [live, filters.waiting, { lastInboundAt: { lt: dayAgo } }] } }),
     db.task.findMany({ where: overdueTasks(now, { deletedAt: null, OR: [{ customerId: null }, { customer: live }] }), take: 5000,

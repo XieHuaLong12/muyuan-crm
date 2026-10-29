@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowUpRight, Check, CheckCheck, CircleAlert, Clock3, FileTe
 import { api } from '@/lib/client';
 import { FIRST_TOUCH_PRODUCT_LINES, pipeline, purchases, sources, stages } from '@/lib/constants';
 import { formatDateTime, formatDay, formatTime, initial, requestId, toneOf, windowLeft, type ChatMessage, type TemplateList, type Thread } from './types';
-import { OutreachBar, OutreachProfile, useOutreach } from './OutreachPanel';
+import { LegacyTag, OutreachBar, OutreachProfile, useOutreach } from './OutreachPanel';
 
 const POLL_MS = 8_000;
 const MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'AUDIO', 'VOICE', 'DOCUMENT', 'FILE', 'STICKER']);
@@ -230,7 +230,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
         <button type="button" className="bos-chat-icon-button bos-chat-back" onClick={onBack} aria-label="返回会话列表"><ArrowLeft size={20} /></button>
         <span className={`bos-chat-avatar bos-chat-tone-${toneOf(customerId)}`} aria-hidden="true">{customer ? initial(customer.name) : ''}</span>
         <div className="bos-chat-thread-title">
-          <div><h2>{customer?.name ?? '加载中…'}</h2>{customer && <span className="bos-chat-tag is-green">{label(stages, customer.stage)}</span>}
+          <div><h2>{customer?.name ?? '加载中…'}</h2>{customer && <span className="bos-chat-tag is-green">{label(stages, customer.stage)}</span>}{customer?.legacy && <LegacyTag />}
             {win && (win.status === 'OPEN' && left ? <span className={`bos-chat-window${left.minutes < 120 ? ' is-warning' : ''}`}><Clock3 size={12} aria-hidden="true" />24h 窗口剩 {left.text}</span>
               : <span className="bos-chat-window is-closed">{win.status === 'CLOSED' ? '24h 窗口已关闭' : '窗口未开启'}</span>)}</div>
           <p>{customer ? [customer.companyName, [customer.country, customer.city].filter(Boolean).join(' '), customer.whatsapp || customer.phone, `负责人 ${customer.owner.name}`].filter(Boolean).join(' · ') : ''}</p>

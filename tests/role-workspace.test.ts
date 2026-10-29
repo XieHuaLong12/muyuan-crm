@@ -51,7 +51,9 @@ test('analysis sections keep the shared period when switching tabs',()=>{
 test('detail pages and tools highlight the section they belong to',()=>{
   const at=(path:string,role:string)=>{const active=activeWorkspace(path,role);return [active?.section.label,active?.tab?.label];};
   assert.deepEqual(at('/tasks','SALES'),['今日工作','全部待办']);
-  assert.deepEqual(at('/customers/customer-id','SALES'),['我的客户','客户列表']);
+  assert.deepEqual(at('/customers/customer-id','SALES'),['我的客户','新客户']);
+  assert.deepEqual(at('/customers/legacy','SALES'),['我的客户','旧客户']);
+  assert.deepEqual(at('/customers/legacy','ADMIN'),['客户','旧客户']);
   assert.deepEqual(at('/crm','SALES'),['我的客户','销售看板']);
   assert.deepEqual(at('/sales/performance','SALES'),['我的业绩',undefined]);
   assert.deepEqual(at('/products/product-id','SALES'),['产品与报价','产品库']);

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { dayKey, periodRange } from '@/lib/time';
+import { currentCustomers } from '@/lib/customer-group';
 import {
   COUNTED_MATCHES, DAY, GRADES, POSITION_LABELS, SCRIPT_STATUSES, SUGGESTIONS, isEffective, judgeArms, percent, positionEnum, readConfig,
   type ArmResult, type OutreachConfig, type Suggestion,
@@ -37,7 +38,8 @@ function tally(rows: TouchRow[]): Tally {
 const arm = (t: Tally) => ({ replied: t.replied, sent: t.matured });
 
 function touchWhere(query: DashboardQuery, since: Date | null, until?: Date): Prisma.OutreachTouchWhereInput {
-  return { code: query.position, judgeStatus: { not: 'VOID' }, customer: { deletedAt: null },
+  // Script numbers count 新客户 only (lib/customer-group): 旧客户 records made before the split stay but are left out.
+  return { code: query.position, judgeStatus: { not: 'VOID' }, customer: { AND: [{ deletedAt: null }, currentCustomers] },
     ...(since || until ? { sentAt: { ...(since ? { gte: since } : {}), ...(until ? { lt: until } : {}) } } : {}),
     ...(query.language !== 'ALL' ? { language: query.language } : {}),
     ...(query.channel === 'TEMPLATE' ? { channel: 'BOS_TEMPLATE' } : query.channel === 'MANUAL' ? { channel: { in: ['BOS_FREE', 'PHONE'] } } : {}) };
@@ -117,7 +119,8 @@ export type OutreachDashboard = Awaited<ReturnType<typeof outreachDashboard>>;
 /** Per salesperson, the share of their judged touches that were not a library script as written or lightly edited. */
 export async function nonStandardShares(since: Date, until = new Date()) {
   const [judged, users] = await Promise.all([
-    db.outreachTouch.findMany({ where: { sentAt: { gte: since, lt: until }, judgeStatus: 'DONE', matchType: { not: '' }, customer: { deletedAt: null } }, select: { senderId: true, matchType: true, scriptId: true } }),
+    db.outreachTouch.findMany({ where: { sentAt: { gte: since, lt: until }, judgeStatus: 'DONE', matchType: { not: '' }, customer: { AND: [{ deletedAt: null }, currentCustomers] } },
+      select: { senderId: true, matchType: true, scriptId: true } }),
     db.user.findMany({ select: { id: true, name: true } }),
   ]);
   const names = new Map(users.map(u => [u.id, u.name]));
@@ -136,9 +139,10 @@ async function qualityChecks(user: Actor, now: Date, config: OutreachConfig, tim
   const month = periodRange('MONTH', dayKey(now, timezone), timezone);
   const [shares, overrides, aiTouches, aiReplies] = await Promise.all([
     nonStandardShares(new Date(now.getTime() - 7 * DAY), now),
-    db.outreachOverride.findMany({ where: { createdAt: { gte: month.start, lt: month.end }, aiOriginal: true, reason: { not: 'VOICE_IMAGE' } }, select: { touchId: true, replyId: true } }),
-    db.outreachTouch.count({ where: { judgedAt: { gte: month.start, lt: month.end }, OR: [{ judgedBy: 'AI' }, { overrides: { some: { aiOriginal: true } } }] } }),
-    db.outreachReply.count({ where: { judgedAt: { gte: month.start, lt: month.end }, OR: [{ judgedBy: 'AI' }, { overrides: { some: { aiOriginal: true } } }] } }),
+    db.outreachOverride.findMany({ where: { createdAt: { gte: month.start, lt: month.end }, aiOriginal: true, reason: { not: 'VOICE_IMAGE' },
+      OR: [{ touch: { customer: currentCustomers } }, { reply: { customer: currentCustomers } }] }, select: { touchId: true, replyId: true } }),
+    db.outreachTouch.count({ where: { judgedAt: { gte: month.start, lt: month.end }, customer: currentCustomers, OR: [{ judgedBy: 'AI' }, { overrides: { some: { aiOriginal: true } } }] } }),
+    db.outreachReply.count({ where: { judgedAt: { gte: month.start, lt: month.end }, customer: currentCustomers, OR: [{ judgedBy: 'AI' }, { overrides: { some: { aiOriginal: true } } }] } }),
   ]);
   const people = shares.map(p => ({ ...p, alert: p.total > 0 && p.share > config.nonStandardShare }))
     .filter(p => user.role === 'ADMIN' || p.id === user.id).sort((a, b) => b.share - a.share);
@@ -157,7 +161,7 @@ export async function scriptTouches(scriptId: string, user: Actor, input: unknow
   const script = await db.outreachScript.findUnique({ where: { id: scriptId }, select: { id: true, code: true, content: true, versionNote: true, status: true, position: true, language: true, grades: true } });
   if (!script) throw new HttpError(404, '话术不存在');
   const since = query.range === 'all' ? null : new Date(Date.now() - Number(query.range) * DAY);
-  const touches = await db.outreachTouch.findMany({ where: { scriptId, judgeStatus: { not: 'VOID' }, customer: scope(user), ...(since ? { sentAt: { gte: since } } : {}),
+  const touches = await db.outreachTouch.findMany({ where: { scriptId, judgeStatus: { not: 'VOID' }, customer: { AND: [scope(user), currentCustomers] }, ...(since ? { sentAt: { gte: since } } : {}),
     ...(query.grade !== 'ALL' ? { grade: query.grade } : {}) }, orderBy: { sentAt: 'desc' }, take: 200,
     select: { id: true, code: true, sentAt: true, channel: true, matchType: true, grade: true, replied24h: true, lateReply: true, replyQuality: true, repliedAt: true, senderId: true,
       customer: { select: { id: true, name: true, country: true } } } });

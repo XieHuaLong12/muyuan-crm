@@ -1,11 +1,13 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Columns3, Search } from 'lucide-react';
 import { api } from '@/lib/client';
 import { sources, stages } from '@/lib/constants';
 import type { Bootstrap, Customer, CustomerPage } from '@/lib/types';
 import { DEFAULT_CUSTOMER_COLUMNS, type CustomerColumnKey } from '@/lib/customer-columns';
+import type { CustomerGroup } from '@/lib/customer-group';
 import { Options } from './forms';
 import { BatchCustomerTable } from './customer-batch';
 import { ColumnPicker } from './customer-columns';
@@ -25,9 +27,10 @@ const FILTER_KEYS = ['q', 'stage', 'country', 'source', 'owner', 'product', 'gra
  * Customer list whose filters, sort and page live in the URL: they survive refreshes, opening a customer
  * and coming back, and can be shared. Filtering, sorting and paging happen on the server.
  * Each user picks their own columns (「定制列」); the customer column opens a side preview.
+ * 新客户 (/customers) and 旧客户 (/customers/legacy) are two pages of the same list, one group each.
  */
-export function CustomerList({ boot, revision, initialColumns, onFollow, onChanged }: {
-  boot: Bootstrap; revision: number; initialColumns?: readonly CustomerColumnKey[]; onFollow: (c: Customer) => void; onChanged: (message: string) => void;
+export function CustomerList({ boot, revision, group = 'current', initialColumns, onFollow, onChanged }: {
+  boot: Bootstrap; revision: number; group?: CustomerGroup; initialColumns?: readonly CustomerColumnKey[]; onFollow: (c: Customer) => void; onChanged: (message: string) => void;
 }) {
   const pathname = usePathname(), params = useSearchParams();
   const admin = boot.user.role === 'ADMIN';
@@ -60,23 +63,25 @@ export function CustomerList({ boot, revision, initialColumns, onFollow, onChang
     try { sessionStorage.setItem(LIST_URL_KEY, `${pathname}${query ? `?${query}` : ''}`); } catch { /* private mode */ }
     let cancelled = false;
     setLoading(true); setError('');
-    api<CustomerPage>(`customers${query ? `?${query}` : ''}`)
+    const groupQuery = group === 'legacy' ? 'group=legacy' : '';
+    const apiQuery = [groupQuery, query].filter(Boolean).join('&');
+    api<CustomerPage>(`customers${apiQuery ? `?${apiQuery}` : ''}`)
       .then(page => { if (!cancelled) setData(page); })
       .catch(e => { if (!cancelled) setError((e as Error).message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [pathname, query, revision, retry]);
+  }, [pathname, query, group, revision, retry]);
 
   const page = Number(get('page') || 1), pageSize = Number(get('pageSize') || 10);
   const pages = Math.max(1, Math.ceil((data?.total ?? 0) / pageSize));
   const sort = get('sort') || 'priority', dir = get('dir') || 'asc';
   const tabs = useMemo(() => [
-    { key: 'all', label: admin ? '全部客户' : '我的全部客户' },
+    { key: 'all', label: `${admin ? '全部' : '我的全部'}${group === 'legacy' ? '旧客户' : '新客户'}` },
     ...(admin ? [{ key: 'assign', label: `待分配${data?.pool ? ` ${data.pool}` : ''}` }] : []),
     { key: 'NEW', label: stages.NEW }, { key: 'QUOTED', label: stages.QUOTED },
     { key: 'FOLLOW_UP', label: stages.FOLLOW_UP }, { key: 'WON', label: stages.WON }, { key: 'PAUSED', label: stages.PAUSED }, { key: 'INVALID', label: stages.INVALID },
     ...GRADE_TABS.map(grade => ({ key: `grade:${grade}`, label: `${grade} 级${data?.grades?.[grade] ? ` ${data.grades[grade]}` : ''}` })),
-  ], [admin, data?.pool, data?.grades]);
+  ], [admin, group, data?.pool, data?.grades]);
   const grade = get('grade');
   const gradeTab = (GRADE_TABS as readonly string[]).includes(grade) ? `grade:${grade}` : '';
   const activeTab = get('assign') === 'pending' ? 'assign' : get('stage') || gradeTab || 'all';
@@ -89,6 +94,8 @@ export function CustomerList({ boot, revision, initialColumns, onFollow, onChang
     else update({ stage: key, assign: '', ...leaveGrade });
   };
   const filtersActive = FILTER_KEYS.some(key => params.get(key));
+  const otherQuery = new URLSearchParams(params); otherQuery.delete('page');
+  const otherHref = `${group === 'legacy' ? '/customers' : '/customers/legacy'}${otherQuery.toString() ? `?${otherQuery}` : ''}`;
   const select = (label: string, key: string, values: string[] | Record<string, string>) => (
     <select aria-label={label} value={get(key)} onChange={e => update({ [key]: e.target.value })}>
       <option value="">全部{label}</option>
@@ -129,6 +136,7 @@ export function CustomerList({ boot, revision, initialColumns, onFollow, onChang
         </details>
         {filtersActive && <button className="text-button" onClick={() => { setSearch(''); window.history.replaceState(null, '', pathname); }}>清除筛选</button>}
       </div>
+      {!!data?.otherTotal && <div className="filter-hint">{group === 'legacy' ? '新客户' : '旧客户'}里还有 {data.otherTotal} 位符合当前筛选。<Link href={otherHref}>去{group === 'legacy' ? '新客户' : '旧客户'}查看 →</Link></div>}
       {get('period') && <div className="filter-hint">已按 {get('date')} 所在周期的新增客户筛选</div>}
       {activeTab.startsWith('grade:') && <div className="filter-hint">按广告表单自动分级：A 优质、B 良好、C 一般。新表单进来时自动评级（配置了 DeepSeek 用 AI，否则按表单规则），漏评的由后台补上；没有表单的客户不评级。</div>}
       {activeTab === 'assign' && <div className="filter-hint">自动进入的线索在这里等待分配，请尽快处理：勾选客户后点击「分配 / 转交」。分配后开始计算首联期限，24 小时内的广告留资须在 {boot.settings.adLeadFirstContactMinutes ?? 5} 分钟内联系。</div>}

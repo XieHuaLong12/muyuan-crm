@@ -4,6 +4,7 @@ import { Check, CheckCheck, Minimize2, MessageCircle, PanelLeftClose, PanelLeftO
 import { api } from '@/lib/client';
 import { purchases, sources, stages } from '@/lib/constants';
 import { ChatThread } from './ChatThread';
+import { LegacyTag } from './OutreachPanel';
 import { dueLabel, formatListTime, initial, toneOf, windowLeft, type Conversation, type Filter, type InboxList, type LinkCandidate, type PendingCustomer, type UnmatchedNumber } from './types';
 
 const LIST_POLL_MS = 15_000;
@@ -32,7 +33,7 @@ function ConversationItem({ item, active, admin, timezone, onOpen }: { item: Con
     <span className={`bos-chat-avatar bos-chat-tone-${toneOf(item.id)}`} aria-hidden="true">{initial(item.name)}</span>
     <span className="bos-chat-conversation-body">
       <span className="bos-chat-row"><strong>{item.name}</strong><time className={item.unread ? 'is-unread' : undefined} dateTime={item.lastMessageAt}>{formatListTime(item.lastMessageAt, timezone)}</time></span>
-      <span className="bos-chat-meta">{item.countryCode && <span className="bos-chat-code">{item.countryCode}</span>}<span>{item.companyName || item.country || '公司待补充'}</span>{tag}{admin && <span>· {item.owner.name}</span>}</span>
+      <span className="bos-chat-meta">{item.countryCode && <span className="bos-chat-code">{item.countryCode}</span>}<span>{item.companyName || item.country || '公司待补充'}</span>{tag}{item.legacy && <LegacyTag />}{admin && <span>· {item.owner.name}</span>}</span>
       <span className="bos-chat-row">
         <span className={`bos-chat-preview${item.unread ? ' is-unread' : ''}`}>
           {last?.direction === 'OUTBOUND' && (status === 'READ' ? <CheckCheck size={15} className="bos-chat-tick is-read" aria-label="已读" /> : status === 'DELIVERED' ? <CheckCheck size={15} className="bos-chat-tick" aria-label="已送达" /> : status === 'FAILED' ? <span className="bos-chat-tick is-failed">发送失败</span> : <Check size={15} className="bos-chat-tick" aria-label="已发送" />)}
@@ -70,7 +71,7 @@ function NewChatDialog({ onClose, onPick }: { onClose: () => void; onPick: (id: 
   const [q, setQ] = useState(''), [rows, setRows] = useState<{ id: string; name: string; companyName: string; country: string }[]>([]), [error, setError] = useState('');
   useEffect(() => {
     if (q.trim().length < 2) { setRows([]); return; }
-    const timer = setTimeout(() => api<{ rows: typeof rows }>(`customers?q=${encodeURIComponent(q.trim())}&pageSize=10`).then(r => { setRows(r.rows); setError(''); }).catch(e => setError((e as Error).message)), 300);
+    const timer = setTimeout(() => api<{ rows: typeof rows }>(`customers?group=all&q=${encodeURIComponent(q.trim())}&pageSize=10`).then(r => { setRows(r.rows); setError(''); }).catch(e => setError((e as Error).message)), 300);
     return () => clearTimeout(timer);
   }, [q]);
   return <div className="bos-chat-dialog" role="dialog" aria-modal="true" aria-labelledby="new-chat-title" onKeyDown={e => { if (e.key === 'Escape') onClose(); }}>

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { IdentityTimeline } from '@/components/bos/IdentityTimeline';
 import { QuotationPanel } from './workspace/QuotationPanel';
 import { inquiryDate } from '@/lib/customer-date';
+import { isLegacyCustomer } from '@/lib/customer-group';
 import { LeadHistory } from './lead-history';
 import { Customer, Bootstrap, Deal } from '@/lib/types';
 import { Badge, Due, GradeChip } from './customer-table';
@@ -33,7 +34,7 @@ export function CustomerDetail({ customer: c, boot, backHref, onEdit, onFollow, 
         <div className="customer-link">
           <span className="avatar large">{c.name[0]}</span>
           <div>
-            <h1>{c.name} <GradeChip grade={c.leadGrade} reason={c.leadGradeReason} source={c.leadGradeSource} /><Badge stage={c.stage} />{c.pendingAssignment && <span className="badge">待分配</span>}</h1>
+            <h1>{c.name} <GradeChip grade={c.leadGrade} reason={c.leadGradeReason} source={c.leadGradeSource} /><Badge stage={c.stage} />{c.pendingAssignment && <span className="badge">待分配</span>}{isLegacyCustomer(c) && <span className="badge" title="2026 年 10 月 1 日前询盘，不参与话术测试、不进今日工作">旧客户</span>}</h1>
             {c.leadGrade && c.leadGradeReason && <p className="muted grade-reason">表单评级 {c.leadGrade}：{c.leadGradeReason}{c.leadGradeSource === 'AI' ? '（AI）' : ''}</p>}
             <p className="muted">{c.companyName} · {c.country} · {c.pendingAssignment ? '待分配（暂由管理员保管）' : `负责人 ${c.owner.name}`}</p>
           </div>

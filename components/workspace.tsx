@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import { api } from '@/lib/client';
 import { Bootstrap, Customer, Deal, Target as TargetType } from '@/lib/types';
 import type { CustomerColumnKey } from '@/lib/customer-columns';
+import type { CustomerGroup } from '@/lib/customer-group';
 import type { TargetProgress } from '@/services/target-service';
 import { CustomerForm, FollowForm, DealForm, AssignDialog, ReasonDialog } from './forms';
 import { CustomerList, rememberedListUrl } from './customer-list';
@@ -18,9 +19,12 @@ import { SmartImport } from './smart-import';
 type Page = 'customers' | 'targets' | 'settings' | 'integrations' | 'lead-intake';
 
 /** Older-generation pages inside the BOS shell: customers, company targets, settings, integrations and lead intake. */
-export function Workspace({ initialBoot, pageOverride: page, customerColumns }: { initialBoot: Bootstrap; pageOverride: Page; customerColumns?: CustomerColumnKey[] }) {
+export function Workspace({ initialBoot, pageOverride: page, customerColumns, customerGroup = 'current' }: {
+  initialBoot: Bootstrap; pageOverride: Page; customerColumns?: CustomerColumnKey[]; customerGroup?: CustomerGroup;
+}) {
   const pathname = usePathname(), router = useRouter();
-  const customerId = page === 'customers' ? pathname.split('/')[2] : undefined;
+  // /customers/legacy is the 旧客户 list, not a customer profile.
+  const customerId = page === 'customers' && customerGroup === 'current' ? pathname.split('/')[2] : undefined;
   const [boot, setBoot] = useState<Bootstrap>(initialBoot);
   const [detail, setDetail] = useState<Customer>();
   const [targets, setTargets] = useState<TargetType[]>([]), [annual, setAnnual] = useState<TargetProgress>();
@@ -72,8 +76,10 @@ export function Workspace({ initialBoot, pageOverride: page, customerColumns }: 
 
   const admin = boot.user.role === 'ADMIN';
   const tz = boot.settings.timezone;
-  const heading = page === 'customers'
-    ? { title: admin ? '客户列表' : '我的客户', description: admin ? '全部客户：搜索、筛选、分配和批量处理。' : '维护你负责的客户资料、报价与成交。' }
+  const heading = page === 'customers' && customerGroup === 'legacy'
+    ? { title: '旧客户', description: '2026 年 10 月 1 日之前询盘的客户，可以照常聊天、报价、下单，但不参与话术测试，也不进今日工作。' }
+    : page === 'customers'
+    ? { title: '新客户', description: admin ? '2026 年 10 月 1 日起询盘的客户：搜索、筛选、分配和批量处理。话术测试和今日工作只统计新客户。' : '你负责的、2026 年 10 月 1 日起询盘的客户：资料、报价与成交。话术测试和今日工作只统计新客户。' }
     : page === 'targets' ? { title: '目标', description: '设置年度、月度和每周的销售目标，查看完成进度。' }
       : page === 'lead-intake' ? { title: '线索接入', description: 'Meta 广告线索是否实时进入客户中心；读取失败时这里会列出原因和处理办法。' }
       : page === 'integrations' ? { title: '集成与接入', description: '表单询盘、Meta 广告与 WhatsApp 的接入状态和同步。' }
@@ -92,7 +98,7 @@ export function Workspace({ initialBoot, pageOverride: page, customerColumns }: 
           )} />
         )}
         {error && <div role="alert" className="error-banner">{error}<button onClick={() => setRevision(v => v + 1)}>重试</button></div>}
-        {page === 'customers' && !customerId && <CustomerList boot={boot} revision={revision} initialColumns={customerColumns} onFollow={setFollow} onChanged={saved} />}
+        {page === 'customers' && !customerId && <CustomerList boot={boot} revision={revision} group={customerGroup} initialColumns={customerColumns} onFollow={setFollow} onChanged={saved} />}
         {loading && (customerId || page === 'targets') ? <div className="loading">正在加载数据…</div> : (
           <>
             {customerId && detail && (

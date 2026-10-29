@@ -6,6 +6,7 @@ import { retryTransaction } from '@/lib/transaction-retry';
 import { GRADES, MATCH_TYPES, OVERRIDE_REASONS, POSITION_LABELS, QUALITIES, SIGNALS, gradeEnum, matchTypeEnum, qualityEnum, signalEnum, type Position } from '@/lib/outreach';
 import { lockCustomer } from './contact-identity-service';
 import { reconcileOutreach } from './outreach-engine-service';
+import { currentCustomers } from '@/lib/customer-group';
 
 /**
  * 人工复核. What DeepSeek was unsure of (confidence below 0.7, a code that does not fit the touch number, no AI
@@ -24,7 +25,8 @@ const customerSelect = { id: true, name: true, companyName: true, country: true,
 
 export async function reviewList(user: Actor, input: unknown = {}) {
   const { tab } = reviewQuery.parse(input);
-  const visible = scope(user);
+  // Only 新客户 feed the script test (lib/customer-group), so only they wait for review.
+  const visible: Prisma.CustomerWhereInput = { AND: [scope(user), currentCustomers] };
   const stale = new Date(Date.now() - STALE_PENDING_MS);
   const touchWhere: Prisma.OutreachTouchWhereInput = { customer: visible, OR: [{ judgeStatus: 'REVIEW' }, { judgeStatus: 'PENDING', createdAt: { lt: stale } }] };
   const replyWhere: Prisma.OutreachReplyWhereInput = { customer: visible, OR: [{ judgeStatus: 'REVIEW' }, { judgeStatus: 'PENDING', createdAt: { lt: stale } }] };

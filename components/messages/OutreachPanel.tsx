@@ -26,8 +26,12 @@ export function useOutreach(customerId: string) {
 const dateTime = (iso: string, timezone: string) => new Intl.DateTimeFormat('zh-CN', { timeZone: timezone, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso));
 
 /** Above the composer: what to send next and which script, with the limits that apply right now. */
+/** 旧客户 (lib/customer-group.ts) chat as usual; the tag says why no script is offered for them. */
+export const LegacyTag = () => <span className="bos-chat-tag is-muted" title="2026 年 10 月 1 日前询盘，不参与话术测试">旧客户</span>;
+
 export function OutreachBar({ view, timezone, canTemplate, onUseTemplate }: { view?: OutreachView; timezone: string; canTemplate: boolean; onUseTemplate: () => void }) {
   const [copied, setCopied] = useState(false);
+  if (view?.legacy && view.state !== 'STOPPED') return <div className="bos-chat-notice bos-outreach-bar"><MessageSquareQuote size={16} aria-hidden="true" /><span><strong>旧客户（2026 年 10 月 1 日前询盘）不参与话术测试。</strong>系统不分配话术，发出的消息也不计入话术效果，可以照常沟通。</span></div>;
   if (!view || (!view.next && view.state !== 'STOPPED')) return null;
   async function copy() {
     if (!view?.script) return;
@@ -66,7 +70,8 @@ export function OutreachProfile({ view, customerId, onChanged }: { view?: Outrea
   return <div className="bos-outreach-profile">
     <div className="bos-chat-section-title"><strong style={{ color: '#1c3226' }}>话术跟进</strong><Link className="bos-chat-link" href="/outreach">话术效果</Link></div>
     <dl className="bos-chat-facts">
-      <dt>会话状态</dt><dd>{view.stateLabel}{view.next ? ` · 下一条 ${view.next}` : ''}</dd>
+      {view.legacy && <><dt>数据分组</dt><dd><LegacyTag /> 不参与话术测试</dd></>}
+      <dt>会话状态</dt><dd>{view.stateLabel}{view.next && !view.legacy ? ` · 下一条 ${view.next}` : ''}</dd>
       <dt>回复话术</dt><dd>{view.replyScriptCode || '—'}</dd>
       <dt>最高回复</dt><dd>{view.bestReplyLabel ? <span className={`bos-chat-tag ${QUALITY_TONE[view.bestReplyQuality] ?? ''}`}>{view.bestReplyLabel}</span> : '—'}</dd>
       <dt>客户等级</dt><dd>

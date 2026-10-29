@@ -11,6 +11,7 @@ import {
   type PlanItem, type Reason, type ReviewFields, type ReviewItem,
 } from '@/lib/workbench';
 import { sendPush } from './push-service';
+import { currentCustomers } from '@/lib/customer-group';
 import {
   DATE, THREE_KINDS, TIME, dayChange, energyView, focusGoals, ignoreDuplicate, localStart, settings, signalInput, snapshotOf, snapshotSelect, urgentItems, weekFocus,
 } from './workbench-service';
@@ -47,7 +48,7 @@ async function dayMetrics(date: string, tz: string) {
   const start = localStart(date, tz), end = localStart(addDays(date, 1), tz);
   const [leads, replies, quotes, weekQuotes] = await Promise.all([
     db.customer.findMany({ where: { deletedAt: null, ...inquiryIn({ start, end }) }, select: { leadGrade: true, createdAt: true, firstContactAt: true, contactedAt: true, lastOutboundAt: true } }),
-    db.outreachReply.findMany({ where: { receivedAt: { gte: start, lt: end }, customer: { deletedAt: null } }, select: { quality: true } }),
+    db.outreachReply.findMany({ where: { receivedAt: { gte: start, lt: end }, customer: { AND: [{ deletedAt: null }, currentCustomers] } }, select: { quality: true } }),
     db.quotation.count({ where: { sentAt: { gte: start, lt: end } } }),
     db.quotation.count({ where: { sentAt: { gte: localStart(mondayOf(date), tz), lt: end } } }),
   ]);
