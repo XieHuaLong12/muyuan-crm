@@ -1,0 +1,150 @@
+{
+ "source": [
+  "LVANJU · 2026 压缩床垫与压缩床产品规格（中文，12 页）：尺寸、包装、体积、重量、中文材质、白底产品图",
+  "LVANJU Mattress Quotation - USD - CNY 6.7（英文，7 页，13 Oct 2026）：英文材质与美元单价"
+ ],
+ "transcribedAt": "2026-10-29",
+ "notes": [
+  "两份文件的尺寸、包装、体积、重量逐项一致；材质中英文按行对应。",
+  "美元报价单写明 1 USD = CNY 6.70、价格不含运费和关税，未写贸易术语；按 2026-09-22 业务规则记为 FOB。",
+  "压缩床的包装为三件（100×29×20 + 101×21×13 + 110×30×33），体积为三件之和 0.194 m³。",
+  "M-507 的编号与其他型号（M-80x）不连续，两份文件都写 M-507，照原样录入。"
+ ],
+ "mattresses": [
+  {
+   "model": "M-801", "page": 2,
+   "materials": [
+    { "cn": "白色针织面料", "en": "White knitted fabric" },
+    { "cn": "1000g无胶棉", "en": "1000 g adhesive-free fiber batting" },
+    { "cn": "2.5分蛋壳海绵", "en": "2.5 fen convoluted foam" },
+    { "cn": "无纺布", "en": "Nonwoven fabric" },
+    { "cn": "220gPK棉毡", "en": "220 g PK fiber felt" },
+    { "cn": "18CM高2.0线独立袋装弹簧", "en": "18 cm pocket springs, wire code 2.0" },
+    { "cn": "220gPK棉毡", "en": "220 g PK fiber felt" },
+    { "cn": "3D网状透气面料", "en": "3D breathable mesh fabric" }
+   ],
+   "sizes": [
+    { "size": [90, 200, 20], "packing": "31*31*98", "cbm": 0.094, "weightKg": 22, "usd": 89.55 },
+    { "size": [120, 200, 20], "packing": "31*31*128", "cbm": 0.123, "weightKg": 26, "usd": 97.01 },
+    { "size": [150, 200, 20], "packing": "31*31*158", "cbm": 0.152, "weightKg": 32, "usd": 101.49 },
+    { "size": [180, 200, 20], "packing": "31*31*188", "cbm": 0.181, "weightKg": 38, "usd": 104.48 }
+   ]
+  },
+  {
+   "model": "M-803", "page": 3, "featureCn": "阻燃面料", "featureEn": "Flame-retardant fabric",
+   "materials": [
+    { "cn": "300g针织面料", "en": "300 g knitted fabric" },
+    { "cn": "25#1分+2分波浪海绵+1000无胶棉绗缝", "en": "Quilting: 25# foam (1 fen), convoluted foam (2 fen), adhesive-free batting (1000)" },
+    { "cn": "3分2560#蓝色", "en": "Blue 2560# foam, 3 fen" },
+    { "cn": "3分2560#白色", "en": "White 2560# foam, 3 fen" },
+    { "cn": "220gPK棉毡", "en": "220 g PK fiber felt" },
+    { "cn": "25CM高无边框独立袋装弹簧", "en": "25 cm pocket springs without border frame" },
+    { "cn": "220gPK棉毡", "en": "220 g PK fiber felt" },
+    { "cn": "3D网状透气面料", "en": "3D breathable mesh fabric" }
+   ],
+   "sizes": [
+    { "size": [90, 200, 34], "packing": "31*31*98", "cbm": 0.094, "weightKg": 29, "usd": 88.06 },
+    { "size": [120, 200, 34], "packing": "31*31*128", "cbm": 0.123, "weightKg": 33, "usd": 94.03 },
+    { "size": [150, 200, 34], "packing": "31*31*158", "cbm": 0.152, "weightKg": 39, "usd": 101.49 },
+    { "size": [180, 200, 34], "packing": "31*31*188", "cbm": 0.181, "weightKg": 45, "usd": 108.96 }
+   ]
+  },
+  {
+   "model": "M-804", "page": 4,
+   "materials": [
+    { "cn": "白色针织面料", "en": "White knitted fabric" },
+    { "cn": "1000g无胶棉", "en": "1000 g adhesive-free fiber batting" },
+    { "cn": "2.5分蛋壳海绵", "en": "2.5 fen convoluted foam" },
+    { "cn": "2cm超软海绵", "en": "2 cm super-soft foam" },
+    { "cn": "2cm支撑海绵", "en": "2 cm support foam" },
+    { "cn": "220gPK棉毡", "en": "220 g PK fiber felt" },
+    { "cn": "22CM高2.0线独立袋装弹簧5CM边海绵", "en": "22 cm pocket springs, wire code 2.0; 5 cm edge foam" },
+    { "cn": "220gPK棉毡", "en": "220 g PK fiber felt" },
+    { "cn": "3D网状透气面料", "en": "3D breathable mesh fabric" }
+   ],
+   "sizes": [
+    { "size": [90, 200, 28], "packing": "23*23*96", "cbm": 0.051, "weightKg": 24, "usd": 74.48 },
+    { "size": [120, 200, 28], "packing": "23*23*126", "cbm": 0.067, "weightKg": 28, "usd": 82.09 },
+    { "size": [150, 200, 28], "packing": "23*23*156", "cbm": 0.083, "weightKg": 34, "usd": 88.06 },
+    { "size": [180, 200, 28], "packing": "23*23*186", "cbm": 0.098, "weightKg": 40, "usd": 94.03 }
+   ]
+  },
+  {
+   "model": "M-805", "page": 5,
+   "materials": [
+    { "cn": "白色针织面料", "en": "White knitted fabric" },
+    { "cn": "1000g无胶棉", "en": "1000 g adhesive-free fiber batting" },
+    { "cn": "2.5分蛋壳海绵", "en": "2.5 fen convoluted foam" },
+    { "cn": "5cm超软海绵", "en": "5 cm super-soft foam" },
+    { "cn": "220gPK棉毡", "en": "220 g PK fiber felt" },
+    { "cn": "22CM高2.0线独立袋装弹簧", "en": "22 cm pocket springs, wire code 2.0" },
+    { "cn": "220gPK棉毡", "en": "220 g PK fiber felt" },
+    { "cn": "3D网状透气面料", "en": "3D breathable mesh fabric" }
+   ],
+   "sizes": [
+    { "size": [90, 200, 30], "packing": "23*23*96", "cbm": 0.051, "weightKg": 29, "usd": 88.06 },
+    { "size": [120, 200, 30], "packing": "23*23*126", "cbm": 0.067, "weightKg": 33, "usd": 94.03 },
+    { "size": [150, 200, 30], "packing": "23*23*156", "cbm": 0.083, "weightKg": 39, "usd": 101.49 },
+    { "size": [180, 200, 30], "packing": "23*23*186", "cbm": 0.098, "weightKg": 45, "usd": 108.96 }
+   ]
+  },
+  {
+   "model": "M-806", "page": 6,
+   "materials": [
+    { "cn": "白色冰丝面料", "en": "White ice-silk fabric" },
+    { "cn": "1000g无胶棉", "en": "1000 g adhesive-free fiber batting" },
+    { "cn": "2.5分蛋壳海绵", "en": "2.5 fen convoluted foam" },
+    { "cn": "3分30中软压缩海绵", "en": "Medium-soft compressible foam, 3 fen, code 30" },
+    { "cn": "2分高回弹压缩海绵四周小6", "en": "High-resilience compressible foam, 2 fen; perimeter reduction: 6 (factory notation)" },
+    { "cn": "220gPK棉毡", "en": "220 g PK fiber felt" },
+    { "cn": "20CM高2.0线独立袋装弹簧5CM边海绵", "en": "20 cm pocket springs, wire code 2.0; 5 cm edge foam" },
+    { "cn": "220gPK棉毡", "en": "220 g PK fiber felt" },
+    { "cn": "3D网状透气面料", "en": "3D breathable mesh fabric" }
+   ],
+   "sizes": [
+    { "size": [90, 200, 28], "packing": "23*23*96", "cbm": 0.051, "weightKg": 29, "usd": 119.40 },
+    { "size": [120, 200, 28], "packing": "23*23*126", "cbm": 0.067, "weightKg": 33, "usd": 126.87 },
+    { "size": [150, 200, 28], "packing": "23*23*156", "cbm": 0.083, "weightKg": 39, "usd": 134.33 },
+    { "size": [180, 200, 28], "packing": "23*23*186", "cbm": 0.098, "weightKg": 45, "usd": 141.79 }
+   ]
+  },
+  {
+   "model": "M-507", "page": 7,
+   "materials": [
+    { "cn": "外罩：300克重灰色针织面料", "en": "Outer cover: 300 g grey knitted fabric" },
+    { "cn": "240GSM灰色亚麻+橙色骨条+防滑底部+拉链闭合", "en": "240 GSM grey linen, orange piping, anti-slip base and zip closure" },
+    { "cn": "内衬：聚酯纤维内衬", "en": "Lining: polyester fiber" },
+    { "cn": "床垫支撑：2厘米28D记忆棉+18厘米25DHR海绵", "en": "Core: 2 cm 28D memory foam + 18 cm 25DHR foam" }
+   ],
+   "sizes": [
+    { "size": [90, 200, 20], "packing": "28*28*96", "cbm": 0.075, "weightKg": 8, "usd": 59.89 },
+    { "size": [120, 200, 20], "packing": "28*28*126", "cbm": 0.099, "weightKg": 10, "usd": 76.49 },
+    { "size": [135, 200, 20], "packing": "28*28*141", "cbm": 0.111, "weightKg": 11, "usd": 83.96 },
+    { "size": [150, 203, 20], "packing": "28*28*156", "cbm": 0.122, "weightKg": 12, "usd": 93.28 },
+    { "size": [180, 200, 20], "packing": "28*28*186", "cbm": 0.146, "weightKg": 14, "usd": 107.28 }
+   ]
+  },
+  {
+   "model": "M-808", "page": 8,
+   "materials": [
+    { "cn": "外罩：270克重白色针织面料+防滑底+拉链闭合", "en": "Outer cover: 270 g white knitted fabric, anti-slip base and zip closure" },
+    { "cn": "床垫支撑：20厘米25DHR海绵", "en": "Core: 20 cm 25DHR foam" }
+   ],
+   "sizes": [
+    { "size": [90, 200, 20], "packing": "28*28*96", "cbm": 0.075, "weightKg": 7, "usd": 56.72 },
+    { "size": [120, 200, 20], "packing": "28*28*126", "cbm": 0.099, "weightKg": 9, "usd": 71.46 },
+    { "size": [135, 200, 20], "packing": "28*28*141", "cbm": 0.111, "weightKg": 10, "usd": 78.92 },
+    { "size": [150, 203, 20], "packing": "28*28*156", "cbm": 0.122, "weightKg": 12, "usd": 87.13 },
+    { "size": [180, 200, 20], "packing": "28*28*186", "cbm": 0.146, "weightKg": 14, "usd": 100.93 }
+   ]
+  }
+ ],
+ "beds": [
+  { "model": "C-301", "page": 9, "size": [228, 169, 96], "packing": "100*29*20+101*21*13+110*30*33", "cbm": 0.194, "weightKg": 55.9, "materialCn": "抗压高密度可压缩海绵" },
+  { "model": "C-302", "page": 9, "size": [227, 170, 96], "packing": "100*29*20+101*21*13+110*30*33", "cbm": 0.194, "weightKg": 55.9, "materialCn": "抗压高密度可压缩海绵" },
+  { "model": "C-303", "page": 10, "size": [226, 175, 108], "packing": "100*29*20+101*21*13+110*30*33", "cbm": 0.194, "weightKg": 55.9, "materialCn": "抗压高密度可压缩海绵" },
+  { "model": "C-304", "page": 10, "size": [225, 171, 99], "packing": "100*29*20+101*21*13+110*30*33", "cbm": 0.194, "weightKg": 55.9, "materialCn": "抗压高密度可压缩海绵" },
+  { "model": "C-305", "page": 11, "size": [231, 169, 101], "packing": "100*29*20+101*21*13+110*30*33", "cbm": 0.194, "weightKg": 55.9, "materialCn": "抗压高密度可压缩海绵" },
+  { "model": "C-306", "page": 11, "size": [222, 115, 93], "packing": "100*29*20+101*21*13+110*30*33", "cbm": 0.194, "weightKg": 55.9, "materialCn": "抗压高密度可压缩海绵" }
+ ]
+}

@@ -71,8 +71,9 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 function dims(v: Variant): string {
-  if (!v.lengthCm || !v.widthCm || !v.heightCm) return '—';
-  const main = `${v.lengthCm}×${v.widthCm}×${v.heightCm}`;
+  if (!v.lengthCm || !v.widthCm) return '—';
+  // 资料只给长 × 宽时（如智能电动床垫未给厚度）只显示两项
+  const main = v.heightCm ? `${v.lengthCm}×${v.widthCm}×${v.heightCm}` : `${v.lengthCm}×${v.widthCm}`;
   if (v.secondaryLengthCm && v.secondaryWidthCm && v.secondaryHeightCm) {
     return `${main} / ${v.secondaryLabelCn || '内空'} ${v.secondaryLengthCm}×${v.secondaryWidthCm}×${v.secondaryHeightCm}`;
   }

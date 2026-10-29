@@ -1,0 +1,93 @@
+{
+ "source": [
+  "LVANJU 2026 智能电动床垫价格表（WPS 表格导出，2 页）：型号、定位、尺寸、附加功能、包装、体积、毛重、人民币单价",
+  "LVANJU 智能电动床垫图册 2026 中文版（印刷版，18 页，整页图片无文字层）：每款材料结构、舒适度与规格参数，逐页人工转录"
+ ],
+ "transcribedAt": "2026-10-29",
+ "category": { "code": "SERIES_SMART_ELECTRIC", "nameCn": "智能电动床垫", "nameEn": "Smart Electric Mattress", "parent": "SMART_MATTRESS" },
+ "priceTerms": {
+  "incoterm": "EXW",
+  "currency": "CNY",
+  "text": "EXW 工厂价，价格不含关税和运费；30% 定金，70% 发货前付清；收到定金后 7-15 天（视订单数量而定）；10 套起，可混款；标准出口纸箱；质保 5 年。价格仅供参考，具体以正式报价单为准；支持 OEM 定制（logo、面料颜色、遥控器、包装），价格另议。"
+ },
+ "common": {
+  "presetModes": 8,
+  "motor": "德国 OKIN 电机",
+  "frame": "12 cm 功能架",
+  "remote": "无线遥控器",
+  "coverLayer": "面料层拉链可拆，可水洗、可更换",
+  "maxLoadKg": 300,
+  "warrantyYears": 5
+ },
+ "notes": [
+  "价格表只写长 × 宽（120 / 150 / 180 × 200），没有床垫厚度，产品高度留空。",
+  "图册与价格表的定位写法不同：智舒-Pro 图册为「分体基础款」、E350-Ultra 为「3D 透气款」、深睡-Ultra 为「康养款」、智安-Ultra 为「主推款」、云栖-Ultra 为「左右独立款」、尊界-Duo 为「智适应款」，价格表分别写基础款 / 升级款 / 旗舰款；两种都保留。",
+  "七款的包装、体积、毛重在价格表里完全相同（124 / 154 / 184 × 204 × 28，0.71 / 0.88 / 1.05 m³，82 / 85 / 88 kg）。",
+  "尊界-Duo 的电机与功能架在图册里是方括号标注（[德国 OKIN 电机]、[12 cm]），记为待确认。",
+  "图册只有场景图，没有白底图；英文名称与英文材料名两份文件都没有提供。"
+ ],
+ "models": [
+  {
+   "model": "智享-Pro", "page": 7, "image": "smart-zhixiang-pro.jpg",
+   "positioning": "基础款", "positioningCatalog": "基础款",
+   "taglineCn": "玫瑰绒亲肤面料，偏硬支撑更稳当。",
+   "comfort": 3, "featuresCn": "无", "featuresPriceList": "八大功能",
+   "layersCn": ["高克重玫瑰绒面料", "水洗棉", "抗菌棉布", "2 公分高回弹棉", "2 公分生物基小蓝垫", "7 公分高密度回弹海绵", "海绵护边", "环保热压棉", "12 cm 功能架 + 德国 OKIN 电机", "环保热压棉", "3D 透气网布"],
+   "cny": [1699, 1799, 1899]
+  },
+  {
+   "model": "智舒-Pro", "page": 8, "image": "smart-zhishu-pro.jpg",
+   "positioning": "基础款", "positioningCatalog": "分体基础款",
+   "taglineCn": "羊驼绒加记忆棉，软硬适中刚刚好。",
+   "comfort": 5, "featuresCn": "无", "featuresPriceList": "八大功能",
+   "layersCn": ["星图防螨抗菌针织面料", "水洗棉", "抗菌棉布", "2 公分记忆棉", "2 公分澳大利亚羊驼绒", "7 公分高密度回弹海绵", "海绵护边", "环保热压棉", "12 cm 功能架 + 德国 OKIN 电机", "环保热压棉", "3D 透气网布"],
+   "cny": [2380, 2480, 2580]
+  },
+  {
+   "model": "E350-Ultra", "page": 9, "image": "smart-e350-ultra.jpg",
+   "positioning": "升级款", "positioningCatalog": "3D 透气款",
+   "taglineCn": "7D 透气面料不闷热，音乐、加热、按摩随心开。",
+   "comfort": 4, "featuresCn": "音乐、加热、按摩", "featuresPriceList": "音乐加热按摩",
+   "layersCn": ["7D 透气面料", "2 公分高回弹棉", "2 公分澳洲大豆纤维舒弹棉", "2 公分生物基小蓝垫", "无纺布独立袋装静音弹簧", "海绵护边", "环保热压棉", "12 cm 功能架 + 德国 OKIN 电机", "环保热压棉", "3D 透气网布"],
+   "cny": [3250, 3350, 3450]
+  },
+  {
+   "model": "深睡-Ultra", "page": 10, "image": "smart-shenshui-ultra.jpg",
+   "positioning": "升级款", "positioningCatalog": "康养款",
+   "taglineCn": "阿拉善骆驼绒加康养律动，躺下就放松。",
+   "comfort": 6, "featuresCn": "康养律动", "featuresPriceList": "康养律动",
+   "layersCn": ["抗菌防螨棉麻面料", "水洗棉", "抗菌棉布", "2 公分记忆棉", "2 公分阿拉善骆驼绒", "2 公分护脊棉", "无纺布独立袋装静音弹簧", "海绵护边", "环保热压棉", "12 cm 功能架 + 德国 OKIN 电机", "环保热压棉", "3D 透气网布"],
+   "cny": [3499, 3599, 3699]
+  },
+  {
+   "model": "智安-Ultra", "page": 11, "image": "smart-zhian-ultra.jpg",
+   "positioning": "升级款", "positioningCatalog": "主推款",
+   "taglineCn": "1980 个感应弹簧，配 4D 音乐按摩。",
+   "comfort": 8, "featuresCn": "4D 音乐按摩", "featuresPriceList": "4d音乐按摩",
+   "layersCn": ["抗菌防螨棉麻面料", "水洗棉", "抗菌棉布", "2 公分记忆棉", "2 公分澳大利亚羊绒", "1980 个微型感应 MONI 弹簧", "2 公分护脊棉", "3 公分挖孔棉", "2 公分生物基小蓝垫", "海绵护边", "环保热压棉", "12 cm 功能架 + 德国 OKIN 电机", "环保热压棉", "3D 透气网布"],
+   "cny": [3650, 3750, 3850]
+  },
+  {
+   "model": "云栖-Ultra", "page": 12, "image": "smart-yunqi-ultra.jpg",
+   "positioning": "升级款", "positioningCatalog": "左右独立款",
+   "taglineCn": "左右分区，两个人各睡各的软硬。",
+   "comfort": 5, "featuresCn": "左右独立分区", "featuresPriceList": "左右独立分区",
+   "layersCn": ["抗菌防螨棉麻面料", "水洗棉", "抗菌棉布", "1 公分澳大利亚羊驼绒", "2 公分澳洲羊毛 + 新疆棉混纺", "2 公分阿拉善骆驼绒", "无纺布独立袋装静音弹簧", "海绵护边", "环保热压棉", "12 cm 功能架 + 德国 OKIN 电机", "环保热压棉", "3D 透气网布"],
+   "cny": [3199, 3299, 3399]
+  },
+  {
+   "model": "尊界-Duo", "page": 13, "image": "smart-zunjie-duo.jpg",
+   "positioning": "旗舰款", "positioningCatalog": "智适应款",
+   "taglineCn": "智适应气囊，躺下自动贴合身体曲线。",
+   "comfort": 5, "featuresCn": "自适应、睡眠监测", "featuresPriceList": "自适应、睡眠监测",
+   "layersCn": ["智适应气囊（肩部支撑、背部支撑、腰椎贴合、臀部承托、腿部舒缓）"],
+   "unconfirmed": ["motor", "frame"],
+   "cny": [4880, 4980, 5080]
+  }
+ ],
+ "sizes": [
+  { "size": [120, 200], "packing": "124*204*28", "cbm": 0.71, "weightKg": 82 },
+  { "size": [150, 200], "packing": "154*204*28", "cbm": 0.88, "weightKg": 85 },
+  { "size": [180, 200], "packing": "184*204*28", "cbm": 1.05, "weightKg": 88 }
+ ]
+}
