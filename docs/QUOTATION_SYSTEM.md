@@ -176,6 +176,8 @@
 
 在产品库录入或修改的价格记在价格表 `MANUAL` 下；每个币种只保留一条在用价格，改价改这条，清空就停用（`status = ARCHIVED`）。上传的图片存在数据库表 `ProductImageFile`，地址为 `/media/products/<uuid>.jpg`（登录可看，可长期缓存）；每次上传都是新地址，旧主图降为图库图片，旧报价单仍能显示原图。只有管理员能新增、编辑、上下架和换图，销售只能查看和报价。
 
+**主图修复（每次部署）**：主图记录指向的图片不存在时（例如从别处导入、文件没进仓库的路径），`scripts/production-init.mjs` 把这条记录降为图库记录（保留不删），再用仓库里的图片补上主图（`public/products/<型号>.jpg`，智能电动床垫用 `smart-*.jpg`）；仓库里也没有图的型号显示「待补图」，可在产品页上传。页面上图片加载失败时也显示「待补图」，不再出现破图。
+
 数据库变更（`20261029022345_product_listing_and_images`，只加不改）：`Product.listingMode VARCHAR(16) DEFAULT 'MANUAL'`；新表 `ProductImageFile`（MEDIUMBLOB，单张不超过 3 MB）。
 
 ## 验证记录

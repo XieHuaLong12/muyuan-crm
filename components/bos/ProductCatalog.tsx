@@ -185,7 +185,14 @@ export function ProductCatalog({ data, canManage = false }: { data: CatalogData;
                     <Link href={`/products/${product.id}`} className="bos-product-thumb">
                       {product.image ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={`/${product.image}`} alt={`${product.model} 产品图`} loading="lazy" width={80} height={60} />
+                        <img
+                          src={`/${product.image}`}
+                          alt={`${product.model} 产品图`}
+                          loading="lazy"
+                          width={80}
+                          height={60}
+                          onError={e => e.currentTarget.parentElement?.classList.add('is-broken')}
+                        />
                       ) : (
                         <span className="bos-product-thumb-missing" title="暂无产品图">待补图</span>
                       )}

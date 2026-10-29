@@ -140,7 +140,61 @@ try {
     console.warn('Product OS: 图册校正未完成：', error instanceof Error ? error.message : error);
   }
 
-  // 2026 新品：压缩床垫 M-803 等 6 款、智能电动床垫 7 款整套新增，M-801 与 C-301 ~ C-306 按新规格补全。
+  // 产品主图修复与补登记（已有产品库不再跑种子，图片在这里对齐）：
+  //   1. 主图记录指向的图片不存在（例如从别处导入、文件没进仓库的路径）：把这条记录降为图库记录（保留不删），
+  //      页面不再显示破图；
+  //   2. 没有主图、但仓库里有 public/products/<型号>.jpg 的型号：登记为主图；同一文件已有记录时恢复为主图。
+  // 只在本机能看到 public/products 目录时检查文件，避免在拿不到静态文件的环境里误判。
+  try {
+    const owner = await db.user.findUnique({ where: { email: 'admin@example.com' }, select: { id: true } });
+    const canSeeFiles = fs.existsSync('public/products');
+    const broken = [];
+    const heroes = await db.productMedia.findMany({
+      where: { role: 'HERO', product: { deletedAt: null } },
+      select: { id: true, storageKey: true, product: { select: { model: true } } },
+    });
+    for (const hero of heroes) {
+      const uploaded = hero.storageKey.startsWith('media/products/');
+      if (!uploaded && !canSeeFiles) continue;
+      const exists = uploaded
+        ? Boolean(await db.productImageFile.findUnique({ where: { storageKey: hero.storageKey }, select: { id: true } }))
+        : fs.existsSync(`public/${hero.storageKey}`);
+      if (exists) continue;
+      await db.productMedia.update({ where: { id: hero.id }, data: { role: 'GALLERY', sort: 1 } });
+      broken.push(`${hero.product.model}（${hero.storageKey}）`);
+    }
+    if (broken.length) console.log(`Product OS: 主图文件不存在，已改为图库记录：${broken.join('、')}`);
+
+    const missing = await db.product.findMany({
+      where: { deletedAt: null, media: { none: { role: 'HERO' } } },
+      select: { id: true, model: true },
+    });
+    let added = 0;
+    for (const product of missing) {
+      const file = `public/products/${product.model}.jpg`;
+      const storageKey = `products/${product.model}.jpg`;
+      if (!owner || !fs.existsSync(file)) continue;
+      const existing = await db.productMedia.findUnique({ where: { storageKey } });
+      if (existing && existing.productId !== product.id) continue;
+      if (existing) {
+        await db.productMedia.update({ where: { id: existing.id }, data: { role: 'HERO', sort: 0 } });
+      } else {
+        await db.productMedia.create({
+          data: {
+            productId: product.id, role: 'HERO', storageKey, mimeType: 'image/jpeg', fileName: `${product.model}.jpg`,
+            size: fs.statSync(file).size, sort: 0, createdBy: owner.id,
+          },
+        });
+      }
+      added += 1;
+    }
+    if (added) console.log(`Product OS: 补登记 ${added} 张产品主图。`);
+  } catch (error) {
+    console.warn('Product OS image registration skipped:', error instanceof Error ? error.message : error);
+  }
+
+  // 2026 新品：压缩床垫 M-803 等 6 款、智能电动床垫 7 款整套新增，M-801 与 C-301 ~ C-306 按新规格补全；
+  // 放在主图修复之后，已在库但没有主图的型号（如智能电动床垫）用仓库里的图片补上。
   // 只新增缺的型号；已有字段只改仍是旧种子值的，人工改过的保留并在日志列出（prisma/products-2026.ts）。
   try {
     const tsxCli = 'node_modules/tsx/dist/cli.mjs';
@@ -152,32 +206,6 @@ try {
     }
   } catch (error) {
     console.warn('Product OS: 2026 新品导入未完成：', error instanceof Error ? error.message : error);
-  }
-
-  // 产品主图补登记：已有产品库不再跑种子，新增的图片文件（public/products/<型号>.jpg）在这里登记。
-  // 只为「有图片文件、但还没有主图记录」的型号新建 HERO 记录；不改动已有图片记录和任何人工资料。
-  try {
-    const missing = await db.product.findMany({
-      where: { deletedAt: null, media: { none: { role: 'HERO' } } },
-      select: { id: true, model: true },
-    });
-    const owner = await db.user.findUnique({ where: { email: 'admin@example.com' }, select: { id: true } });
-    let added = 0;
-    for (const product of missing) {
-      const file = `public/products/${product.model}.jpg`;
-      const storageKey = `products/${product.model}.jpg`;
-      if (!owner || !fs.existsSync(file) || await db.productMedia.findUnique({ where: { storageKey } })) continue;
-      await db.productMedia.create({
-        data: {
-          productId: product.id, role: 'HERO', storageKey, mimeType: 'image/jpeg', fileName: `${product.model}.jpg`,
-          size: fs.statSync(file).size, sort: 0, createdBy: owner.id,
-        },
-      });
-      added += 1;
-    }
-    if (added) console.log(`Product OS: 补登记 ${added} 张产品主图。`);
-  } catch (error) {
-    console.warn('Product OS image registration skipped:', error instanceof Error ? error.message : error);
   }
 
   // 订单：为启用订单模块之前已有的成交补单。按 dealId 幂等，重复运行不会重复建单。
