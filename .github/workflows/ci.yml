@@ -93,7 +93,7 @@ jobs:
         env:
           DATABASE_URL: mysql://root:root@127.0.0.1:3306/muyuan_reuse
         run: |
-          # 从 13 条旧迁移升级至当前版本，验证身份链、销售角色、分配池、报价单、表单分级推送、客户列表定制列、话术分析 / 工作日历与每日复盘增量迁移。
+          # 从 13 条旧迁移升级至当前版本，验证身份链、销售角色、分配池、报价单、表单分级推送、客户列表定制列、话术分析 / 工作日历、每日复盘与产品上架管理增量迁移。
           mysql -h127.0.0.1 -uroot -proot -e 'CREATE DATABASE muyuan_reuse'
           mkdir /tmp/identity-ci-migrations
           trap 'for migration in /tmp/identity-ci-migrations/*; do [ ! -d "$migration" ] || mv "$migration" prisma/migrations/; done' EXIT
@@ -110,12 +110,13 @@ jobs:
           mv prisma/migrations/20261015170000_qualify_replied_stages /tmp/identity-ci-migrations/
           mv prisma/migrations/20261021090000_outreach_and_workbench /tmp/identity-ci-migrations/
           mv prisma/migrations/20261022090000_daily_review /tmp/identity-ci-migrations/
+          mv prisma/migrations/20261029022345_product_listing_and_images /tmp/identity-ci-migrations/
           pnpm exec prisma migrate deploy
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "13"
           mysql -h127.0.0.1 -uroot -proot muyuan_reuse -e "INSERT INTO User (id,name,email,passwordHash) VALUES ('reuse-sentinel','Existing user','existing@example.com','preserve-me')"
           mv /tmp/identity-ci-migrations/* prisma/migrations/
           pnpm exec prisma migrate deploy
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "26"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "27"
           # 分配池、联系方式规范键、任务执行人与线索分配方式（20261009024647_assignment_pool_and_corrections）
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND ((table_name='Customer' AND column_name IN ('pendingAssignment','contactKeysAt')) OR (table_name='Task' AND column_name='assigneeId') OR (table_name='Setting' AND column_name='leadAssignMode'))")" = "4"
           # 广告线索实时入库：来源、提交时间、重试退避、表单补拉水位与广告线索首联分钟数（20261009035838_meta_lead_realtime_intake）
@@ -136,6 +137,9 @@ jobs:
           # 每日复盘：复盘、修改记录、重心进度记录三张新表，今日三件事位置与重心数字目标（20261022090000_daily_review）
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('DailyReview','DailyReviewRevision','FocusProgressLog')")" = "3"
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND ((table_name='WorkItem' AND column_name='topOrder') OR (table_name='FocusGoal' AND column_name IN ('targetValue','currentValue','unit')))")" = "4"
+          # 产品库上架管理：上架方式列（已有产品默认手动）与上传产品图表（20261029022345_product_listing_and_images）
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND table_name='Product' AND column_name='listingMode' AND column_default LIKE '%MANUAL%'")" = "1"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name='ProductImageFile'")" = "1"
           echo "reused-deployment upgrade path OK"
 
       - name: Seed test database
@@ -230,6 +234,10 @@ jobs:
           check "SELECT CAST(usdCnyRate AS CHAR) FROM Setting WHERE id='system'" "6.7000"
           check "SELECT COUNT(*) FROM ProductCost" "0"
           # 成本绝不出现在普通产品列表接口的返回结构里（由 tests/product-cost.test.ts 断言）
+
+          # 上架方式：种子写入的产品都是手动上架、已上架；产品库上传图片表存在且为空
+          check "SELECT COUNT(*) FROM Product WHERE listingMode='MANUAL' AND status='ACTIVE'" "43"
+          check "SELECT COUNT(*) FROM ProductImageFile" "0"
 
           # 产品图：42 张图 + 42 条记录（只有 M-802 暂无图）
           check "SELECT COUNT(*) FROM ProductMedia WHERE role='HERO'" "42"

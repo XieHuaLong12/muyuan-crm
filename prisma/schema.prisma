@@ -761,6 +761,8 @@ model Product {
   seriesId String?
   series ProductSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
   status String @default("ACTIVE") @db.VarChar(16)
+  // 上架方式：AUTO 资料齐全（主图、尺寸、价格）自动上架 / MANUAL 由管理员上架、下架
+  listingMode String @default("MANUAL") @db.VarChar(16)
   lengthLabel String @default("")
   isModular Boolean @default(false)
   isSofaBed Boolean @default(false)
@@ -901,6 +903,20 @@ model ProductPrice {
   @@unique([variantId, priceListKey, currency, incoterm, customerTier, minQty])
   @@index([variantId, status])
   @@index([effectiveFrom])
+}
+
+// 在产品库里上传的产品图（统一处理成 1200 × 900 白底 JPEG）。存进数据库，部署重建目录也不会丢；
+// 每次上传用新的 storageKey（media/products/<uuid>.jpg），旧图保留给历史报价单。
+model ProductImageFile {
+  id String @id @default(cuid())
+  storageKey String @unique @db.VarChar(191)
+  mimeType String @db.VarChar(32)
+  width Int
+  height Int
+  size Int
+  data Bytes @db.MediumBlob
+  createdBy String
+  createdAt DateTime @default(now())
 }
 
 model ProductMedia {

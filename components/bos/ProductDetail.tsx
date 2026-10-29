@@ -2,6 +2,8 @@
 import Link from 'next/link';
 import { ArrowLeft,AlertTriangle,Boxes,Truck,Sparkles,FilePlus2 } from 'lucide-react';
 import { Header,Card,Table,Badge,EmptyState,Typography } from '@/components/ui/bos';
+import { ProductListingPanel, type ListingSummary } from '@/components/bos/ProductListingPanel';
+import { ProductImageUpload } from '@/components/bos/ProductImageUpload';
 
 type Carton = {
   id: string;
@@ -46,6 +48,9 @@ export type ProductDetailData = {
   model: string;
   nameEn: string;
   status: string;
+  listingMode: string;
+  descriptionCn: string;
+  descriptionEn: string;
   lengthLabel: string;
   lang: 'zh' | 'en';
   category: { code: string; name: string; path: string };
@@ -81,16 +86,20 @@ function dims(v: Variant): string {
   return main;
 }
 
-export function ProductDetail({ data }: { data: ProductDetailData }) {
+const STATUS_TEXT: Record<string, string> = { ACTIVE: '已上架', DRAFT: '待上架', ARCHIVED: '已下架' };
+
+/** listing 只给管理员：上架状态、上架方式与操作按钮。 */
+export function ProductDetail({ data, listing = null }: { data: ProductDetailData; listing?: ListingSummary | null }) {
   const reviewVariants = data.variants.filter(v => v.needsReview);
   const hero = data.media.find(m => m.role === 'HERO') ?? null;
+  const description = data.lang === 'en' ? data.descriptionEn || data.descriptionCn : data.descriptionCn || data.descriptionEn;
 
   return (
     <>
       <Header
         eyebrow={`产品库 · ${data.category.path}`}
         title={`${data.model} ${data.series ? `· ${data.series.nameEn}` : ''}`}
-        description={`${data.lengthLabel || data.nameEn} · ${data.variants.length} 个尺寸变体 · 交期 ${data.leadTimeDays} 天 · 质保 ${data.qaMonths} 个月`}
+        description={`${data.lengthLabel || data.nameEn} · ${data.variants.length} 个尺寸变体 · 交期 ${data.leadTimeDays} 天 · 质保 ${data.qaMonths} 个月${listing ? '' : ` · ${STATUS_TEXT[data.status] ?? data.status}`}`}
         actions={
           <>
             <Link href="/products" className="bos-button">
@@ -103,19 +112,25 @@ export function ProductDetail({ data }: { data: ProductDetailData }) {
         }
       />
 
+      {listing && <ProductListingPanel productId={data.id} listing={listing} />}
+
       <Card className="bos-product-hero">
         {hero ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`/${hero.storageKey}`} alt={`${data.model} 产品图`} />
-            <p className="bos-footnote">产品图来自 2026 产品图册（{data.model}）。</p>
+            <p className="bos-footnote">
+              {hero.storageKey.startsWith('media/') ? '产品图由管理员在产品库上传，已统一处理成 4:3。' : `产品图来自 2026 产品资料（${data.model}）。`}
+            </p>
           </>
         ) : (
           <div className="bos-product-hero-missing">
             <strong>暂无产品图</strong>
-            <p>该型号未收录在图册中，需要单独提供照片。</p>
+            <p>该型号还没有产品照片{listing ? '，可以直接上传，系统会处理成 4:3 白底图。' : '，需要单独提供。'}</p>
+            {listing && <ProductImageUpload productId={data.id} label="上传主图" />}
           </div>
         )}
+        {description && <p className="bos-product-description">{description}</p>}
       </Card>
 
       {reviewVariants.length > 0 && (
@@ -124,8 +139,8 @@ export function ProductDetail({ data }: { data: ProductDetailData }) {
           <div>
             <strong>{reviewVariants.length} 个变体待核对</strong>
             <p>
-              报价表的 CBM 与包装尺寸推导值偏差超过 15%，或存在已登记的来源冲突。
-              数值仍按「以报价表为准」展示，<strong>未做自动修正</strong>，请人工确认后通过 API 更正。
+              报价表的 CBM 与包装尺寸推导值偏差超过 15%、存在已登记的来源冲突，或资料缺失（如床垫厚度）。
+              数值仍按「以报价表为准」展示，<strong>未做自动修正</strong>，管理员可在「编辑资料与价格」里核对更正，改过的规格不再标记待核对。
             </p>
           </div>
         </Card>
@@ -164,9 +179,9 @@ export function ProductDetail({ data }: { data: ProductDetailData }) {
               </td>
               <td>{variant.cartonCount}</td>
               <td>{variant.cbm}</td>
-              <td className={variant.needsReview ? 'bos-danger-text' : ''}>
+              <td className={variant.needsReview && variant.reviewNote.includes('CBM') ? 'bos-danger-text' : ''}>
                 {variant.cbmComputed ?? '—'}
-                {variant.needsReview && <AlertTriangle size={11} />}
+                {variant.needsReview && variant.reviewNote.includes('CBM') && <AlertTriangle size={11} />}
               </td>
               <td>
                 {variant.grossWeightKg}
@@ -272,7 +287,7 @@ export function ProductDetail({ data }: { data: ProductDetailData }) {
           )}
           <div className="bos-inline-actions" style={{ marginTop: 16 }}>
             <span className="bos-text-link"><Boxes size={14} /> 变体 {data.variants.length}</span>
-            <span className="bos-text-link"><Truck size={14} /> FOB 报价</span>
+            <span className="bos-text-link"><Truck size={14} /> {[...new Set(data.variants.flatMap(v => v.prices.map(p => p.incoterm)))].join(' / ') || '暂无'} 报价</span>
           </div>
         </Card>
       </div>

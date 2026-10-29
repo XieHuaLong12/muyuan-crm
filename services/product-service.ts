@@ -227,6 +227,9 @@ export async function productDetail(user: Actor, id: string, input: unknown = {}
     nameEn: product.nameEn,
     nameCn: product.nameCn,
     status: product.status,
+    listingMode: product.listingMode,
+    descriptionCn: product.descriptionCn,
+    descriptionEn: product.descriptionEn,
     lengthLabel: product.lengthLabel,
     lang,
     category: {
