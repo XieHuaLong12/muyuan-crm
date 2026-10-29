@@ -7,7 +7,7 @@ import { retryTransaction } from '@/lib/transaction-retry';
 import { afterResponse } from '@/lib/after-response';
 import { isTerminalStage } from '@/lib/constants';
 import {
-  COUNTED_MATCHES, DAY, HOUR, OUTREACH_STATES, POSITION_LABELS, QUALITIES, SCRIPT_STATUSES, customerScriptLanguage, deriveOutreach, groupChannel, groupHasMedia,
+  COUNTED_MATCHES, DAY, DELETED_SCRIPT, HOUR, OUTREACH_STATES, POSITION_LABELS, QUALITIES, SCRIPT_STATUSES, customerScriptLanguage, deriveOutreach, groupChannel, groupHasMedia,
   groupHasWords, groupMessages, groupText, matchesExactly, readConfig, renderScript, ruleReply,
   type Derivation, type FlowMessage, type MessageGroup, type OutreachConfig, type Position, type Quality, type ReplyVerdict,
 } from '@/lib/outreach';
@@ -44,7 +44,7 @@ export async function outreachSetup(client: Tx | typeof db = db) {
 }
 
 type Scripts = Awaited<ReturnType<typeof loadScripts>>;
-const loadScripts = (client: Tx | typeof db) => client.outreachScript.findMany({ select: { id: true, code: true, position: true, grades: true, language: true,
+const loadScripts = (client: Tx | typeof db) => client.outreachScript.findMany({ where: { status: { not: DELETED_SCRIPT } }, select: { id: true, code: true, position: true, grades: true, language: true,
   content: true, status: true, templateName: true, buttonQualities: true, firstSentAt: true }, orderBy: { code: 'asc' } });
 
 async function loadMessages(client: Tx | typeof db, customerId: string) {
@@ -208,9 +208,10 @@ async function reconcileIn(tx: Tx, customerId: string, now: Date, setup: { confi
   for (const id of [...lockScripts].sort()) await tx.outreachScript.updateMany({ where: { id, firstSentAt: null }, data: { firstSentAt: now } });
 
   // The customer's outreach fields. Not an edit: updatedAt stays, as for grades.
-  const firstAnswered = derivation.firstAnsweredTouch ? await tx.outreachTouch.findUnique({ where: { groupKey: derivation.firstAnsweredTouch }, select: { script: { select: { code: true } } } }) : null;
+  const firstAnswered = derivation.firstAnsweredTouch ? await tx.outreachTouch.findUnique({ where: { groupKey: derivation.firstAnsweredTouch }, select: { script: { select: { code: true, status: true } } } }) : null;
+  const answeredWith = firstAnswered?.script && firstAnswered.script.status !== DELETED_SCRIPT ? firstAnswered.script.code : null;
   const fields = { outreachState: derivation.state, outreachNext: derivation.next, outreachDueAt: derivation.dueAt,
-    replyScriptCode: firstAnswered?.script?.code ?? customer.replyScriptCode, bestReplyQuality: derivation.bestQuality };
+    replyScriptCode: answeredWith ?? customer.replyScriptCode, bestReplyQuality: derivation.bestQuality };
   const stopNow = derivation.state === 'STOPPED' && customer.whatsappOptInStatus !== 'OPTED_OUT';
   await tx.customer.update({ where: { id: customerId }, data: { ...fields, updatedAt: customer.updatedAt,
     ...(stopNow ? { whatsappOptInStatus: 'OPTED_OUT', whatsappOptOutAt: now } : {}) } });

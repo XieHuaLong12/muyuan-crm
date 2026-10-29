@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { retryTransaction } from '@/lib/transaction-retry';
-import { GRADES, MATCH_TYPES, OVERRIDE_REASONS, POSITION_LABELS, QUALITIES, SIGNALS, gradeEnum, matchTypeEnum, qualityEnum, signalEnum, type Position } from '@/lib/outreach';
+import { DELETED_SCRIPT, GRADES, MATCH_TYPES, OVERRIDE_REASONS, POSITION_LABELS, QUALITIES, SIGNALS, gradeEnum, matchTypeEnum, qualityEnum, signalEnum, type Position } from '@/lib/outreach';
 import { lockCustomer } from './contact-identity-service';
 import { reconcileOutreach } from './outreach-engine-service';
 import { currentCustomers } from '@/lib/customer-group';
+import { liveTouches } from './outreach-script-service';
 
 /**
  * 人工复核. What DeepSeek was unsure of (confidence below 0.7, a code that does not fit the touch number, no AI
@@ -28,7 +29,7 @@ export async function reviewList(user: Actor, input: unknown = {}) {
   // Only 新客户 feed the script test (lib/customer-group), so only they wait for review.
   const visible: Prisma.CustomerWhereInput = { AND: [scope(user), currentCustomers] };
   const stale = new Date(Date.now() - STALE_PENDING_MS);
-  const touchWhere: Prisma.OutreachTouchWhereInput = { customer: visible, OR: [{ judgeStatus: 'REVIEW' }, { judgeStatus: 'PENDING', createdAt: { lt: stale } }] };
+  const touchWhere: Prisma.OutreachTouchWhereInput = { customer: visible, AND: [liveTouches], OR: [{ judgeStatus: 'REVIEW' }, { judgeStatus: 'PENDING', createdAt: { lt: stale } }] };
   const replyWhere: Prisma.OutreachReplyWhereInput = { customer: visible, OR: [{ judgeStatus: 'REVIEW' }, { judgeStatus: 'PENDING', createdAt: { lt: stale } }] };
   const gradeWhere: Prisma.OutreachReplyWhereInput = { customer: visible, gradeSuggestionStatus: 'PENDING' };
   const hotWhere: Prisma.OutreachReplyWhereInput = { customer: { ...visible, quotedAt: null }, quality: 'HIGH', receivedAt: { lt: new Date(Date.now() - 24 * 3_600_000) } };
@@ -38,7 +39,7 @@ export async function reviewList(user: Actor, input: unknown = {}) {
     tab === 'touches' ? db.outreachTouch.findMany({ where: touchWhere, orderBy: { sentAt: 'desc' }, take: 100, include: { customer: { select: customerSelect }, script: { select: { code: true } } } }) : [],
     tab === 'replies' || tab === 'grades' || tab === 'hot' ? db.outreachReply.findMany({ where: tab === 'replies' ? replyWhere : tab === 'grades' ? gradeWhere : hotWhere,
       orderBy: { receivedAt: 'desc' }, take: 100, include: { customer: { select: customerSelect } } }) : [],
-    tab === 'touches' ? db.outreachScript.findMany({ select: { id: true, code: true, position: true, language: true, status: true, content: true }, orderBy: { code: 'asc' } }) : [],
+    tab === 'touches' ? db.outreachScript.findMany({ where: { status: { not: DELETED_SCRIPT } }, select: { id: true, code: true, position: true, language: true, status: true, content: true }, orderBy: { code: 'asc' } }) : [],
   ]);
   const users = await db.user.findMany({ select: { id: true, name: true } });
   const names = new Map(users.map(u => [u.id, u.name]));
@@ -75,7 +76,7 @@ export async function correctTouch(touchId: string, input: unknown, user: Actor)
   if (!touch) throw new HttpError(404, '记录不存在或无访问权限');
   await visibleCustomer(touch.customerId, user);
   const script = v.scriptId ? await db.outreachScript.findUnique({ where: { id: v.scriptId } }) : null;
-  if (v.scriptId && !script) throw new HttpError(400, '话术不存在');
+  if (v.scriptId && (!script || script.status === DELETED_SCRIPT)) throw new HttpError(400, '话术不存在');
   if (script && script.position !== touch.code) throw new HttpError(400, `这次是 ${touch.code}，只能选 ${touch.code} 的话术`);
   const changes: { field: string; oldValue: string; newValue: string }[] = [];
   if (v.scriptId !== undefined && (v.scriptId || null) !== touch.scriptId) changes.push({ field: 'SCRIPT', oldValue: touch.script?.code ?? '', newValue: script?.code ?? '' });

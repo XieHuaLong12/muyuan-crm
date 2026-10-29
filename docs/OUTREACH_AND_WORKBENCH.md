@@ -497,9 +497,28 @@
 - 上线：无手工步骤。部署后旧客户遗留的话术跟进任务由每 5 分钟的定时补算逐批关闭。
 - 以后要调整分界日期，只改 `lib/customer-group.ts` 的 `NEW_CUSTOMERS_FROM`。
 
+## 13. 话术库：删除话术（2026-10-29）
+
+> 需求来源：老大在话术库里要把 T0-A1、T0-A4 两条「直接删除」。原来话术只能停用：停用后不再分配，但仍留在话术库里。
+
+### 13.1 规则
+
+- 管理员在话术库每一行点「删除」，确认后删除。销售没有这个按钮，接口返回 403。
+- **没发出过的话术**：彻底删除。已分配给客户但还没发出的，客户打开聊天时会换成其他话术。
+- **发出过的话术**：从话术库消失，不再参与轮换，规则和 DeepSeek 也不会再把消息认成这条话术。它发出的那几条触达记录**不计入任何数字**：不计入话术效果、周一结论，也不算「非标准话术」（不影响业务员的非标准话术占比），也不计入 DeepSeek 改判率和工作台的回复率信号。聊天记录不受影响。
+- 删除后编号可以重新使用（例如删掉 T0-A1 后可以再建一条 T0-A1，新数据不会和旧数据混在一起）。删除不能恢复。
+- 只是不想再用、但想保留数据时，用「停用」。
+
+### 13.2 实现
+
+- 发出过的话术保留原行，只把状态标为 `DELETED`（不在可选状态里，只能通过删除设置），编号改成 `原编号~随机后缀` 以释放原编号。触达记录仍指向它，统计时按 `liveTouches`（`services/outreach-script-service.ts`）排除。这样重新计算时，这些记录不会变成「未识别话术」又被计入非标准话术。
+- 涉及：`services/outreach-script-service.ts`（`deleteScript`、列表和编辑排除已删除）、`outreach-engine-service.ts`（匹配和轮换不再用已删除话术；客户的「回复话术」保留原来的编号）、`outreach-ai-service.ts`、`outreach-analytics-service.ts`、`outreach-review-service.ts`、`workbench-service.ts`、`components/outreach/ScriptLibrary.tsx`、`app/api/outreach/scripts/[id]/route.ts`。
+- 接口：新增 `DELETE /api/outreach/scripts/:id`（管理员），返回 `{ code, touches }`；已删除或不存在的返回 404。`{success, data}` 信封不变。
+- 无迁移、无新环境变量。测试：`tests/outreach-script-delete.test.ts`。
+
 ---
 
-## 12. 每位还没发过消息的客户都分配破冰话术（2026-10-29）
+## 14. 每位还没发过消息的客户都分配破冰话术（2026-10-29）
 
 > 需求来源：@老大 在消息中心看到「破冰期 · 下一条 T0 首回 · 话术库暂无可分配的话术」，要求「只要我们没有发送第一条消息的，都要自动分配破冰话术，不管客户是先发信息，每个都需要分配可复制的话术」。
 
@@ -518,4 +537,3 @@
 **对统计的影响**：客户先来消息的会话，我方第一条从此计入 T0 统计。这类客户更热，回复率更高；因为两条话术轮流分配，比较仍然公平，但 T0 的整体回复率会比只算表单线索时高。上线前已发出的历史消息按新规则重新推算：上线后客户先来、我方已回复但客户没再回的会话，会从「沉默期 / R 唤醒」改为「破冰期 / T 跟进」。
 
 **涉及文件**：`lib/outreach.ts`（状态机）、`services/outreach-engine-service.ts`（分配与提示原因）、`components/messages/OutreachPanel.tsx`、`app/workbench.css`、`tests/outreach-unit.test.ts`、`tests/outreach-engine.test.ts`。
-

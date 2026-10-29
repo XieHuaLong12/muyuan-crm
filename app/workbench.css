@@ -311,6 +311,9 @@
 .bos .bos-outreach-content span{white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;line-height:1.6}
 .bos .bos-outreach-status{width:auto;padding:6px 26px 6px 10px;font-size:12px}
 .bos .bos-outreach-actions{display:flex;gap:4px;flex-wrap:wrap}
+.bos .bos-outreach-actions .bos-outreach-delete{color:#a44b36}
+.bos .bos-outreach-confirm p{margin:0 0 10px;font-size:14px;line-height:1.65}
+.bos .bos-button.bos-button-danger,.bos .bos-button.bos-button-danger:hover{background:#a44b36;border-color:#a44b36;color:#fff}
 .bos .bos-outreach-review{display:grid;gap:12px}
 .bos .bos-outreach-review-card{display:grid;gap:10px}
 .bos .bos-outreach-review-head{display:flex;flex-wrap:wrap;gap:8px;align-items:center}

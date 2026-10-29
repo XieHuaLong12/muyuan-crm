@@ -16,6 +16,8 @@ export const POSITION_LABELS: Record<Position, string> = {
   R1: 'R1 第1次唤醒', R2: 'R2 第2次唤醒', R3: 'R3 第3次唤醒',
 };
 export const SCRIPT_STATUSES = { TESTING: '测试中', WINNER: '胜出', RETIRED: '停用' } as const;
+/** Set only by 删除 in the library, never chosen as a status: the script is gone from the library, rotation and every number. */
+export const DELETED_SCRIPT = 'DELETED';
 export type ScriptStatus = keyof typeof SCRIPT_STATUSES;
 export const SCRIPT_LANGUAGES = { en: '英语', fr: '法语', ar: '阿拉伯语' } as const;
 export type ScriptLanguage = keyof typeof SCRIPT_LANGUAGES;
