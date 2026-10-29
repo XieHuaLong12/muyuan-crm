@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { formAnswers } from '@/lib/lead-grade';
-import { GRADES, INTENTS, MATCH_TYPES, QUALITIES, SIGNALS, SIGNAL_KEYS, intentEnum, matchTypeEnum, qualityEnum } from '@/lib/outreach';
+import { DELETED_SCRIPT, GRADES, INTENTS, MATCH_TYPES, QUALITIES, SIGNALS, SIGNAL_KEYS, intentEnum, matchTypeEnum, qualityEnum } from '@/lib/outreach';
 import { callDeepSeek, deepSeekConfigured } from './deepseek-customer-service';
 import { outreachSetup } from './outreach-engine-service';
 
@@ -79,7 +79,7 @@ export async function judgePending(customerId: string, limit = 8, now = new Date
     const claim = await db.outreachTouch.updateMany({ where: { id: touch.id, ...claimable(now) }, data: { judgedAt: now } });
     if (!claim.count) continue;
     const assigned = await db.outreachAssignment.findFirst({ where: { customerId, position: touch.code, cycle: touch.cycle }, select: { scriptId: true } });
-    const scripts = (await db.outreachScript.findMany({ where: { position: touch.code, language: touch.language || 'en' }, orderBy: { code: 'asc' } }))
+    const scripts = (await db.outreachScript.findMany({ where: { position: touch.code, language: touch.language || 'en', status: { not: DELETED_SCRIPT } }, orderBy: { code: 'asc' } }))
       .sort((a, b) => Number(b.id === assigned?.scriptId) - Number(a.id === assigned?.scriptId) || Number(a.status === 'RETIRED') - Number(b.status === 'RETIRED')).slice(0, 10);
     if (!scripts.length) {
       await db.outreachTouch.update({ where: { id: touch.id }, data: { matchType: 'FREE', confidence: 1, judgeStatus: 'DONE', judgedBy: 'RULE', judgedAt: now,

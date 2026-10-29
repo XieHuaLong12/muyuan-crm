@@ -1,8 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Lock, PencilLine, Plus, Copy } from 'lucide-react';
+import { Lock, PencilLine, Plus, Copy, Trash2 } from 'lucide-react';
 import { Badge, Button, Card, EmptyState, Header, Table } from '@/components/ui/bos';
+import { Dialog } from '@/components/ui/dialog';
 import { api } from '@/lib/client';
 import { GRADES, POSITION_LABELS, POSITIONS, QUALITIES, SCRIPT_LANGUAGES, SCRIPT_STATUSES, nextVersionCode, type OutreachConfig, type Position } from '@/lib/outreach';
 import type { listScripts } from '@/services/outreach-script-service';
@@ -19,6 +20,7 @@ export function ScriptLibrary({ scripts, config, admin, templateNames }: { scrip
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<Script>();
   const codes = scripts.map(s => s.code);
   const blank = (position: Position = 'T0'): Form => ({ id: null, code: nextVersionCode(`${position}-A0`, codes), position, grades: ['A', 'B'], language: 'en', content: '', versionNote: '', status: 'TESTING', templateName: '', buttons: [], locked: false });
   const fromScript = (s: Script, version: boolean): Form => ({ id: version ? null : s.id, code: version ? nextVersionCode(s.code, codes) : s.code, position: s.position as Position, grades: s.grades, language: s.language,
@@ -42,6 +44,14 @@ export function ScriptLibrary({ scripts, config, admin, templateNames }: { scrip
     setBusy(true); setError(''); setMessage('');
     try { await api(`outreach/scripts/${s.id}`, 'PATCH', { status }); setMessage(`${s.code} 已改为「${SCRIPT_STATUSES[status as keyof typeof SCRIPT_STATUSES]}」`); router.refresh(); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  }
+
+  async function remove(s: Script) {
+    setBusy(true); setError(''); setMessage('');
+    try {
+      await api(`outreach/scripts/${s.id}`, 'DELETE');
+      setDeleting(undefined); setMessage(`${s.code} 已删除${s.touches ? `，它发出的 ${s.touches} 条记录不再计入话术效果` : ''}`); router.refresh();
+    } catch (e) { setDeleting(undefined); setError((e as Error).message); } finally { setBusy(false); }
   }
 
   const byPosition = POSITIONS.map(position => ({ position, rows: scripts.filter(s => s.position === position) })).filter(g => g.rows.length);
@@ -95,6 +105,7 @@ export function ScriptLibrary({ scripts, config, admin, templateNames }: { scrip
           <td>{admin ? <div className="bos-outreach-actions">
             <Button variant="ghost" onClick={() => { setForm(fromScript(s, false)); setMessage(''); }}><PencilLine size={14} />编辑</Button>
             <Button variant="ghost" onClick={() => { setForm(fromScript(s, true)); setMessage(''); }}><Copy size={14} />新建版本</Button>
+            <Button variant="ghost" className="bos-outreach-delete" onClick={() => { setDeleting(s); setMessage(''); }}><Trash2 size={14} />删除</Button>
           </div> : <small>{s.createdByName}</small>}</td>
         </tr>)}
       </Table>
@@ -102,6 +113,15 @@ export function ScriptLibrary({ scripts, config, admin, templateNames }: { scrip
       action={admin ? <Button variant="primary" onClick={() => setForm(blank())}><Plus size={15} />新建话术</Button> : undefined} /></Card>}
 
     {admin && <Settings config={config} />}
+    {deleting && <Dialog open className="bos bos-team-dialog" title={`删除话术 ${deleting.code}`} onClose={() => !busy && setDeleting(undefined)}>
+      <div className="bos-outreach-confirm">
+        <p>{deleting.touches
+          ? `${deleting.code} 已发出过 ${deleting.touches} 次。删除后它从话术库消失、不再分配给客户，这 ${deleting.touches} 条发送记录也不再计入话术效果和非标准话术占比；聊天记录不受影响。`
+          : `${deleting.code} 还没有发出过，删除后从话术库移除，已分配到这条话术的客户打开聊天时会换成其他话术。`}</p>
+        <p>删除后不能恢复，编号 {deleting.code} 可以重新使用。</p>
+        <div className="bos-wb-form-actions"><Button className="bos-button-danger" onClick={() => remove(deleting)} disabled={busy}>{busy ? '删除中…' : '确认删除'}</Button><Button onClick={() => setDeleting(undefined)} disabled={busy}>取消</Button></div>
+      </div>
+    </Dialog>}
   </div>;
 }
 
