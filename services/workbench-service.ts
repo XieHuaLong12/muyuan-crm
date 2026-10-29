@@ -5,6 +5,7 @@ import { db } from '@/lib/db';
 import { Actor, HttpError, requireAdmin } from '@/lib/auth';
 import { dayKey } from '@/lib/time';
 import { TERMINAL_STAGES } from '@/lib/constants';
+import { liveTouches } from './outreach-script-service';
 import { CATEGORIES, DAY, HOUR, categoryEnum, focusSignals, readConfig, type Category, type OutreachConfig, type SignalInput } from '@/lib/outreach';
 import {
   KIND_RANK, PRESET_EVENTS, PRESET_MONTHS, PRESET_TIME_BLOCKS, PRESET_WEEKS, addDays, completion, countOutcomes, daysBetween, fixedItemsFor, mondayOf, monthOf, rankToday,
@@ -87,7 +88,7 @@ export async function signalInput(userId: string, now: Date, tz: string, config:
   const matureEnd = now.getTime() - DAY;
   const window = (end: number) => ({ start: end - 7 * DAY, end });
   const windows = [0, 1, 2, 3, 4].map(i => window(matureEnd - i * 7 * DAY));
-  const touches = await db.outreachTouch.findMany({ where: { code: 'T0', judgeStatus: { not: 'VOID' }, replied24h: { not: null }, customer: { AND: [{ deletedAt: null }, currentCustomers] },
+  const touches = await db.outreachTouch.findMany({ where: { code: 'T0', judgeStatus: { not: 'VOID' }, replied24h: { not: null }, customer: { AND: [{ deletedAt: null }, currentCustomers] }, AND: [liveTouches],
     sentAt: { gte: new Date(windows[4].start), lt: new Date(matureEnd) } }, select: { sentAt: true, replied24h: true } });
   const rate = (w: { start: number; end: number }) => {
     const rows = touches.filter(t => t.sentAt.getTime() >= w.start && t.sentAt.getTime() < w.end);
