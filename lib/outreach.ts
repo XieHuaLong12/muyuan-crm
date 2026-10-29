@@ -239,7 +239,8 @@ const MAX_ICEBREAK = 5, MAX_REVIVE = 3;
  * while breaking the ice, R1–R3 while the customer is silent, nothing in a conversation) and which touch a reply
  * belongs to (the last one sent before it). Time moves the state too: 72 hours after the customer's last real
  * message a conversation goes silent; 7 days after T4 or R3 without an answer the lead goes dormant. An auto-reply
- * (INVALID) changes nothing; a request to stop ends all outreach.
+ * (INVALID) changes nothing; a request to stop ends all outreach. A customer who wrote first is still being broken
+ * the ice with until they answer our first message, so every customer we have not written to gets a T0.
  */
 export function deriveOutreach(groups: MessageGroup[], verdict: (key: string) => ReplyVerdict | null, config: OutreachConfig, now: Date): Derivation {
   const silentMs = config.silentHours * HOUR, dormantMs = config.dormantDays * DAY, gapMs = config.minTouchGapHours * HOUR;
@@ -300,6 +301,9 @@ export function deriveOutreach(groups: MessageGroup[], verdict: (key: string) =>
     if (state !== 'CONVERSING') answer(group);
     if (judged.stop) state = 'STOPPED';
     else if (state === 'ICEBREAK' && judged.quality === 'REJECT') state = 'DORMANT';
+    // A customer who writes before we ever did has answered nothing yet: our first message is still T0, and the ice
+    // is broken by a reply to it.
+    else if (state === 'ICEBREAK' && !touches.length) continue;
     else state = 'CONVERSING';
     if (state !== 'DORMANT') episodeTouch = null;
   }

@@ -330,6 +330,8 @@
 .bos .bos-outreach-chip{padding:1px 8px;border-radius:6px;background:#fff;color:var(--bos-green);font-weight:600}
 .bos .bos-outreach-chip.is-muted{color:#6e6e73;font-weight:400}
 .bos .bos-outreach-bar .bos-outreach-script{background:#fff;font-size:12px;max-height:96px;overflow:auto}
+.bos .bos-outreach-missing{margin:0;color:#85521b}
+.bos .bos-outreach-missing a{margin-left:6px;color:var(--bos-green);font-weight:600}
 .bos .bos-outreach-bar-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .bos .bos-outreach-bar-actions button{display:inline-flex;align-items:center;gap:5px;min-height:32px;border:1px solid rgba(27,49,40,.12);border-radius:10px;padding:0 10px;background:#fff;color:#2c4535;font-size:12px}
 .bos .bos-outreach-bar-actions button.is-primary{background:#174b3b;color:#fff;border-color:transparent;font-weight:600}

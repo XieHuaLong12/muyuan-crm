@@ -236,9 +236,11 @@ function freshRound(d: Derivation, createdAt: Date, startedAt: Date) {
 }
 
 /**
- * The script for a customer's next touch: among the 测试中 and 胜出 scripts for that position, grade and language
- * (English when none exists in the customer's language), the one assigned least so far, the lower code first on a
- * tie: A1, A2, A1, A2… Salespeople do not choose. D leads get none; ungraded leads rotate in their own group.
+ * The script for a customer's next touch: among the 测试中 and 胜出 scripts for that position, the closest fit — the
+ * customer's grade and language, else that grade in English, else any grade in the customer's language, else any
+ * grade in English — so a customer gets a script whenever the library has one for the position. Within the fit, the
+ * one assigned least so far, the lower code first on a tie: A1, A2, A1, A2… Salespeople do not choose. D leads (Meta
+ * test leads, no way to contact) get none; ungraded leads rotate in their own group.
  */
 export async function assignScript(tx: Tx, customer: { id: string; leadGrade: string; language: string }, position: Position, cycle: number, config?: OutreachConfig) {
   void config;
@@ -247,9 +249,9 @@ export async function assignScript(tx: Tx, customer: { id: string; leadGrade: st
   if (customer.leadGrade === 'D') return null;
   const grade = gradeOf(customer.leadGrade);
   const active = await tx.outreachScript.findMany({ where: { position, status: { in: ['TESTING', 'WINNER'] } }, orderBy: { code: 'asc' } });
-  const fits = (language: string) => active.filter(s => s.language === language && (!grade || s.grades.split(',').includes(grade)));
+  const fits = (language: string, anyGrade: boolean) => active.filter(s => s.language === language && (anyGrade || !grade || s.grades.split(',').includes(grade)));
   const wanted = customerScriptLanguage(customer.language);
-  const candidates = fits(wanted).length ? fits(wanted) : fits('en');
+  const candidates = [fits(wanted, false), fits('en', false), fits(wanted, true), fits('en', true)].find(list => list.length) ?? [];
   if (!candidates.length) return null;
   const language = candidates[0].language;
   const counts = await tx.outreachAssignment.groupBy({ by: ['scriptId'], where: { position, grade, language, scriptId: { in: candidates.map(c => c.id) } }, _count: { _all: true } });
@@ -398,6 +400,8 @@ async function outreachView(customerId: string, result: Reconciled, assignment: 
     next: result.next, nextLabel: result.next ? POSITION_LABELS[result.next] : '', nextTouchAt: result.nextTouchAt,
     script: script ? { id: script.id, code: script.code, status: script.status, statusLabel: SCRIPT_STATUSES[script.status as keyof typeof SCRIPT_STATUSES] ?? script.status,
       templateName: script.templateName, content: script.content, rendered: renderScript(script.content, facts) } : null,
+    // Why a touch that is due has no script: a D lead, or nothing usable in the library for this position.
+    noScript: result.next && !script && !result.legacy && (result.state === 'ICEBREAK' || result.state === 'SILENT') ? (c.leadGrade === 'D' ? 'GRADE_D' as const : 'LIBRARY_EMPTY' as const) : null,
     limits: { stopped: result.state === 'STOPPED', waitUntil: waitUntil && waitUntil > new Date() ? waitUntil : null,
       templatesLeft: Math.max(0, config.templateCap - d.templatesSinceReply), templateCap: config.templateCap },
     grade: c.leadGrade, gradeSource: c.leadGradeSource, replyScriptCode: c.replyScriptCode,
