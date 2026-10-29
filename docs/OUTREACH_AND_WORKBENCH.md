@@ -474,6 +474,7 @@
 | `services/inbox-service.ts` | 会话和聊天返回 `legacy` |
 | `app/customers/legacy/page.tsx`（新）、`components/workspace.tsx`、`components/customer-list.tsx`、`lib/role-workspace.ts` | 旧客户页、页头说明、导航页签「新客户 / 旧客户」 |
 | `components/messages/*`、`components/customer-detail.tsx` | 「旧客户」标签与说明 |
+| `lib/constants.ts` | 阶段 `NEW` 的名称由「新客户」改为「新线索」（与销售看板一致），避免和「新客户」页混淆；导入表格里写「新客户」的阶段照样识别 |
 
 ### 12.4 数据变化
 
