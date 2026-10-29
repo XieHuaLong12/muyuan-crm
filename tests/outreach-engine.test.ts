@@ -326,3 +326,41 @@ test('every customer we have not written to gets a T0 script: customers who wrot
     await db.setting.update({ where: { id: 'system' }, data: { outreachStartedAt: setting.outreachStartedAt, outreachConfig: setting.outreachConfig ?? Prisma.DbNull } });
   }
 });
+
+test('a French lead with no language on file gets the French script for its grade, filled in French', async () => {
+  const tag = randomUUID().replace(/-/g, '').slice(0, 6).toUpperCase(), marker = `Lang${tag}`;
+  const setting = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { outreachStartedAt: true, outreachConfig: true } });
+  await db.setting.update({ where: { id: 'system' }, data: { outreachStartedAt: new Date('2026-01-01T00:00:00Z'), outreachConfig: {} } });
+  const boss = actorOf(await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } }));
+  let n = 0;
+  const lead = async (grade: string, country: string, phone: string) => {
+    const c = await db.customer.create({ data: { name: `Merlin ${marker}${++n}`, ownerId: boss.id, source: 'FACEBOOK', sourceDetail: 'Sofa_FR_Oct', leadGrade: grade, country, language: '',
+      whatsapp: phone, phone, phoneE164: phone, whatsappNormalized: phone.slice(1), contactKeysAt: new Date(), assignedAt: new Date() } });
+    await db.leadSubmission.create({ data: { customerId: c.id, eventKey: `${marker}-${n}`, ordinal: 1, occurredAt: new Date(), values: '{}', filename: '', fileHash: '', translationPending: '',
+      raw: JSON.stringify({ field_data: [{ name: 'how_many_pieces_do_you_need?', values: ['1-5_pieces'] }] }) } });
+    return c;
+  };
+  const body = 'Bonjour {{客户名称}}, ici Jason 👋 Je vois que vous recherchez des {{产品}} pour votre marché ({{目标市场}}), environ {{数量}} pour une première commande.';
+  const ab = await createScript({ code: `T0-FR${tag}1`, position: 'T0', grades: ['A', 'B'], language: 'fr', content: body }, boss);
+  const c3 = await createScript({ code: `T0-FR${tag}3`, position: 'T0', grades: ['C'], language: 'fr', content: `${body} (C)` }, boss);
+  try {
+    const merlin = await lead('C', '法国', `+3364${String(Date.now()).slice(-7)}`);
+    const view = await outreachNextView({ customerId: merlin.id }, boss);
+    assert.deepEqual([view.script?.code, view.noScript, view.language.code, view.language.basis], [c3.code, null, 'fr', '国家：法国']);
+    assert.equal(view.script?.rendered, 'Bonjour Merlin, ici Jason 👋 Je vois que vous recherchez des canapés compressés pour votre marché (France), environ 1 à 5 pièces pour une première commande. (C)');
+    const b = await lead('B', '', `+3365${String(Date.now()).slice(-7)}`);
+    assert.equal((await outreachNextView({ customerId: b.id }, boss)).script?.code, ab.code, 'no country written: the French number decides');
+
+    // A German lead with only French scripts in the library: the chat says which language is missing.
+    const english = await db.outreachScript.count({ where: { position: 'T0', language: 'en', status: { in: ['TESTING', 'WINNER'] } } });
+    if (!english) {
+      const german = await lead('B', '德国', `+4915${String(Date.now()).slice(-8)}`);
+      const missing = await outreachNextView({ customerId: german.id }, boss);
+      assert.deepEqual([missing.script, missing.noScript, missing.language.label, missing.language.basis], [null, 'NO_LANGUAGE', '英语', '国家：德国']);
+    }
+  } finally {
+    await deleteTestCustomers({ where: { name: { contains: marker } } });
+    await db.outreachScript.deleteMany({ where: { code: { startsWith: `T0-FR${tag}` } } });
+    await db.setting.update({ where: { id: 'system' }, data: { outreachStartedAt: setting.outreachStartedAt, outreachConfig: setting.outreachConfig ?? Prisma.DbNull } });
+  }
+});

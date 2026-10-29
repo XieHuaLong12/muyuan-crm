@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { formAnswers } from '@/lib/lead-grade';
-import { customerScriptLanguage } from '@/lib/outreach';
+import { customerScriptLanguage, type ScriptLanguage } from '@/lib/outreach';
+import { countryCodeOf } from '@/lib/phone-country';
 import { callDeepSeek } from '@/services/deepseek-customer-service';
 import { catalogFacts, knownModels } from '@/services/sales-copilot-service';
 
@@ -88,8 +89,8 @@ export async function getConversation(customerId: string, user?: Actor) {
 }
 
 /** Scripts that won their test, in the customer's language: how our team writes when it works. */
-async function styleExamples(language: string) {
-  const scripts = await db.outreachScript.findMany({ where: { status: 'WINNER', language: customerScriptLanguage(language) },
+async function styleExamples(language: ScriptLanguage) {
+  const scripts = await db.outreachScript.findMany({ where: { status: 'WINNER', language },
     orderBy: [{ position: 'asc' }, { code: 'asc' }], take: 3, select: { content: true } });
   return scripts.map(s => s.content.slice(0, 600));
 }
@@ -109,7 +110,7 @@ export async function generateWhatsAppReply(customerId: string, user: Actor, pre
       purchaseTimeline: customer.purchaseTimeline, shippingCountry: customer.shippingCountry, currency: customer.currency, stage: customer.stage, leadGrade: customer.leadGrade },
     formAnswers: customer.submissions[0] ? formAnswers(customer.submissions[0].raw).slice(0, 20) : [],
     internalNotes: customer.aiSummary.slice(0, 800),
-    styleExamples: await styleExamples(customer.language),
+    styleExamples: await styleExamples(customerScriptLanguage(customer.language, countryCodeOf(customer))),
     catalog: await catalogFacts(),
     messages: messages.map(m => ({ direction: m.direction, content: m.content.slice(0, 4096), messageType: m.messageType, at: m.sentAt.toISOString() })),
     ...(previous ? { previousDraft: previous } : {}),
