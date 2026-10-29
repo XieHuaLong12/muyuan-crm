@@ -3,7 +3,7 @@ import { quotationAmount } from '@/lib/quotation-amount';
 import { db } from '@/lib/db';
 import { Actor, scope } from '@/lib/auth';
 import { dayKey, localDate, periodRange } from '@/lib/time';
-import { biggestFunnelLoss, changeRate, cockpitSelection, customerFunnel, rate, type CockpitSelection } from '@/lib/business-cockpit';
+import { biggestFunnelLoss, bucketIndex, changeRate, cockpitSelection, customerFunnel, rate, trendBuckets, type CockpitSelection } from '@/lib/business-cockpit';
 import { dealsIn, inquiryIn, ordersIn, overdueTasks as overdueTaskWhere, sentQuotesIn, staleQuotes as staleQuoteWhere } from '@/lib/metrics';
 import { taskScope } from './task-service';
 
@@ -13,7 +13,6 @@ const sum = (values: Prisma.Decimal[]) => values.reduce((total, value) => total.
 const channelName: Record<string, string> = { FACEBOOK: 'Facebook Ads', TIKTOK: 'TikTok', INSTAGRAM: 'Instagram', WEBSITE: 'Website', WHATSAPP: 'WhatsApp' };
 const channelKey = (source: string) => source.toUpperCase().includes('FACEBOOK') ? 'FACEBOOK' : source.toUpperCase().includes('TIKTOK') ? 'TIKTOK' : source.toUpperCase().includes('INSTAGRAM') ? 'INSTAGRAM' : source.toUpperCase().includes('WEBSITE') || source.toUpperCase().includes('WEB') ? 'WEBSITE' : source.toUpperCase().includes('WHATSAPP') ? 'WHATSAPP' : null;
 const dated = (key: string, timezone: string) => localDate(`${key}T00:00`, timezone);
-const shiftKey = (key: string, days: number) => { const date = new Date(`${key}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); };
 
 /** Dashboard reads existing records only. Currency and incomplete attribution remain visible to the user. */
 export async function businessCockpit(user: Actor, query: Query, now = new Date()) {
@@ -120,17 +119,9 @@ export type BusinessCockpit = Awaited<ReturnType<typeof businessCockpit>>;
 
 function buildTrend(selected: CockpitSelection, timezone: string,
  deals: { dealDate: Date; dealAmount: Prisma.Decimal }[], orders: { orderDate: Date }[]) {
- const boundaries: { start: string; end: string; label: string }[] = [];
- let cursor = selected.trendStartKey;
- while (cursor <= selected.endKey) {
-  const next = selected.trend === 'day' ? shiftKey(cursor, 1) : selected.trend === 'week' ? shiftKey(cursor, 7 - ((new Date(`${cursor}T12:00:00Z`).getUTCDay() + 6) % 7)) : `${Number(cursor.slice(5, 7)) === 12 ? Number(cursor.slice(0, 4)) + 1 : cursor.slice(0, 4)}-${String(Number(cursor.slice(5, 7)) % 12 + 1).padStart(2, '0')}-01`;
-  const end = shiftKey(next, -1) < selected.endKey ? shiftKey(next, -1) : selected.endKey;
-  const label = selected.trend === 'month' ? `${cursor.slice(0, 4) === selected.endKey.slice(0, 4) ? '' : `${cursor.slice(0, 4)}/`}${Number(cursor.slice(5, 7))}月` : `${Number(cursor.slice(5, 7))}/${Number(cursor.slice(8, 10))}`;
-  boundaries.push({ start: cursor, end, label });
-  cursor = next;
- }
+ const boundaries = trendBuckets(selected);
  const points = boundaries.map(boundary => ({ label: boundary.label, revenue: 0, orders: 0 }));
- const bucket = (date: Date) => boundaries.findIndex(boundary => { const key = dayKey(date, timezone); return key >= boundary.start && key <= boundary.end; });
+ const bucket = (date: Date) => bucketIndex(boundaries, dayKey(date, timezone));
  for (const deal of deals) { const index = bucket(deal.dealDate); if (index >= 0) points[index].revenue += deal.dealAmount.toNumber(); }
  for (const order of orders) { const index = bucket(order.orderDate); if (index >= 0) points[index].orders++; }
  return { view: selected.trend, label: selected.range === 'today' ? '近 7 天（含今日）' : `${selected.label} · ${selected.startKey} — ${selected.endKey}`, points };

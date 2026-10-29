@@ -81,7 +81,9 @@ test('A–F: lead → contact → conversation → real quote/order → immutabl
     const messageId=`message-${marker}`;
     await ingestWhatsAppWebhook(inbound(messageId,phone.replace('+','')));await ingestWhatsAppWebhook(inbound(messageId,phone.replace('+','')));
     const message=await db.whatsAppMessage.findUniqueOrThrow({where:{waMessageId:messageId}});assert.equal(message.customerId,customerId);assert.ok(message.conversationId);
-    const ai=await analyzeIncrementalCustomer(customerId,actor);assert.equal(ai.analysis.quantity,20);assert.equal((await db.customer.findUniqueOrThrow({where:{id:customerId}})).stage,'REPLIED');
+    const ai=await analyzeIncrementalCustomer(customerId,actor);assert.equal(ai.analysis.quantity,20);
+    // The customer wrote before we did: not a reply yet, so still 新线索 (docs/METRICS.md 已回复).
+    assert.equal((await db.customer.findUniqueOrThrow({where:{id:customerId}})).stage,'NEW');
     assert.equal((await db.customer.findUniqueOrThrow({where:{id:customerId}})).quotedAt,null);
     const intelligence=await db.customerIntelligence.findUniqueOrThrow({where:{customerId}});
     await overrideCustomerIntelligence({customerId,updatedAt:intelligence.updatedAt.toISOString(),overrides:{quality:'B',quantity:25,lossReasons:['MOQ_TOO_HIGH']},reason:'销售已人工确认'},actor);

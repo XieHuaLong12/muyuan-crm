@@ -115,7 +115,7 @@ tests/                  核心指标与边界单元测试
 
 | 角色 | 分区 | 分区内的页面 |
 | --- | --- | --- |
-| 管理员 | 经营总览 | 经营驾驶舱 `/command-center` · 来源与国家 `/command-center/analysis` · 财务 `/finance` |
+| 管理员 | 经营总览 | 经营驾驶舱 `/command-center` · 来源与国家 `/command-center/analysis` · 财务 `/finance` · 客户分析 `/command-center/customers` · 消息分析 `/command-center/messages` |
 | 管理员 | 客户 | 客户列表与档案 `/customers`（含待分配、回收站、智能导入）· 跟进队列 `/sales` · 销售看板 `/crm` |
 | 管理员 | 消息 | WhatsApp 消息中心 `/messages`（全部客户，可按负责人筛选；处理未关联号码） |
 | 管理员 | 任务 | 团队任务 `/tasks` |
