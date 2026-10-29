@@ -359,6 +359,32 @@ export async function applyProducts2026(db: PrismaClient, log: (message: string)
     result.created.push(plan.model);
   }
 
+  // 已在库的型号（包括从别处导入的）没有主图时，用仓库里的图片补上；同一文件已有记录就恢复为主图
+  for (const plan of plans) {
+    if (!existing.has(plan.model)) continue;
+    const file = `public/products/${plan.image}`;
+    if (!existsSync(file)) continue;
+    const product = await db.product.findUnique({
+      where: { model: plan.model },
+      select: { id: true, deletedAt: true, media: { where: { role: 'HERO' }, select: { id: true }, take: 1 } },
+    });
+    if (!product || product.deletedAt || product.media.length) continue;
+    const storageKey = `products/${plan.image}`;
+    const same = await db.productMedia.findUnique({ where: { storageKey } });
+    if (same && same.productId !== product.id) continue;
+    if (same) {
+      await db.productMedia.update({ where: { id: same.id }, data: { role: 'HERO', sort: 0 } });
+    } else {
+      await db.productMedia.create({
+        data: {
+          productId: product.id, role: 'HERO', storageKey, mimeType: 'image/jpeg', fileName: plan.image,
+          size: statSync(file).size, sort: 0, createdBy: owner.id,
+        },
+      });
+    }
+    result.updated.push(`${plan.model}（补主图 ${storageKey}）`);
+  }
+
   const m801 = plans.find(p => p.model === 'M-801');
   if (m801 && existing.has('M-801')) await completeM801(db, m801, owner.id, result);
   await completeBeds(db, mattressBed.beds, result);

@@ -118,7 +118,7 @@ export function ProductDetail({ data, listing = null }: { data: ProductDetailDat
         {hero ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/${hero.storageKey}`} alt={`${data.model} 产品图`} />
+            <img src={`/${hero.storageKey}`} alt={`${data.model} 产品图`} onError={e => e.currentTarget.parentElement?.classList.add('is-broken')} />
             <p className="bos-footnote">
               {hero.storageKey.startsWith('media/') ? '产品图由管理员在产品库上传，已统一处理成 4:3。' : `产品图来自 2026 产品资料（${data.model}）。`}
             </p>

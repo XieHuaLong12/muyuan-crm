@@ -635,3 +635,8 @@
   .bos-product-editor-incoterm{width:100%}
   .bos-listing-panel .bos-actions{width:100%}
 }
+/* 图片地址失效时不显示破图，提示补图 */
+.bos-product-thumb.is-broken img,.bos-product-hero.is-broken img{display:none}
+.bos-product-thumb.is-broken{display:grid;place-items:center;border-style:dashed;background:#fafafa}
+.bos-product-thumb.is-broken::after{content:'待补图';font-size:10px;color:#a0a0a6}
+.bos-product-hero.is-broken::before{content:'产品图打不开，请在上方「更换主图」重新上传';display:grid;place-items:center;min-height:180px;border:1px dashed var(--bos-border);border-radius:12px;background:#fafafa;font-size:13px;color:#86868b}

@@ -84,3 +84,40 @@ test('deployment registers product photos added after the library was seeded, on
     if (before.length) await db.productMedia.createMany({ data: before });
   }
 });
+
+test('deployment replaces main photos whose file is missing with the repository photo, keeping the old record', async () => {
+  assertIsolatedDatabase();
+  const models = ['M-803', '智享-Pro', 'M-802'];
+  const products = await db.product.findMany({ where: { model: { in: models } }, include: { media: true } });
+  const byModel = new Map(products.map(p => [p.model, p]));
+  const before = products.flatMap(p => p.media);
+  const brokenKey = (model: string) => `uploads/imported/${encodeURIComponent(model)}.png`;
+  try {
+    // 从别处导入的主图：路径指向不存在的文件
+    for (const model of ['M-803', '智享-Pro']) {
+      const hero = byModel.get(model)!.media.find(m => m.role === 'HERO')!;
+      await db.productMedia.update({ where: { id: hero.id }, data: { storageKey: brokenKey(model) } });
+    }
+    const m802 = byModel.get('M-802')!;
+    await db.productMedia.create({
+      data: { productId: m802.id, role: 'HERO', storageKey: brokenKey('M-802'), mimeType: 'image/png', fileName: 'M-802.png', size: 1, sort: 0, createdBy: m802.createdBy },
+    });
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = bootstrap();
+      assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+      if (attempt === 0) assert.match(result.stdout, /主图文件不存在，已改为图库记录/);
+      else assert.doesNotMatch(result.stdout, /主图文件不存在/, 'a second deployment has nothing to repair');
+      const heroes = await db.productMedia.findMany({ where: { productId: { in: products.map(p => p.id) }, role: 'HERO' }, include: { product: true } });
+      const heroOf = (model: string) => heroes.filter(h => h.product.model === model).map(h => h.storageKey);
+      assert.deepEqual(heroOf('M-803'), ['products/M-803.jpg']);
+      assert.deepEqual(heroOf('智享-Pro'), ['products/smart-zhixiang-pro.jpg'], 'smart mattress photos are restored by their file name');
+      assert.deepEqual(heroOf('M-802'), [], 'no photo in the repository: the page shows 待补图 instead of a broken image');
+      const kept = await db.productMedia.findMany({ where: { storageKey: { in: models.map(brokenKey) } } });
+      assert.deepEqual(kept.map(m => m.role), ['GALLERY', 'GALLERY', 'GALLERY'], 'the imported records are kept, not deleted');
+    }
+  } finally {
+    await db.productMedia.deleteMany({ where: { productId: { in: products.map(p => p.id) } } });
+    await db.productMedia.createMany({ data: before });
+  }
+});
