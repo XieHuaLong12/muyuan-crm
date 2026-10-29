@@ -31,6 +31,7 @@ export type CatalogData = {
   pageSize: number;
   total: number;
   libraryTotal: number;
+  draftCount: number;
   reviewCount: number;
   reviewBreakdown: { math: number; source: number; missing: number };
   tree: {
@@ -67,7 +68,7 @@ export function ProductCatalog({ data, canManage = false }: { data: CatalogData;
     <>
       <Header
         title="产品库"
-        description={`${data.total} 个型号 · 价格与包装以报价表为准（FOB）`}
+        description={`${data.total} 个型号 · 价格与包装以报价表和产品库录入为准`}
         actions={
           <>
             <span className="bos-lang-switch" role="group" aria-label="语言">
@@ -78,6 +79,11 @@ export function ProductCatalog({ data, canManage = false }: { data: CatalogData;
               <AlertTriangle size={15} />
               待核对 {data.reviewCount}
             </Link>
+            {canManage && data.draftCount > 0 && data.query.status !== 'DRAFT' && (
+              <Link href={buildUrl(data.query, { status: 'DRAFT', review: 'ALL', page: 1 })} className="bos-button">
+                待上架 {data.draftCount}
+              </Link>
+            )}
             {canManage && (
               <Link href="/products/new" className="bos-button">
                 <PackagePlus size={15} /> 新增产品
