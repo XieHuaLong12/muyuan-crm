@@ -44,7 +44,7 @@ pnpm exec prisma generate
 
 在 Gupshup 配置 Callback URL，订阅 message 和 message-event 回调。发送端使用官方 `POST https://api.gupshup.io/wa/api/v1/msg`；表单包含 channel/source/destination/src.name/message，密钥通过 apikey header 提交。仅支持会话内文本发送，客户最近入站消息超过 24 小时会提示使用审核模板；本版本未实现模板发送。
 
-API：`GET /api/whatsapp/messages?customerId=...&before=...`；`POST /api/whatsapp/send` 接收 customerId/content/requestId（UUID）；`POST /api/whatsapp/ai-reply` 接收 customerId。全部复用 CRM 登录与负责人权限。
+API：`GET /api/whatsapp/messages?customerId=...&before=...`；`POST /api/whatsapp/send` 接收 customerId/content/requestId（UUID）；`POST /api/whatsapp/ai-reply` 接收 customerId，可选 previous（「换一种说法」时传当前草稿）。全部复用 CRM 登录与负责人权限。
 
 发送成功后记录 SENT，表示提供商已接受；后续回调更新 DELIVERED / READ / FAILED。网络超时记录 UNKNOWN，不自动重发。使用同一 requestId 查询/重试不会重复调用提供商。若提供商已接收但保存结果时数据库不可用，记录可能停在 PENDING；应人工核对提供商记录后处理，避免重复发送。
 

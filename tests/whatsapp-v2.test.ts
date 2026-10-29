@@ -6,7 +6,7 @@ import { db } from '../lib/db';
 import { parseGupshup, statusPredecessors } from '../lib/gupshup';
 import { ingestWhatsAppWebhook } from '../services/whatsapp-webhook-service';
 import { sendWhatsAppMessage, listWhatsAppMessages } from '../services/whatsapp-message-service';
-import { generateWhatsAppReply, ConversationAnalysis } from '../services/whatsapp-ai-service';
+import { draftProblems, generateWhatsAppReply, ConversationAnalysis } from '../services/whatsapp-ai-service';
 import { translateForCustomer } from '../services/sales-copilot-service';
 import { shouldApplyStage, updateWhatsAppStage } from '../services/whatsapp-stage-service';
 
@@ -42,6 +42,16 @@ test('AI stage: protects terminal/manual stages, evidence and forward progressio
   for (const stage of ['WON', 'ORDER', 'LOST', 'PAUSED', 'INVALID', 'FOLLOW_UP']) assert.equal(shouldApplyStage(stage, analysis, 'FOB price'), false);
   assert.equal(shouldApplyStage('NEW', { ...analysis, confidence: 79 }, 'FOB price'), false);
   assert.equal(shouldApplyStage('NEW', analysis, 'Hello'), false);
+});
+
+test('AI draft rules: no Chinese to a foreign buyer, no wall of text, one question at a time', () => {
+  assert.deepEqual(draftProblems('Hi, this is Jason from LVANJU. Would you like a container proposal or samples first?', false), []);
+  assert.match(draftProblems('Bonjour et bienvenue chez 木远 !', false).map(p => p.zh).join(), /中文/);
+  assert.deepEqual(draftProblems('您好，请问需要多少件？', true), [], 'a customer who writes Chinese may be answered in Chinese');
+  assert.match(draftProblems('Welcome to Muyuan!', false).map(p => p.en).join(), /LVANJU/);
+  assert.match(draftProblems('a'.repeat(401), false).map(p => p.zh).join(), /401 个字符/);
+  assert.match(draftProblems('Which model? How many? Which port?', false).map(p => p.en).join(), /asks 3 questions/);
+  assert.deepEqual(draftProblems('¿Qué modelo le interesa?', false), [], 'an opening ¿ is not a second question');
 });
 
 test('WhatsApp V2 integration: ingestion, Meta sends, receipts, scoped history and AI', async t => {
@@ -170,7 +180,12 @@ test('WhatsApp V2 integration: ingestion, Meta sends, receipts, scoped history a
       const context = JSON.parse(request.messages[1].content);
       if(context.messages)assert.equal(context.messages.length, 20);
       assert.equal('phone' in context.customer, false);
-      if(!context.newMessages)assert.ok(Array.isArray(context.catalog), 'the draft sees the catalog');
+      if(!context.newMessages){
+        assert.ok(Array.isArray(context.catalog), 'the draft sees the catalog');
+        assert.ok(context.catalog.every((f: { moq: string }) => !/线上|线下/.test(f.moq)), 'the buyer is quoted one MOQ, never the internal channels');
+        assert.equal(context.seller.name, admin.name, 'the draft introduces the owner by name');
+        assert.equal(request.temperature, 0.2);
+      }
       return Response.json({ choices: [{ message: { content: JSON.stringify(context.newMessages?{score:88,intent:'HIGH',customerType:'WHOLESALE',products:['Y-601'],quantity:20,summary:'Wholesale buyer',quality:'A',confidence:95,nextAction:'确认目的港',suggestedStage:'QUOTED'}:drafted) } }] });
     });
     const reply = await generateWhatsAppReply(customerId, actor);
@@ -178,12 +193,37 @@ test('WhatsApp V2 integration: ingestion, Meta sends, receipts, scoped history a
     assert.deepEqual([reply.replyZh, reply.nextStep], ['请确认型号和数量', '发报价']);
     assert.deepEqual(reply.quoteItems, model ? [{ model, quantity: 50 }] : [], 'invented models never reach a quotation');
     assert.equal(reply.quoteHref, model ? `/products/quotes/new?customerId=${encodeURIComponent(customerId)}&items=${encodeURIComponent(`${model}:50`)}` : null);
+    assert.deepEqual(reply.warnings, []);
     await updateWhatsAppStage(customerId);
     assert.equal((await db.customer.findUniqueOrThrow({ where: { id: customerId } })).stage, 'NEW');
     assert.equal(await db.stageHistory.count({ where: { customerId, changedBy: 'AI:DeepSeek' } }), 0);
     await updateWhatsAppStage(customerId);
     assert.equal(await db.task.count({where:{customerId,source:'AI',type:'FOLLOW_UP'}}),1);
     assert.equal(await db.stageHistory.count({ where: { customerId, changedBy: 'AI:DeepSeek' } }), 0);
+    // A draft that breaks a checkable rule is rewritten once with the problems named; what is still wrong is shown.
+    const contexts: Record<string, unknown>[] = [];
+    fetchMock.mock.mockImplementation(async (_url, options) => {
+      const request = JSON.parse(String(options?.body));
+      const context = JSON.parse(request.messages[1].content);
+      contexts.push({ ...context, temperature: request.temperature });
+      const reply = context.fix ? 'Hi, this is the LVANJU team. Which model would you like to start with?' : 'Bonjour et bienvenue chez 木远 ! Quel modèle ? Quelle quantité ?';
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ reply, replyZh: '你好', nextStep: '问型号', quoteItems: [] }) } }] });
+    });
+    const fixed = await generateWhatsAppReply(customerId, actor);
+    assert.equal(fixed.reply, 'Hi, this is the LVANJU team. Which model would you like to start with?');
+    assert.deepEqual(fixed.warnings, []);
+    assert.equal(contexts.length, 2);
+    assert.match((contexts[1].fix as string[]).join(' '), /Chinese characters.*Ask only one/);
+    contexts.length = 0;
+    fetchMock.mock.mockImplementation(async (_url, options) => {
+      const request = JSON.parse(String(options?.body));
+      contexts.push({ ...JSON.parse(request.messages[1].content), temperature: request.temperature });
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ reply: 'Quel modèle ? Quelle quantité ?', replyZh: '哪个型号？多少？', nextStep: '问型号' }) } }] });
+    });
+    const rewrite = await generateWhatsAppReply(customerId, actor, 'Bonjour !');
+    assert.equal(contexts[0].previousDraft, 'Bonjour !');
+    assert.equal(contexts[0].temperature, 0.9, '换一种说法 gets a freer draft');
+    assert.deepEqual(rewrite.warnings, ['草稿一次问了 2 个问题']);
     // The salesperson's Chinese goes out in the customer's language, judged from what the customer writes.
     fetchMock.mock.mockImplementation(async (_url, options) => {
       const context = JSON.parse(JSON.parse(String(options?.body)).messages[1].content);

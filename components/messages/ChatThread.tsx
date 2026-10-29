@@ -73,7 +73,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
   const [attachment, setAttachment] = useState<{ id: string; fileName: string; mimeType: string }>();
   const [busy, setBusy] = useState<'' | 'send' | 'upload' | 'draft' | 'older' | 'template' | 'translate' | 'summary'>('');
   const [sendError, setSendError] = useState('');
-  const [draft, setDraft] = useState<{ reply: string; reason: string; replyZh?: string; nextStep?: string; quoteHref?: string | null }>();
+  const [draft, setDraft] = useState<{ reply: string; replyZh?: string; nextStep?: string; warnings: string[]; quoteHref?: string | null }>();
   // The Chinese the salesperson typed before "译成客户语言", so the translation can be undone.
   const [original, setOriginal] = useState<{ text: string; language: string }>();
   const [translations, setTranslations] = useState<Record<string, string>>({});
@@ -151,9 +151,10 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
     } catch (e) { setSendError((e as Error).message); } finally { setBusy(''); if (file.current) file.current.value = ''; }
   }
 
-  async function aiDraft() {
+  /** previous: the draft on screen, when the salesperson asks for a different version of it. */
+  async function aiDraft(previous?: string) {
     setBusy('draft'); setSendError('');
-    try { setDraft(await api<{ reply: string; reason: string; replyZh: string; nextStep: string; quoteHref: string | null }>('whatsapp/ai-reply', 'POST', { customerId })); }
+    try { setDraft(await api<{ reply: string; replyZh: string; nextStep: string; warnings: string[]; quoteHref: string | null }>('whatsapp/ai-reply', 'POST', { customerId, previous })); }
     catch (e) { setSendError((e as Error).message); } finally { setBusy(''); }
   }
 
@@ -272,10 +273,11 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
         <p>{draft.reply}</p>
         {draft.replyZh && <p className="bos-chat-draft-zh"><span>中文意思</span>{draft.replyZh}</p>}
         {draft.nextStep && <p className="bos-chat-draft-next"><span>建议下一步</span>{draft.nextStep}</p>}
+        {draft.warnings.length > 0 && <p className="bos-chat-draft-next"><span>发送前请修改</span>{draft.warnings.join('；')}</p>}
         <div className="bos-chat-actions">
           <button type="button" className="is-primary" onClick={() => { setText(draft.reply); setOriginal(undefined); setDraft(undefined); }} disabled={!canChat}>填入输入框</button>
           {draft.quoteHref && <Link className="bos-chat-quote-link" href={draft.quoteHref}><FileText size={14} aria-hidden="true" />按对话生成报价单</Link>}
-          <button type="button" onClick={aiDraft} disabled={busy === 'draft'}>换一种说法</button>
+          <button type="button" onClick={() => aiDraft(draft.reply)} disabled={busy === 'draft'}>换一种说法</button>
           <button type="button" onClick={() => setDraft(undefined)}>忽略</button>
         </div>
       </div>}
@@ -327,7 +329,7 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
         <div className="bos-chat-tools">
           <input ref={file} type="file" accept={ACCEPT} hidden onChange={e => upload(e.target.files?.[0])} />
           <button type="button" className="bos-chat-chip" onClick={() => file.current?.click()} disabled={!canChat || busy === 'upload'}>{busy === 'upload' ? <Loader2 size={14} /> : <Paperclip size={14} />}图片 / 文件</button>
-          <button type="button" className="bos-chat-chip" onClick={aiDraft} disabled={busy === 'draft' || !messages.length || !thread.ai.configured} title={thread.ai.configured ? '按聊天记录和产品库写一条回复，确认后再发' : '需要在服务器配置 DeepSeek'}>{busy === 'draft' ? <Loader2 size={14} /> : <Sparkles size={14} />}AI 草稿</button>
+          <button type="button" className="bos-chat-chip" onClick={() => aiDraft()} disabled={busy === 'draft' || !messages.length || !thread.ai.configured} title={thread.ai.configured ? '按聊天记录和产品库写一条回复，确认后再发' : '需要在服务器配置 DeepSeek'}>{busy === 'draft' ? <Loader2 size={14} /> : <Sparkles size={14} />}AI 草稿</button>
           <button type="button" className="bos-chat-chip" onClick={translateOut} disabled={busy === 'translate' || !text.trim() || !thread.ai.configured} title={thread.ai.configured ? '把输入框里的中文译成客户使用的语言' : '需要在服务器配置 DeepSeek'}>{busy === 'translate' ? <Loader2 size={14} /> : <Languages size={14} />}译成客户语言</button>
           {thread.sending.configured && !thread.sending.optedOut && <button type="button" className="bos-chat-chip" onClick={openTemplates}><LayoutTemplate size={14} />模板消息</button>}
           <Link className="bos-chat-chip" href={`/products/quotes/new?customerId=${encodeURIComponent(customerId)}`}><FileText size={14} />报价单</Link>

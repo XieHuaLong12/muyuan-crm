@@ -15,7 +15,8 @@ const CACHE_MS = 10 * 60_000;
 
 /**
  * The catalog as the AI may cite it: model, size, FOB reference price, minimum order and lead time. Prices are the
- * public price list (customer tier ALL), never costs. Cached for ten minutes.
+ * public price list (customer tier ALL), never costs. The MOQ is the lowest of the product's channel MOQs, as one
+ * number: the channel labels (线上 / 线下交谈) are internal and a buyer is quoted that one figure. Cached for ten minutes.
  */
 export async function catalogFacts(): Promise<CatalogFact[]> {
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.facts;
@@ -24,7 +25,7 @@ export async function catalogFacts(): Promise<CatalogFact[]> {
     orderBy: { model: 'asc' },
     select: {
       model: true, nameEn: true, leadTimeDays: true,
-      moqs: { orderBy: { minQty: 'asc' }, select: { channelLabelCn: true, minQty: true } },
+      moqs: { orderBy: { minQty: 'asc' }, take: 1, select: { minQty: true } },
       variants: {
         where: { deletedAt: null, status: 'ACTIVE' }, orderBy: { cbm: 'asc' },
         select: { labelEn: true, lengthCm: true, widthCm: true, heightCm: true,
@@ -34,7 +35,7 @@ export async function catalogFacts(): Promise<CatalogFact[]> {
   });
   const facts: CatalogFact[] = [];
   for (const product of products) {
-    const moq = product.moqs.map(m => `${m.channelLabelCn || 'MOQ'} ${m.minQty}`).join(' / ');
+    const moq = product.moqs.length ? `${product.moqs[0].minQty} pcs per model` : '';
     for (const variant of product.variants) {
       const price = variant.prices.find(p => p.currency === 'USD') ?? variant.prices[0];
       const size = variant.lengthCm && variant.widthCm && variant.heightCm ? `${Number(variant.lengthCm)}x${Number(variant.widthCm)}x${Number(variant.heightCm)} cm` : variant.labelEn;
