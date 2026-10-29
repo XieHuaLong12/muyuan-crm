@@ -1,4 +1,4 @@
-import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import { getCountries, parsePhoneNumberFromString } from 'libphonenumber-js';
 import { canonicalPhone } from './contact-identity';
 
 // Everyday short names where the standard Chinese region name is long or formal (印度尼西亚 → 印尼).
@@ -26,6 +26,33 @@ export function phoneCountry(numbers: Numbers): { code: string; name: string } |
     if (code) return { code, name: countryName(code) };
   }
   return null;
+}
+
+let codesByName: Map<string, string> | null = null;
+/** Country names as customers' country is written (法国, 沙特, France, Arabie saoudite), lower case → ISO code. */
+function codeByName(name: string) {
+  if (!codesByName) {
+    const names = new Map<string, string>();
+    const displays = ['zh-CN', 'en', 'fr'].map(locale => new Intl.DisplayNames([locale], { type: 'region' }));
+    for (const code of getCountries()) {
+      for (const display of displays) { const label = display.of(code); if (label && label !== code) names.set(label.toLowerCase(), code); }
+      names.set(countryName(code).toLowerCase(), code);
+    }
+    codesByName = names;
+  }
+  return codesByName.get(name.trim().toLowerCase());
+}
+
+/**
+ * The ISO code of a customer's country: from the country written on the record (what sales see and may have
+ * corrected), else the code entered with the phone number, else the WhatsApp or international number. '' when none.
+ */
+export function countryCodeOf(c: Numbers & { country?: string | null; countryCode?: string | null }) {
+  const written = c.country?.trim() ?? '';
+  const byName = written ? codeByName(written) ?? (/^[a-z]{2}$/i.test(written) ? written.toUpperCase() : undefined) : undefined;
+  if (byName) return byName;
+  const entered = c.countryCode?.trim().toUpperCase() ?? '';
+  return /^[A-Z]{2}$/.test(entered) ? entered : phoneCountry(c)?.code ?? '';
 }
 
 /**

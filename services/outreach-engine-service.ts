@@ -7,10 +7,13 @@ import { retryTransaction } from '@/lib/transaction-retry';
 import { afterResponse } from '@/lib/after-response';
 import { isTerminalStage } from '@/lib/constants';
 import {
-  COUNTED_MATCHES, DAY, DELETED_SCRIPT, HOUR, OUTREACH_STATES, POSITION_LABELS, QUALITIES, SCRIPT_STATUSES, customerScriptLanguage, deriveOutreach, groupChannel, groupHasMedia,
-  groupHasWords, groupMessages, groupText, matchesExactly, readConfig, renderScript, ruleReply,
-  type Derivation, type FlowMessage, type MessageGroup, type OutreachConfig, type Position, type Quality, type ReplyVerdict,
+  COUNTED_MATCHES, DAY, DELETED_SCRIPT, HOUR, OUTREACH_STATES, POSITION_LABELS, QUALITIES, SCRIPT_LANGUAGES, SCRIPT_STATUSES, countryIn, customerScriptLanguage, deriveOutreach, profileLanguage,
+  groupChannel, groupHasMedia, groupHasWords, groupMessages, groupText, matchesExactly, productLineIn, quantityIn, readConfig, renderScript, ruleReply,
+  type Derivation, type FlowMessage, type MessageGroup, type OutreachConfig, type Position, type Quality, type ReplyVerdict, type ScriptLanguage,
 } from '@/lib/outreach';
+import { countryCodeOf, countryName } from '@/lib/phone-country';
+import { formAnswers } from '@/lib/lead-grade';
+import { readAnswers } from '@/lib/lead-answers';
 import { accessible } from './customer-service';
 import { lockCustomer } from './contact-identity-service';
 import { automatedTask, resolveRule } from './workflow-service';
@@ -31,6 +34,10 @@ type Tx = Prisma.TransactionClient;
 const STALE_CLAIM_MS = 10 * 60_000;
 const hash = (group: MessageGroup) => createHash('sha256').update(group.messages.map(m => `${m.id}:${m.content}`).join('\n')).digest('hex');
 const gradeOf = (grade: string) => ['A', 'B', 'C'].includes(grade) ? grade : '';
+/** What the script language is read from: the profile language, the country written on the record, the numbers. */
+const languageFields = { language: true, country: true, countryCode: true, whatsapp: true, waId: true, phone: true } as const;
+type LanguageFields = { language: string; country: string; countryCode: string; whatsapp: string | null; waId: string | null; phone: string | null };
+const scriptLanguageOf = (c: LanguageFields) => customerScriptLanguage(c.language, countryCodeOf(c));
 
 /** The parameters and the day records start, written once on the first run (two first runs agree on one value). */
 export async function outreachSetup(client: Tx | typeof db = db) {
@@ -99,7 +106,7 @@ async function phoneSender(client: Tx, source: string, account: string | null, o
 
 /**
  * Which script a touch used, by rules only: a registered template carries its code; text identical to a script of
- * the same position and language (apart from punctuation, spacing and variables) is "原样". Anything else waits for
+ * the same position (apart from punctuation, spacing and variables) is "原样". Anything else waits for
  * the AI (or a person when the AI is not configured).
  */
 function resolveScript(group: MessageGroup, code: Position, language: string, scripts: Scripts) {
@@ -113,7 +120,8 @@ function resolveScript(group: MessageGroup, code: Position, language: string, sc
       : { scriptId: null, matchType: 'FREE', confidence: 1, judgeStatus: 'DONE', judgedBy: 'RULE', judgeReason: `模板 ${templateName ?? ''} 没有登记到话术库，归入非标准话术` };
   }
   const text = groupText(group);
-  const exact = scripts.find(s => s.position === code && s.language === language && matchesExactly(text, s.content));
+  // Word-for-word cannot mix languages, so every language is checked (a fallback script may be in English); the customer's first.
+  const exact = scripts.filter(s => s.position === code && matchesExactly(text, s.content)).sort((a, b) => Number(b.language === language) - Number(a.language === language))[0];
   if (exact) return { scriptId: exact.id, matchType: 'EXACT', confidence: 1, judgeStatus: 'DONE', judgedBy: 'RULE', judgeReason: `与话术 ${exact.code} 原文一致` };
   return { scriptId: null, matchType: '', confidence: null, judgeStatus: deepSeekConfigured() ? 'PENDING' : 'REVIEW', judgedBy: '',
     judgeReason: deepSeekConfigured() ? '等待 DeepSeek 识别话术' : '未配置 DeepSeek，请人工选择话术' };
@@ -127,7 +135,7 @@ export type Reconciled = { state: string; next: Position | ''; cycle: number; ne
  */
 async function reconcileIn(tx: Tx, customerId: string, now: Date, setup: { config: OutreachConfig; startedAt: Date }): Promise<Reconciled | null> {
   await lockCustomer(tx, customerId);
-  const customer = await tx.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, ownerId: true, leadGrade: true, language: true, stage: true,
+  const customer = await tx.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, ownerId: true, leadGrade: true, ...languageFields, stage: true,
     deletedAt: true, createdAt: true, inquiryAt: true, updatedAt: true, whatsappOptInStatus: true, outreachState: true, outreachNext: true, outreachDueAt: true, replyScriptCode: true, bestReplyQuality: true } });
   if (!customer || customer.deletedAt) return null;
   const { config, startedAt } = setup;
@@ -145,7 +153,7 @@ async function reconcileIn(tx: Tx, customerId: string, now: Date, setup: { confi
   // is still derived, so a stop request is honoured; records made before the split stay and are filtered out of the stats.
   const legacy = isLegacyCustomer(customer);
   const recorded = (at: Date) => !legacy && at.getTime() >= startedAt.getTime();
-  const language = customerScriptLanguage(customer.language);
+  const language = scriptLanguageOf(customer);
 
   // Replies: one row per customer group since the start; a group that grew is judged again (unless a person judged it).
   for (const group of groups) {
@@ -219,7 +227,7 @@ async function reconcileIn(tx: Tx, customerId: string, now: Date, setup: { confi
 
   // The next touch: a script from the rotation and a follow-up task, for rounds that started after records began.
   const fresh = !legacy && freshRound(derivation, customer.createdAt, startedAt);
-  if (derivation.next && fresh) await assignScript(tx, { id: customerId, leadGrade: customer.leadGrade, language: customer.language }, derivation.next, derivation.cycle, config);
+  if (derivation.next && fresh) await assignScript(tx, { id: customerId, leadGrade: customer.leadGrade, scriptLanguage: language }, derivation.next, derivation.cycle, config);
   await syncFollowUpTask(tx, customer, derivation, fresh);
 
   const pendingAi = legacy ? 0 : await tx.outreachTouch.count({ where: { customerId, judgeStatus: 'PENDING' } }) + await tx.outreachReply.count({ where: { customerId, judgeStatus: 'PENDING' } });
@@ -237,12 +245,12 @@ function freshRound(d: Derivation, createdAt: Date, startedAt: Date) {
 
 /**
  * The script for a customer's next touch: among the 测试中 and 胜出 scripts for that position, the closest fit — the
- * customer's grade and language, else that grade in English, else any grade in the customer's language, else any
- * grade in English — so a customer gets a script whenever the library has one for the position. Within the fit, the
+ * customer's grade and language (the profile language, else the country's), else that grade in English, else any
+ * grade in the customer's language, else any grade in English. Within the fit, the
  * one assigned least so far, the lower code first on a tie: A1, A2, A1, A2… Salespeople do not choose. D leads (Meta
  * test leads, no way to contact) get none; ungraded leads rotate in their own group.
  */
-export async function assignScript(tx: Tx, customer: { id: string; leadGrade: string; language: string }, position: Position, cycle: number, config?: OutreachConfig) {
+export async function assignScript(tx: Tx, customer: { id: string; leadGrade: string; scriptLanguage: ScriptLanguage }, position: Position, cycle: number, config?: OutreachConfig) {
   void config;
   const existing = await tx.outreachAssignment.findUnique({ where: { customerId_position_cycle: { customerId: customer.id, position, cycle } }, include: { script: true } });
   if (existing) return existing;
@@ -250,7 +258,7 @@ export async function assignScript(tx: Tx, customer: { id: string; leadGrade: st
   const grade = gradeOf(customer.leadGrade);
   const active = await tx.outreachScript.findMany({ where: { position, status: { in: ['TESTING', 'WINNER'] } }, orderBy: { code: 'asc' } });
   const fits = (language: string, anyGrade: boolean) => active.filter(s => s.language === language && (anyGrade || !grade || s.grades.split(',').includes(grade)));
-  const wanted = customerScriptLanguage(customer.language);
+  const wanted = customer.scriptLanguage;
   const candidates = [fits(wanted, false), fits('en', false), fits(wanted, true), fits('en', true)].find(list => list.length) ?? [];
   if (!candidates.length) return null;
   const language = candidates[0].language;
@@ -377,22 +385,30 @@ export async function outreachNextView(input: unknown, user: Actor) {
   const assignment = !result.legacy && result.next && (result.state === 'ICEBREAK' || result.state === 'SILENT')
     ? await retryTransaction(() => db.$transaction(async tx => {
       await lockCustomer(tx, customerId);
-      const c = await tx.customer.findUniqueOrThrow({ where: { id: customerId }, select: { id: true, leadGrade: true, language: true } });
-      return assignScript(tx, c, result.next as Position, result.cycle);
+      const c = await tx.customer.findUniqueOrThrow({ where: { id: customerId }, select: { id: true, leadGrade: true, ...languageFields } });
+      return assignScript(tx, { id: c.id, leadGrade: c.leadGrade, scriptLanguage: scriptLanguageOf(c) }, result.next as Position, result.cycle);
     })) : null;
   return outreachView(customerId, result, assignment);
 }
 
 async function outreachView(customerId: string, result: Reconciled, assignment: Awaited<ReturnType<typeof assignScript>>) {
   const { config } = await outreachSetup();
-  const c = await db.customer.findUniqueOrThrow({ where: { id: customerId }, select: { name: true, country: true, sourceDetail: true, productInterest: true, productModel: true,
-    leadGrade: true, leadGradeSource: true, replyScriptCode: true, bestReplyQuality: true, owner: { select: { name: true } } } });
+  const c = await db.customer.findUniqueOrThrow({ where: { id: customerId }, select: { name: true, ...languageFields, sourceDetail: true, productInterest: true, productModel: true,
+    quantity: true, leadGrade: true, leadGradeSource: true, replyScriptCode: true, bestReplyQuality: true, owner: { select: { name: true } },
+    submissions: { orderBy: { ordinal: 'desc' }, take: 1, select: { raw: true } } } });
   const suggestion = await db.outreachReply.findFirst({ where: { customerId, gradeSuggestionStatus: 'PENDING' }, orderBy: { receivedAt: 'desc' },
     select: { id: true, gradeSuggestion: true, reason: true, nextStep: true, receivedAt: true } });
   const latest = await db.outreachReply.findFirst({ where: { customerId, quality: { not: 'INVALID' }, nextStep: { not: '' } }, orderBy: { receivedAt: 'desc' }, select: { nextStep: true, quality: true } });
   const d = result.derivation;
   const script = assignment?.script;
-  const facts = { firstName: firstNameOf(c.name), country: c.country, product: productLineOf(c.sourceDetail, c.productInterest, c.productModel), owner: c.owner.name };
+  // Variables in the script's own language: the country and product line by name, the quantity the buyer gave.
+  const countryCode = countryCodeOf(c), wanted = customerScriptLanguage(c.language, countryCode);
+  const language = (script?.language ?? wanted) as ScriptLanguage;
+  const stated = c.quantity && c.quantity > 0 ? { min: c.quantity, container: false, label: `${c.quantity} 件` } : c.submissions[0] ? readAnswers(formAnswers(c.submissions[0].raw)).quantity : null;
+  const facts = { firstName: firstNameOf(c.name), country: countryIn(countryCode, language) || c.country, owner: c.owner.name,
+    product: productLineIn(productLineOf(c.sourceDetail, c.productInterest, c.productModel), language), quantity: quantityIn(stated, language) };
+  const due = !!result.next && !script && !result.legacy && (result.state === 'ICEBREAK' || result.state === 'SILENT');
+  const usable = due && c.leadGrade !== 'D' ? await db.outreachScript.count({ where: { position: result.next as Position, status: { in: ['TESTING', 'WINNER'] } } }) : 0;
   const waitUntil = d.lastTouchAt && (d.state === 'ICEBREAK' || d.state === 'SILENT') ? new Date(d.lastTouchAt.getTime() + config.minTouchGapHours * HOUR) : null;
   return {
     legacy: result.legacy,
@@ -400,8 +416,10 @@ async function outreachView(customerId: string, result: Reconciled, assignment: 
     next: result.next, nextLabel: result.next ? POSITION_LABELS[result.next] : '', nextTouchAt: result.nextTouchAt,
     script: script ? { id: script.id, code: script.code, status: script.status, statusLabel: SCRIPT_STATUSES[script.status as keyof typeof SCRIPT_STATUSES] ?? script.status,
       templateName: script.templateName, content: script.content, rendered: renderScript(script.content, facts) } : null,
-    // Why a touch that is due has no script: a D lead, or nothing usable in the library for this position.
-    noScript: result.next && !script && !result.legacy && (result.state === 'ICEBREAK' || result.state === 'SILENT') ? (c.leadGrade === 'D' ? 'GRADE_D' as const : 'LIBRARY_EMPTY' as const) : null,
+    // Why a touch that is due has no script: a D lead, nothing usable for this position, or none in the customer's language or English.
+    noScript: !due ? null : c.leadGrade === 'D' ? 'GRADE_D' as const : usable ? 'NO_LANGUAGE' as const : 'LIBRARY_EMPTY' as const,
+    // The language scripts are chosen in, and what it was read from.
+    language: { code: wanted, label: SCRIPT_LANGUAGES[wanted], basis: profileLanguage(c.language) ? '客户档案的语言' : countryCode ? `国家：${countryName(countryCode)}` : '默认英语' },
     limits: { stopped: result.state === 'STOPPED', waitUntil: waitUntil && waitUntil > new Date() ? waitUntil : null,
       templatesLeft: Math.max(0, config.templateCap - d.templatesSinceReply), templateCap: config.templateCap },
     grade: c.leadGrade, gradeSource: c.leadGradeSource, replyScriptCode: c.replyScriptCode,

@@ -124,26 +124,76 @@ export function nextVersionCode(code: string, taken: Iterable<string>) {
   return `${stem}${n}`;
 }
 
-/** The script's language for a customer: the profile language when it names one we write in, else English. */
-export function customerScriptLanguage(language: string): ScriptLanguage {
+// Countries written to in French (France, Belgium, Switzerland, the Maghreb, French-speaking Africa, overseas France)
+// and in Arabic (the Gulf, the Levant, Egypt, Libya, Sudan, Mauritania), by ISO code.
+const FRENCH_COUNTRIES = new Set(['FR', 'BE', 'CH', 'LU', 'MC', 'MA', 'DZ', 'TN', 'SN', 'CI', 'CM', 'ML', 'BF', 'NE', 'TD', 'GN', 'BJ', 'TG', 'GA', 'CG', 'CD',
+  'MG', 'DJ', 'KM', 'CF', 'BI', 'RW', 'HT', 'MU', 'SC', 'RE', 'GP', 'MQ', 'GF', 'YT', 'PF', 'NC', 'PM', 'WF', 'BL', 'MF']);
+const ARABIC_COUNTRIES = new Set(['SA', 'AE', 'QA', 'KW', 'BH', 'OM', 'YE', 'IQ', 'JO', 'LB', 'SY', 'PS', 'EG', 'LY', 'SD', 'MR']);
+
+/**
+ * The script's language for a customer: the profile language when it names one we write in; else the language of
+ * the customer's country (most leads have a country from their number but no language); else English.
+ */
+export function customerScriptLanguage(language: string, countryCode = ''): ScriptLanguage {
+  const code = countryCode.trim().toUpperCase();
+  return profileLanguage(language) ?? (FRENCH_COUNTRIES.has(code) ? 'fr' : ARABIC_COUNTRIES.has(code) ? 'ar' : 'en');
+}
+/** The language the customer profile names, when it is one we write scripts in. */
+export function profileLanguage(language: string): ScriptLanguage | null {
   const text = language.trim().toLowerCase();
-  if (/^fr|french|français|francais|法/.test(text)) return 'fr';
-  if (/^ar|arab|عرب|阿拉伯/.test(text)) return 'ar';
-  return 'en';
+  return /^fr|french|français|francais|法/.test(text) ? 'fr' : /^ar|arab|عرب|阿拉伯/.test(text) ? 'ar' : /^en|english|英/.test(text) ? 'en' : null;
 }
 
 export const gradesOf = (grades: string) => grades.split(',').map(g => g.trim()).filter((g): g is Grade => (GRADES as readonly string[]).includes(g));
 
-/** Variables a script may use; templates use {{1}}… instead and are filled in the template panel. */
-export const SCRIPT_VARIABLES = { '客户名': 'firstName', '国家': 'country', '产品': 'product', '业务员': 'owner' } as const;
-const VARIABLE = /\{\{\s*\d{1,2}\s*\}\}|\{([^{}]{1,20})\}/g;
-export type ScriptFacts = { firstName: string; country: string; product: string; owner: string };
+/**
+ * Variables a script may use, in single or double braces ({客户名} or {{客户名称}}), with the other names people
+ * write them under. Templates use {{1}}… instead and are filled in the template panel.
+ */
+export const SCRIPT_VARIABLES = { '客户名': 'firstName', '国家': 'country', '产品': 'product', '数量': 'quantity', '业务员': 'owner' } as const;
+const VARIABLE_ALIASES: Record<string, keyof ScriptFacts> = {
+  '客户名称': 'firstName', '客户姓名': 'firstName', '名字': 'firstName', '目标市场': 'country', '市场': 'country', '意向产品': 'product', '采购数量': 'quantity', '销售': 'owner',
+};
+const VARIABLE = /\{\{\s*([^{}]{1,20}?)\s*\}\}|\{([^{}]{1,20})\}/g;
+/** Each value already in the script's language. */
+export type ScriptFacts = { firstName: string; country: string; product: string; owner: string; quantity: string };
+const factOf = (name: string): keyof ScriptFacts | undefined => SCRIPT_VARIABLES[name as keyof typeof SCRIPT_VARIABLES] ?? VARIABLE_ALIASES[name];
 /** The script as the customer would read it; a variable the record cannot fill stays visible for the salesperson. */
 export function renderScript(content: string, facts: ScriptFacts) {
-  return content.replace(VARIABLE, (whole, name: string | undefined) => {
-    const key = name ? SCRIPT_VARIABLES[name.trim() as keyof typeof SCRIPT_VARIABLES] : undefined;
+  return content.replace(VARIABLE, (whole, double: string | undefined, single: string | undefined) => {
+    const key = factOf((double ?? single ?? '').trim());
     return key && facts[key] ? facts[key] : whole;
   });
+}
+
+/** A country's name in the script's language: 法国 → « France », « فرنسا ». */
+export function countryIn(code: string, language: ScriptLanguage) {
+  if (!/^[A-Z]{2}$/.test(code)) return '';
+  try { return new Intl.DisplayNames([language], { type: 'region' }).of(code) ?? ''; } catch { return ''; }
+}
+// The product lines named in the first-touch templates (lib/constants.ts FIRST_TOUCH_PRODUCT_LINES), in French and Arabic.
+const PRODUCT_LINES: Record<string, Record<Exclude<ScriptLanguage, 'en'>, string>> = {
+  'compressed sofas': { fr: 'canapés compressés', ar: 'الكنب المضغوط' },
+  'vacuum-packed mattresses': { fr: 'matelas compressés sous vide', ar: 'المراتب المضغوطة' },
+  'smart electric mattresses': { fr: 'matelas électriques intelligents', ar: 'المراتب الكهربائية الذكية' },
+};
+export const productLineIn = (line: string, language: ScriptLanguage) => !line || language === 'en' ? line : PRODUCT_LINES[line]?.[language] ?? '';
+const UNITS: Record<ScriptLanguage, { piece: string; set: string }> = { en: { piece: 'pieces', set: 'sets' }, fr: { piece: 'pièces', set: 'ensembles' }, ar: { piece: 'قطعة', set: 'طقم' } };
+/** A quantity the buyer gave (lib/lead-answers.ts), written in the script's language: « 1 à 5 pièces ». */
+export function quantityIn(quantity: { min: number | null; container: boolean; label: string; sets?: boolean } | null, language: ScriptLanguage) {
+  if (!quantity) return '';
+  if (quantity.container) {
+    const n = Number(/^(\d+)/.exec(quantity.label)?.[1] ?? 0);
+    if (language === 'fr') return n ? `${n} conteneur${n > 1 ? 's' : ''}` : 'un conteneur complet';
+    if (language === 'ar') return n ? `${n} حاوية` : 'حاوية كاملة';
+    return n ? `${n} container${n > 1 ? 's' : ''}` : 'a full container';
+  }
+  if (!quantity.min) return '';
+  const unit = UNITS[language][quantity.sets ? 'set' : 'piece'];
+  const range = /^(\d+)–(\d+)/.exec(quantity.label);
+  if (range) return language === 'fr' ? `${range[1]} à ${range[2]} ${unit}` : `${range[1]}–${range[2]} ${unit}`;
+  if (/以上$/.test(quantity.label)) return language === 'fr' ? `plus de ${quantity.min} ${unit}` : language === 'ar' ? `أكثر من ${quantity.min} ${unit}` : `${quantity.min}+ ${unit}`;
+  return `${quantity.min} ${unit}`;
 }
 
 /** Lower case without punctuation, symbols and spaces: "only punctuation and spacing differ" compares equal. */
@@ -158,7 +208,7 @@ export const stripPlaceholders = (text: string) => text.split('\n').filter(line 
 export function matchesExactly(text: string, script: string) {
   const sent = normalizeText(stripPlaceholders(text));
   if (!sent) return false;
-  const pieces = script.split(VARIABLE).filter((piece, i) => i % 2 === 0 && piece !== undefined).map(piece => normalizeText(piece));
+  const pieces = script.replace(VARIABLE, '\u0000').split('\u0000').map(piece => normalizeText(piece));
   const escape = (piece: string) => piece.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(`^${pieces.map(escape).join('.{0,80}?')}$`, 'u');
   return pattern.test(sent);

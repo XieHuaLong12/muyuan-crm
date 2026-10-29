@@ -77,7 +77,7 @@ export function ScriptLibrary({ scripts, config, admin, templateNames }: { scrip
           <datalist id="approved-templates">{templateNames.map(name => <option key={name} value={name} />)}</datalist></label>
       </div>
       <label className="bos-outreach-wide"><span>话术内容{form.locked && <><Lock size={12} aria-hidden="true" /> 已发出过，内容已锁定</>}</span>
-        <textarea className="bos-input" rows={5} value={form.content} readOnly={form.locked} maxLength={4000} placeholder="发出的原文，可用 {客户名} {国家} {产品} {业务员}；模板用 {{1}} {{2}}"
+        <textarea className="bos-input" rows={5} value={form.content} readOnly={form.locked} maxLength={4000} placeholder="发出的原文，可用 {{客户名称}} {{目标市场}} {{产品}} {{数量}} {{业务员}}（单括号 {客户名} {国家} 也可以），按话术语言自动填写；模板用 {{1}} {{2}}"
           onChange={e => setForm({ ...form, content: e.target.value })} /></label>
       <label className="bos-outreach-wide"><span>版本说明（和上一版相比改了什么）</span><input className="bos-input" value={form.versionNote} maxLength={300} placeholder="例如 开场改为先问销售市场" onChange={e => setForm({ ...form, versionNote: e.target.value })} /></label>
       <fieldset className="bos-outreach-wide"><legend>模板快捷按钮 → 回复质量（客户点按钮时直接判定，不调用 DeepSeek）</legend>

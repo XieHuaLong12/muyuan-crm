@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DAY, HOUR, deriveOutreach, focusSignals, groupMessages, judgeArms, matchesExactly, nextVersionCode, readConfig, renderScript, ruleReply,
+import { DAY, HOUR, countryIn, deriveOutreach, focusSignals, groupMessages, judgeArms, matchesExactly, nextVersionCode, productLineIn, quantityIn, readConfig, renderScript, ruleReply,
   winProbabilities, customerScriptLanguage, type FlowMessage, type Quality, type SignalInput } from '../lib/outreach';
+import { countryCodeOf } from '../lib/phone-country';
+import { quantityOf } from '../lib/lead-answers';
 
 const config = readConfig(null);
 const t0 = new Date('2026-11-02T01:00:00Z');
@@ -143,9 +145,29 @@ test('a script matches word for word apart from punctuation, spacing and its var
   assert.ok(matchesExactly('Hi Jean, we make compressed sofas in Foshan... do you sell in France through stores or online', script));
   assert.ok(matchesExactly('Hi Jean! We make compressed sofas in Foshan. Do you sell in France through stores or online?\n[图片]', script), 'an attached photo is not words');
   assert.equal(matchesExactly('Hi Jean! We make compressed sofas in Foshan. What quantity do you need?', script), false, 'a different closing question');
-  assert.equal(renderScript(script, { firstName: 'Jean', country: 'France', product: '', owner: 'Sophie' }),
+  assert.equal(renderScript(script, { firstName: 'Jean', country: 'France', product: '', owner: 'Sophie', quantity: '' }),
     'Hi Jean! We make compressed sofas in Foshan. Do you sell in France through stores or online?');
-  assert.equal(renderScript('Hi {客户名}, {产品}', { firstName: '', country: '', product: '', owner: '' }), 'Hi {客户名}, {产品}', 'what the record cannot fill stays visible');
+  assert.equal(renderScript('Hi {客户名}, {产品}', { firstName: '', country: '', product: '', owner: '', quantity: '' }), 'Hi {客户名}, {产品}', 'what the record cannot fill stays visible');
+});
+
+test('scripts written with {{客户名称}} {{目标市场}} {{产品}} {{数量}} are filled in the script\'s language', () => {
+  const script = 'Bonjour {{客户名称}}, ici Jason de LVANJU Furniture 👋 Je vois que vous recherchez des {{产品}} pour votre marché ({{目标市场}}), environ {{数量}} pour une première commande.';
+  const facts = { firstName: 'Merlin', country: countryIn('FR', 'fr'), product: productLineIn('compressed sofas', 'fr'), owner: 'Jason', quantity: quantityIn(quantityOf('1-5_pieces'), 'fr') };
+  const rendered = renderScript(script, facts);
+  assert.equal(rendered, 'Bonjour Merlin, ici Jason de LVANJU Furniture 👋 Je vois que vous recherchez des canapés compressés pour votre marché (France), environ 1 à 5 pièces pour une première commande.');
+  assert.ok(matchesExactly(rendered, script), 'sent as assigned, it is recognised as this script');
+  assert.equal(renderScript('Hello {{客户名称}}, {{2}}', { ...facts, firstName: '' }), 'Hello {{客户名称}}, {{2}}', 'unfilled and template variables stay visible');
+  assert.deepEqual([countryIn('SA', 'fr'), countryIn('FR', 'ar'), countryIn('', 'en')], ['Arabie saoudite', 'فرنسا', '']);
+  assert.deepEqual([quantityIn(quantityOf('50_sets'), 'en'), quantityIn(quantityOf('200+ pcs'), 'ar'), quantityIn(quantityOf('1 x 40HQ'), 'fr'), quantityIn(null, 'fr')],
+    ['50 sets', 'أكثر من 200 قطعة', 'un conteneur complet', '']);
+  assert.equal(productLineIn('', 'fr'), '', 'no product line, the salesperson fills it');
+});
+
+test('the script language: the profile language, else the country\'s, from the country written or the number', () => {
+  assert.deepEqual([countryCodeOf({ country: '法国' }), countryCodeOf({ country: '沙特' }), countryCodeOf({ country: 'France' }), countryCodeOf({ country: '', whatsapp: '+33641037868' }),
+    countryCodeOf({ country: '', countryCode: 'ma' }), countryCodeOf({ country: '' })], ['FR', 'SA', 'FR', 'FR', 'MA', '']);
+  assert.deepEqual([['', 'FR'], ['', 'MA'], ['', 'SN'], ['', 'SA'], ['', 'DE'], ['English', 'FR'], ['Arabic', 'FR'], ['', '']].map(([language, code]) => customerScriptLanguage(language, code)),
+    ['fr', 'fr', 'fr', 'ar', 'en', 'en', 'ar', 'en']);
 });
 
 test('reply rules: auto-replies, stop, buying words, polite one-liners, photos', () => {
@@ -212,6 +234,6 @@ test('parameters fall back to the defaults, versions count up, languages map to 
   assert.equal(readConfig({ silentHours: 48 }).silentHours, 48);
   assert.equal(nextVersionCode('T0-A1', ['T0-A1', 'T0-A2']), 'T0-A3');
   assert.equal(nextVersionCode('T1-M1', []), 'T1-M2');
-  assert.deepEqual(['fr', 'French', 'Arabic', '', 'en'].map(customerScriptLanguage), ['fr', 'fr', 'ar', 'en', 'en']);
+  assert.deepEqual(['fr', 'French', 'Arabic', '', 'en'].map(language => customerScriptLanguage(language)), ['fr', 'fr', 'ar', 'en', 'en']);
   assert.equal(DAY, 24 * HOUR);
 });
