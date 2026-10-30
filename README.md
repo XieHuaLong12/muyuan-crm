@@ -117,14 +117,14 @@ tests/                  核心指标与边界单元测试
 | --- | --- | --- |
 | 管理员 | 经营总览 | 经营驾驶舱 `/command-center` · 来源与国家 `/command-center/analysis` · 财务 `/finance` · 客户分析 `/command-center/customers` · 消息分析 `/command-center/messages` |
 | 管理员 | 客户 | 客户列表与档案 `/customers`（含待分配、回收站、智能导入）· 跟进队列 `/sales` · 销售看板 `/crm` |
-| 管理员 | 消息 | WhatsApp 消息中心 `/messages`（全部客户，可按负责人筛选；处理未关联号码） |
+| 管理员 | 消息 | WhatsApp 消息中心 `/messages`（全部客户，可按负责人、标签筛选；待处理；在聊天里点改销售阶段、贴标签；处理未关联号码） |
 | 管理员 | 任务 | 团队任务 `/tasks` |
 | 管理员 | 订单 | 订单 `/orders` · 产品库 `/products` · 报价单 `/products/quotes`（含报价设置）· 运费库 `/products/freight` · 利润 `/products/margin` |
 | 管理员 | 广告与线索 | 广告效果 `/analytics/ads` · 会话质量 · 丢单原因 · 数据质量 · 线索接入 `/growth/intake` |
 | 管理员 | 团队 | 销售业绩与账号 `/team` · 目标 `/targets` · 沟通监督 `/communication` |
 | 管理员 | 设置 | 公司设置 `/settings` · 集成与接入 `/settings/integrations`（表单询盘、Meta、WhatsApp 与排查工具） |
 | 销售 | 今日工作 | 今日跟进 `/sales`（待首联、到期跟进与到期待办，按截止时间排序）· 全部待办 `/tasks` |
-| 销售 | 消息 | WhatsApp 消息中心 `/messages`（自己负责的客户；「待首联」列出分配后还没联系的客户，点开即发首条模板） |
+| 销售 | 消息 | WhatsApp 消息中心 `/messages`（自己负责的客户；「待处理」列出该先处理的客户；「待首联」列出分配后还没联系的客户，点开即发首条模板；可在聊天里改销售阶段、贴标签） |
 | 销售 | 我的客户 | 客户列表与档案 `/customers` · 销售看板 `/crm` |
 | 销售 | 产品与报价 | 产品库 `/products` · 报价单 `/products/quotes` · 运费库 `/products/freight`（只读） |
 | 销售 | 我的订单 / 我的业绩 | `/orders` · `/sales/performance` |
