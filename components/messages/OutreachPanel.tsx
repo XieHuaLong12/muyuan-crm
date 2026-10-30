@@ -80,10 +80,10 @@ export function OutreachProfile({ view, customerId, onChanged }: { view?: Outrea
       <dt>最高回复</dt><dd>{view.bestReplyLabel ? <span className={`bos-chat-tag ${QUALITY_TONE[view.bestReplyQuality] ?? ''}`}>{view.bestReplyLabel}</span> : '—'}</dd>
       <dt>客户等级</dt><dd>
         <label className="bos-chat-sr" htmlFor={`grade-${customerId}`}>客户等级</label>
-        <select id={`grade-${customerId}`} className="bos-outreach-grade" value={['A', 'B', 'C'].includes(view.grade) ? view.grade : ''} disabled={busy}
+        <select id={`grade-${customerId}`} className="bos-outreach-grade" value={['A', 'B', 'C', 'D'].includes(view.grade) ? view.grade : ''} disabled={busy}
           onChange={e => e.target.value && decide({ action: 'SET', customerId, grade: e.target.value })}>
-          {!['A', 'B', 'C'].includes(view.grade) && <option value="">{view.grade === 'D' ? 'D 无效' : '未评级'}</option>}
-          <option value="A">A 类</option><option value="B">B 类</option><option value="C">C 类</option>
+          {!['A', 'B', 'C', 'D'].includes(view.grade) && <option value="">未评级</option>}
+          <option value="A">A 类</option><option value="B">B 类</option><option value="C">C 类</option><option value="D">D 无效</option>
         </select>
         {view.gradeSource === 'HUMAN' && <small> 人工确认</small>}
       </dd>

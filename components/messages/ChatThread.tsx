@@ -1,12 +1,18 @@
 'use client';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, Check, CheckCheck, CircleAlert, Clock3, FileText, Languages, LayoutTemplate, Loader2, Maximize2, Minimize2, PanelRight, Paperclip, RefreshCw, Send, Sparkles, Undo2, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, BookOpen, Check, MessageSquareText, CheckCheck, CircleAlert, Clock3, FileText, Languages, LayoutTemplate, Loader2, Maximize2, Minimize2, PanelRight, Paperclip, RefreshCw, Send, Sparkles, Undo2, X } from 'lucide-react';
 import { api } from '@/lib/client';
+import { TRANSLATE_BATCH, needsTranslation } from '@/lib/message-translation';
+import { REPLY_LANGUAGES } from '@/lib/quick-replies';
 import { FIRST_TOUCH_PRODUCT_LINES, purchases, sources, stages } from '@/lib/constants';
-import { formatDateTime, formatDay, formatTime, initial, requestId, toneOf, windowLeft, type ChatMessage, type TemplateList, type Thread } from './types';
+import { formatDateTime, formatDay, formatTime, requestId, windowLeft, type ChatMessage, type TemplateList, type Thread, type Translation } from './types';
 import { LegacyTag, OutreachBar, OutreachProfile, useOutreach } from './OutreachPanel';
 import { StageControl } from './StageControl';
+import { GradeAvatar, GradeControl, GradeFollow } from './Grade';
+import { ComposerHandle, useComposerSize } from './Composer';
+import { MaterialsPanel } from './Materials';
+import { QuickRepliesPanel, type QuickRepliesHandle } from './QuickReplies';
 import { TagEditor } from './Tags';
 import { TodoMarkBanner, TodoMarkButton } from './TodoMark';
 
@@ -76,13 +82,25 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
   const [attachment, setAttachment] = useState<{ id: string; fileName: string; mimeType: string }>();
   const [busy, setBusy] = useState<'' | 'send' | 'upload' | 'draft' | 'older' | 'template' | 'translate' | 'summary'>('');
   const [sendError, setSendError] = useState('');
+  // The panel open above the composer: 产品资料 or 常用回复.
+  const [panel, setPanel] = useState<'' | 'materials' | 'replies'>('');
+  // Typing "/" first in the input searches 常用回复; Esc hides the list until the "/" is gone.
+  const [slashClosed, setSlashClosed] = useState(false);
+  const replies = useRef<QuickRepliesHandle>(null);
   const [draft, setDraft] = useState<{ reply: string; replyZh?: string; nextStep?: string; warnings: string[]; quoteHref?: string | null }>();
   // The Chinese the salesperson typed before "译成客户语言", so the translation can be undone.
   const [original, setOriginal] = useState<{ text: string; language: string }>();
-  const [translations, setTranslations] = useState<Record<string, string>>({});
+  // Chinese lines: what the automatic translation brought this visit, and what a click on 翻译 brought (or its status).
+  const [autoTranslated, setAutoTranslated] = useState<Record<string, Translation>>({});
+  const [translations, setTranslations] = useState<Record<string, Translation | string>>({});
+  const [autoSwitch, setAutoSwitch] = useState<boolean | null>(null);
+  const [autoDown, setAutoDown] = useState(false);
+  const asked = useRef(new Set<string>());
   const [broken, setBroken] = useState<Set<string>>(new Set());
   const [templates, setTemplates] = useState<TemplateList & { open: boolean; chosen: string; params: string[]; error: string }>({ status: 'CONNECTED', templates: [], suggestion: null, fills: {}, open: false, chosen: '', params: [], error: '' });
   const { outreach, reloadOutreach } = useOutreach(customerId);
+  const box = useRef<HTMLElement>(null);
+  const composer = useComposerSize(text, box);
   const log = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null), file = useRef<HTMLInputElement>(null), stickToBottom = useRef(true), lastSeen = useRef(''), autoOpened = useRef(false);
 
   const load = useCallback(async (quiet = false) => {
@@ -103,6 +121,7 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
 
   useEffect(() => {
     setThread(undefined); setMessages([]); setCursor(null); setText(''); setAttachment(undefined); setDraft(undefined); setSendError(''); setTranslations({});
+    setAutoTranslated({}); setAutoSwitch(null); setAutoDown(false); asked.current = new Set(); setPanel('');
     setTemplates(t => ({ ...t, open: false, chosen: '', params: [], error: '' })); lastSeen.current = ''; stickToBottom.current = true;
     void load();
     const timer = setInterval(() => { if (!document.hidden) void load(true); }, POLL_MS);
@@ -136,8 +155,9 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
     if (!thread || busy || (!text.trim() && !attachment)) return;
     setBusy('send'); setSendError('');
     try {
-      const result = await api<{ error?: string }>('whatsapp/send', 'POST', { customerId, content: text.trim(), requestId: requestId(), ...(attachment ? { mediaAssetId: attachment.id } : {}) });
-      if (result.error) setSendError(result.error); else { setText(''); setAttachment(undefined); setDraft(undefined); setOriginal(undefined); }
+      const result = await api<{ error?: string }>('whatsapp/send', 'POST', { customerId, content: text.trim(), requestId: requestId(), ...(attachment ? { mediaAssetId: attachment.id } : {}),
+        ...(original ? { original: original.text } : {}) });
+      if (result.error) setSendError(result.error); else { setText(''); setAttachment(undefined); setDraft(undefined); setOriginal(undefined); composer.setBig(false); }
       stickToBottom.current = true; await load(true); onChanged(); void reloadOutreach();
     } catch (e) { setSendError((e as Error).message); } finally { setBusy(''); }
   }
@@ -178,8 +198,26 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
 
   async function translate(id: string) {
     setTranslations(t => ({ ...t, [id]: '翻译中…' }));
-    try { const r = await api<{ text: string }>('inbox/translate', 'POST', { messageId: id }); setTranslations(t => ({ ...t, [id]: `译文：${r.text}` })); }
+    try { const r = await api<Translation>('inbox/translate', 'POST', { messageId: id }); setTranslations(t => ({ ...t, [id]: r })); }
     catch (e) { setTranslations(t => ({ ...t, [id]: (e as Error).message })); }
+  }
+
+  // 自动翻译: the newest foreign messages without Chinese yet, a few at a time; stored, so each is translated once.
+  const autoOn = autoSwitch ?? thread?.customer.autoTranslate ?? false;
+  useEffect(() => {
+    if (!thread || !autoOn || autoDown) return;
+    const ids = messages.filter(m => !m.translation && !autoTranslated[m.id] && !asked.current.has(m.id) && needsTranslation(m)).slice(-TRANSLATE_BATCH).map(m => m.id);
+    if (!ids.length) return;
+    ids.forEach(id => asked.current.add(id));
+    api<{ translations: Record<string, Translation>; unavailable: boolean }>('inbox/translate-batch', 'POST', { customerId, messageIds: ids })
+      .then(r => { setAutoTranslated(t => ({ ...t, ...r.translations })); if (r.unavailable) setAutoDown(true); })
+      .catch(() => setAutoDown(true));
+  }, [thread, messages, autoOn, autoDown, autoTranslated, customerId]);
+  async function toggleAuto() {
+    const next = !autoOn;
+    setAutoSwitch(next); setAutoDown(false);
+    try { await api('inbox/auto-translate', 'PATCH', { customerId, on: next }); }
+    catch (e) { setAutoSwitch(!next); setSendError((e as Error).message); }
   }
 
   /** Every template comes filled in from the customer record; what the record does not say stays empty. */
@@ -228,19 +266,27 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
   // Stage, tags and the 待处理 mark change what the list shows too.
   const profileChanged = () => { void load(true); onChanged(); };
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  const slash = canChat && /^\/[^\n]{0,40}$/.test(text) ? text.slice(1) : null;
+  const repliesOpen = panel === 'replies' || (slash !== null && !slashClosed);
+  useEffect(() => { if (!text.startsWith('/')) setSlashClosed(false); }, [text]);
+  function closeReplies() { if (panel === 'replies') setPanel(''); if (slash !== null) setSlashClosed(true); }
 
   return <>
-    <section className="bos-chat-thread" aria-label={customer ? `与 ${customer.name} 的聊天` : '聊天'}>
+    <section className="bos-chat-thread" ref={box} aria-label={customer ? `与 ${customer.name} 的聊天` : '聊天'}>
       <header className="bos-chat-thread-head">
         <button type="button" className="bos-chat-icon-button bos-chat-back" onClick={onBack} aria-label="返回会话列表"><ArrowLeft size={20} /></button>
-        <span className={`bos-chat-avatar bos-chat-tone-${toneOf(customerId)}`} aria-hidden="true">{customer ? initial(customer.name) : ''}</span>
+        {customer ? <GradeControl key={customerId} customerId={customerId} grade={customer.leadGrade} reason={customer.leadGradeReason} source={customer.leadGradeSource} gradedAt={customer.leadGradedAt}
+          suggestion={thread.gradeSuggestion} timezone={timezone} onChanged={() => { profileChanged(); void reloadOutreach(); }} />
+          : <span className="bos-chat-avatar bos-chat-grade is-none" aria-hidden="true" />}
         <div className="bos-chat-thread-title">
-          <div><h2>{customer?.name ?? '加载中…'}</h2>{customer && <span className="bos-chat-tag is-green">{label(stages, customer.stage)}</span>}{customer?.legacy && <LegacyTag />}
+          <div><h2>{customer?.name ?? '加载中…'}</h2>{customer && <GradeFollow grade={customer.leadGrade} />}{customer && <span className="bos-chat-tag is-green">{label(stages, customer.stage)}</span>}{customer?.legacy && <LegacyTag />}
             {win && (win.status === 'OPEN' && left ? <span className={`bos-chat-window${left.minutes < 120 ? ' is-warning' : ''}`}><Clock3 size={12} aria-hidden="true" />24h 窗口剩 {left.text}</span>
               : <span className="bos-chat-window is-closed">{win.status === 'CLOSED' ? '24h 窗口已关闭' : '窗口未开启'}</span>)}</div>
           <p>{customer ? [customer.companyName, [customer.country, customer.city].filter(Boolean).join(' '), customer.whatsapp || customer.phone, `负责人 ${customer.owner.name}`].filter(Boolean).join(' · ') : ''}</p>
         </div>
         <div className="bos-chat-thread-actions">
+          {thread && <button type="button" role="switch" aria-checked={autoOn} aria-label="自动翻译" className="bos-chat-auto-translate" onClick={toggleAuto}
+            title={autoOn ? '客户的外语消息自动带中文；点一下关掉' : '打开后，客户的外语消息自动带中文'}><Languages size={15} aria-hidden="true" /><span>自动翻译</span><i aria-hidden="true" /></button>}
           {thread && <TodoMarkButton customerId={customerId} mark={thread.pendingMark} timezone={timezone} onChanged={profileChanged} />}
           <button type="button" className="bos-chat-icon-button" onClick={onToggleFullscreen} aria-pressed={fullscreen} aria-label={fullscreen ? '退出全屏聊天' : '全屏聊天'} title={fullscreen ? '退出全屏（Esc）' : '全屏聊天'}>{fullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>
           <button type="button" className="bos-chat-icon-button" onClick={onToggleProfile} aria-pressed={profileOpen} aria-label={profileOpen ? '收起客户资料' : '查看客户资料'}><PanelRight size={18} /></button>
@@ -255,16 +301,21 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
         {thread && !messages.length && <div className="bos-chat-empty-thread"><div><strong>还没有聊天记录</strong>{canChat ? '可以直接给客户发消息。' : '首次联系客户需要先发送已审核的模板消息，客户回复后即可自由聊天。'}</div></div>}
         {messages.map((message, index) => {
           const day = formatDay(message.sentAt, timezone), previous = index ? formatDay(messages[index - 1].sentAt, timezone) : '';
-          const out = message.direction === 'OUTBOUND', body = visibleText(message), translation = translations[message.id];
+          const out = message.direction === 'OUTBOUND', body = visibleText(message);
+          // What the salesperson wrote always shows; machine translations while 自动翻译 is on, or after a click on 翻译.
+          const stored = message.translation ?? autoTranslated[message.id];
+          const clicked = translations[message.id];
+          const chinese = stored && (stored.kind === 'ORIGINAL' || autoOn) ? stored : typeof clicked === 'object' ? clicked : undefined;
           return <Fragment key={message.id}>
             {day !== previous && <div className="bos-chat-day">{day}</div>}
             <article className={`bos-chat-bubble${out ? ' is-out' : ''}`}>
               {message.messageType === 'TEMPLATE' && <span className="bos-chat-bubble-label">模板消息</span>}
               <Media message={message} broken={broken.has(message.id)} onBroken={() => setBroken(set => new Set(set).add(message.id))} onLoad={keepAtBottom} />
               {body && <p>{body}</p>}
-              {translation && <p className="bos-chat-translation">{translation}</p>}
+              {chinese ? <p className="bos-chat-translation"><span>{chinese.kind === 'ORIGINAL' ? (out ? '你写的中文' : '中文') : '机器翻译'}</span>{chinese.text}</p>
+                : typeof clicked === 'string' && <p className="bos-chat-translation is-status">{clicked}</p>}
               <div className="bos-chat-bubble-meta">
-                {!out && body.trim() && !translation && <button type="button" className="bos-chat-translate" onClick={() => translate(message.id)}>翻译</button>}
+                {!out && body.trim() && !chinese && !clicked && (!autoOn || autoDown) && needsTranslation(message) && <button type="button" className="bos-chat-translate" onClick={() => translate(message.id)}>翻译</button>}
                 {message.source === 'whatsapp_web' && <span>本地同步</span>}
                 <time dateTime={message.sentAt}>{formatTime(message.sentAt, timezone)}</time>
                 {out && <Status status={message.status} />}
@@ -289,6 +340,7 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
       </div>}
 
       {thread && <footer className="bos-chat-composer">
+        {!coarse && canChat && <ComposerHandle dragging={composer.dragging} handle={composer.handle} />}
         {!thread.sending.configured ? <div className="bos-chat-notice"><CircleAlert size={16} /><span><strong>WhatsApp 发送服务尚未配置。</strong>需要在服务器配置 Gupshup 业务号后才能从这里发消息，目前只能查看记录。</span></div>
           : thread.sending.optedOut ? <div className="bos-chat-notice"><CircleAlert size={16} /><span><strong>客户已明确退订。</strong>系统不会再向这个客户发送 WhatsApp 消息，请人工核对后续沟通许可。</span></div>
           : win?.status !== 'OPEN' && <div className="bos-chat-notice"><CircleAlert size={16} /><span><strong>{win?.status === 'CLOSED' ? '客户超过 24 小时没有回复' : '客户还没有通过公司业务号发来消息'}，WhatsApp 只允许发送已审核的模板消息。</strong>客户回复后，自动恢复自由聊天。</span></div>}
@@ -332,9 +384,20 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
             </div>}
         </div>}
 
+        {repliesOpen && <QuickRepliesPanel ref={replies} customerId={customerId} query={slash !== null && !slashClosed ? slash : null} canChat={canChat} onClose={closeReplies}
+          onPick={reply => {
+            setText(reply.text); setPanel(''); setSlashClosed(false);
+            // Kept with the message when it goes out, like a translation from Chinese.
+            setOriginal(reply.language === 'zh' ? undefined : { text: reply.zh, language: REPLY_LANGUAGES[reply.language as keyof typeof REPLY_LANGUAGES] ?? reply.language });
+            composer.input.current?.focus();
+          }} />}
+        {panel === 'materials' && <MaterialsPanel customerId={customerId} timezone={timezone} canChat={canChat} onClose={() => setPanel('')}
+          onSent={() => { stickToBottom.current = true; void load(true); onChanged(); void reloadOutreach(); }} />}
         <div className="bos-chat-tools">
           <input ref={file} type="file" accept={ACCEPT} hidden onChange={e => upload(e.target.files?.[0])} />
           <button type="button" className="bos-chat-chip" onClick={() => file.current?.click()} disabled={!canChat || busy === 'upload'}>{busy === 'upload' ? <Loader2 size={14} /> : <Paperclip size={14} />}图片 / 文件</button>
+          <button type="button" className="bos-chat-chip" aria-expanded={panel === 'materials'} onClick={() => setPanel(panel === 'materials' ? '' : 'materials')}><BookOpen size={14} />产品资料</button>
+          <button type="button" className="bos-chat-chip" aria-expanded={panel === 'replies'} onClick={() => setPanel(panel === 'replies' ? '' : 'replies')}><MessageSquareText size={14} />常用回复</button>
           <button type="button" className="bos-chat-chip" onClick={() => aiDraft()} disabled={busy === 'draft' || !messages.length || !thread.ai.configured} title={thread.ai.configured ? '按聊天记录和产品库写一条回复，确认后再发' : '需要在服务器配置 DeepSeek'}>{busy === 'draft' ? <Loader2 size={14} /> : <Sparkles size={14} />}AI 草稿</button>
           <button type="button" className="bos-chat-chip" onClick={translateOut} disabled={busy === 'translate' || !text.trim() || !thread.ai.configured} title={thread.ai.configured ? '把输入框里的中文译成客户使用的语言' : '需要在服务器配置 DeepSeek'}>{busy === 'translate' ? <Loader2 size={14} /> : <Languages size={14} />}译成客户语言</button>
           {thread.sending.configured && !thread.sending.optedOut && <button type="button" className="bos-chat-chip" onClick={openTemplates}><LayoutTemplate size={14} />模板消息</button>}
@@ -343,21 +406,33 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
         {attachment && <span className="bos-chat-attachment"><Paperclip size={13} aria-hidden="true" /><span>{attachment.fileName}</span><button type="button" className="bos-chat-icon-button" style={{ width: 26, height: 26 }} onClick={() => setAttachment(undefined)} aria-label="移除附件"><X size={14} /></button></span>}
         <div className="bos-chat-input">
           <label className="bos-chat-sr" htmlFor={`composer-${customerId}`}>输入消息</label>
-          <textarea id={`composer-${customerId}`} rows={2} value={text} disabled={!canChat} onChange={e => setText(e.target.value)}
-            placeholder={canChat ? (attachment?.mimeType.startsWith('audio/') ? '语音文件不能附带文字' : '输入消息…') : '当前只能发送模板消息'}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} />
+          <div className="bos-chat-input-box">
+            <textarea ref={composer.input} id={`composer-${customerId}`} rows={2} value={text} disabled={!canChat} onChange={e => setText(e.target.value)}
+              placeholder={canChat ? (attachment?.mimeType.startsWith('audio/') ? '语音文件不能附带文字' : '输入消息…') : '当前只能发送模板消息'}
+              onKeyDown={e => {
+                if (e.nativeEvent.isComposing) return;
+                // While typing "/" the input is the search: ↑↓ and Enter pick a reply and never send.
+                if (slash !== null && !slashClosed && replies.current?.key(e)) { e.preventDefault(); return; }
+                if (e.key !== 'Enter') return;
+                // 放大 is for long messages: Enter starts a new line there and ⌘ / Ctrl + Enter sends.
+                if (composer.big ? e.metaKey || e.ctrlKey : !e.shiftKey && !coarse) { e.preventDefault(); void send(); }
+              }} />
+            {canChat && <button type="button" className="bos-chat-expand" aria-pressed={composer.big} onClick={() => { composer.setBig(!composer.big); composer.input.current?.focus(); }}
+              aria-label={composer.big ? '还原输入框' : '放大输入框，写长消息'} title={composer.big ? '还原输入框' : '放大输入框，写长消息'}>{composer.big ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>}
+          </div>
           <button type="button" className="bos-chat-icon-button is-primary bos-chat-send" onClick={send} disabled={!canChat || busy === 'send' || (!text.trim() && !attachment)} aria-label="发送">{busy === 'send' ? <Loader2 size={19} /> : <Send size={19} />}</button>
         </div>
         {original && <p className="bos-chat-original"><span>已译成{original.language} · 原文：{original.text}</span><button type="button" onClick={() => { setText(original.text); setOriginal(undefined); }}><Undo2 size={13} aria-hidden="true" />还原</button></p>}
         {sendError && <p className="bos-chat-error" role="alert">{sendError}</p>}
-        <p className="bos-chat-hint">Enter 发送 · Shift + Enter 换行 · 通过公司业务号{thread.sending.businessNumber ? ` ${thread.sending.businessNumber}` : ''}发出，记录自动存入客户档案</p>
+        <p className="bos-chat-hint">{[composer.big ? 'Enter 换行 · ⌘ / Ctrl + Enter 发送 · 再点右上角还原' : coarse ? '' : `Enter 发送 · Shift + Enter 换行 · 拖动上方横杠调高度${composer.adjusted ? '（已记住）' : ''}`,
+          `通过公司业务号${thread.sending.businessNumber ? ` ${thread.sending.businessNumber}` : ''}发出，记录自动存入客户档案`].filter(Boolean).join(' · ')}</p>
       </footer>}
     </section>
 
     <aside className="bos-chat-profile" aria-label="客户资料">
       <div className="bos-chat-profile-head"><h2>客户资料</h2><span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><Link href={`/customers/${encodeURIComponent(customerId)}`}>完整档案<ArrowUpRight size={13} /></Link><button type="button" className="bos-chat-icon-button" onClick={onToggleProfile} aria-label="收起客户资料"><X size={16} /></button></span></div>
       {customer && <>
-        <div className="bos-chat-person"><span className={`bos-chat-avatar is-large bos-chat-tone-${toneOf(customerId)}`} aria-hidden="true">{initial(customer.name)}</span>
+        <div className="bos-chat-person"><GradeAvatar grade={customer.leadGrade} reason={customer.leadGradeReason} size="large" />
           <div><strong>{customer.name}{used('firstName')}</strong><span>{customer.companyName || '公司待补充'}</span><span>{[customer.country, customer.city].filter(Boolean).join(' · ') || '国家待补充'}{customer.language ? ` · ${customer.language}` : ''}</span></div></div>
         <TagEditor customerId={customerId} tags={thread.tags} admin={admin} onChanged={profileChanged} />
         <StageControl customerId={customerId} stage={customer.stage} hasDeal={customer.hasDeal} invalidReason={customer.invalidReason} currency={customer.currency}

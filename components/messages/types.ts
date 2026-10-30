@@ -17,6 +17,8 @@ export type TemplateList = { status: 'CONNECTED' | 'NOT_CONNECTED'; templates: A
   outreach?: { position: string; scriptCode: string; templateId: string | null } | null };
 export type Filter = 'all' | 'unread' | 'awaiting' | 'unmatched' | 'pending' | 'todo';
 export type TagView = { id: string; name: string; color: string };
+/** A message's Chinese: machine translation, or what the salesperson wrote before translating (ORIGINAL). */
+export type Translation = { kind: string; text: string };
 
 /** Request ids for idempotent sends; falls back to getRandomValues where randomUUID is unavailable (plain HTTP). */
 export function requestId() {

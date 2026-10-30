@@ -112,12 +112,13 @@ jobs:
           mv prisma/migrations/20261022090000_daily_review /tmp/identity-ci-migrations/
           mv prisma/migrations/20261029022345_product_listing_and_images /tmp/identity-ci-migrations/
           mv prisma/migrations/20261030090000_customer_tags_and_pending /tmp/identity-ci-migrations/
+          mv prisma/migrations/20261030120000_chat_translate_materials_replies /tmp/identity-ci-migrations/
           pnpm exec prisma migrate deploy
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "13"
           mysql -h127.0.0.1 -uroot -proot muyuan_reuse -e "INSERT INTO User (id,name,email,passwordHash) VALUES ('reuse-sentinel','Existing user','existing@example.com','preserve-me')"
           mv /tmp/identity-ci-migrations/* prisma/migrations/
           pnpm exec prisma migrate deploy
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "28"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "29"
           # 分配池、联系方式规范键、任务执行人与线索分配方式（20261009024647_assignment_pool_and_corrections）
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND ((table_name='Customer' AND column_name IN ('pendingAssignment','contactKeysAt')) OR (table_name='Task' AND column_name='assigneeId') OR (table_name='Setting' AND column_name='leadAssignMode'))")" = "4"
           # 广告线索实时入库：来源、提交时间、重试退避、表单补拉水位与广告线索首联分钟数（20261009035838_meta_lead_realtime_intake）
@@ -143,6 +144,10 @@ jobs:
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name='ProductImageFile'")" = "1"
           # 消息页标签与待处理：标签库、客户标签、手动待处理三张新表（20261030090000_customer_tags_and_pending）
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('CustomerTag','CustomerTagLink','PendingMark')")" = "3"
+          # 消息页：译文、资料库、常用回复三张新表，客户自动翻译开关与发送人索引（20261030120000_chat_translate_materials_replies）
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('MessageTranslation','SalesMaterial','QuickReply')")" = "3"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND table_name='Customer' AND column_name='autoTranslate'")" = "1"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='muyuan_reuse' AND table_name='WhatsAppMessage' AND index_name='WhatsAppMessage_sentById_sentAt_idx'")" = "2"
           echo "reused-deployment upgrade path OK"
 
       - name: Seed test database
