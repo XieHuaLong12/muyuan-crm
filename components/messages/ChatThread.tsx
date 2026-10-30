@@ -1,7 +1,7 @@
 'use client';
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, BookOpen, Check, MessageSquareText, CheckCheck, CircleAlert, Clock3, FileText, Languages, LayoutTemplate, Loader2, Maximize2, Minimize2, PanelRight, Paperclip, RefreshCw, Send, Sparkles, Undo2, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, BookOpen, Check, MessageSquareText, CheckCheck, CircleAlert, Clock3, FileText, Languages, LayoutTemplate, Loader2, Maximize2, Minimize2, PanelRight, Paperclip, RefreshCw, Send, Sparkles, Undo2, Wand2, X } from 'lucide-react';
 import { api } from '@/lib/client';
 import { TRANSLATE_BATCH, needsTranslation } from '@/lib/message-translation';
 import { REPLY_LANGUAGES } from '@/lib/quick-replies';
@@ -12,6 +12,7 @@ import { StageControl } from './StageControl';
 import { GradeAvatar, GradeControl, GradeFollow } from './Grade';
 import { ComposerHandle, useComposerSize } from './Composer';
 import { MaterialsPanel } from './Materials';
+import { PolishPanel } from './Polish';
 import { QuickRepliesPanel, type QuickRepliesHandle } from './QuickReplies';
 import { TagEditor } from './Tags';
 import { TodoMarkBanner, TodoMarkButton } from './TodoMark';
@@ -83,13 +84,15 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
   const [busy, setBusy] = useState<'' | 'send' | 'upload' | 'draft' | 'older' | 'template' | 'translate' | 'summary'>('');
   const [sendError, setSendError] = useState('');
   // The panel open above the composer: 产品资料 or 常用回复.
-  const [panel, setPanel] = useState<'' | 'materials' | 'replies'>('');
+  const [panel, setPanel] = useState<'' | 'materials' | 'replies' | 'polish'>('');
   // Typing "/" first in the input searches 常用回复; Esc hides the list until the "/" is gone.
   const [slashClosed, setSlashClosed] = useState(false);
   const replies = useRef<QuickRepliesHandle>(null);
   const [draft, setDraft] = useState<{ reply: string; replyZh?: string; nextStep?: string; warnings: string[]; quoteHref?: string | null }>();
   // The Chinese the salesperson typed before "译成客户语言", so the translation can be undone.
-  const [original, setOriginal] = useState<{ text: string; language: string }>();
+  // What goes back into the input on 还原, and the Chinese kept with the message: after 译成客户语言 both are what
+  // the salesperson typed; after 优化话术 `text` is their own line and `zh` the chosen version's Chinese.
+  const [original, setOriginal] = useState<{ text: string; language: string; zh?: string; label?: string }>();
   // Chinese lines: what the automatic translation brought this visit, and what a click on 翻译 brought (or its status).
   const [autoTranslated, setAutoTranslated] = useState<Record<string, Translation>>({});
   const [translations, setTranslations] = useState<Record<string, Translation | string>>({});
@@ -156,7 +159,7 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
     setBusy('send'); setSendError('');
     try {
       const result = await api<{ error?: string }>('whatsapp/send', 'POST', { customerId, content: text.trim(), requestId: requestId(), ...(attachment ? { mediaAssetId: attachment.id } : {}),
-        ...(original ? { original: original.text } : {}) });
+        ...(original ? { original: original.zh ?? original.text } : {}) });
       if (result.error) setSendError(result.error); else { setText(''); setAttachment(undefined); setDraft(undefined); setOriginal(undefined); composer.setBig(false); }
       stickToBottom.current = true; await load(true); onChanged(); void reloadOutreach();
     } catch (e) { setSendError((e as Error).message); } finally { setBusy(''); }
@@ -391,6 +394,12 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
             setOriginal(reply.language === 'zh' ? undefined : { text: reply.zh, language: REPLY_LANGUAGES[reply.language as keyof typeof REPLY_LANGUAGES] ?? reply.language });
             composer.input.current?.focus();
           }} />}
+        {panel === 'polish' && <PolishPanel customerId={customerId} text={text} onClose={() => setPanel('')}
+          onUse={s => {
+            // 还原 brings back what was in the box; a line already translated from Chinese keeps that Chinese to restore.
+            setOriginal(o => ({ text: o && !o.label ? o.text : text, language: '', zh: s.zh || undefined, label: s.angle }));
+            setText(s.text); setPanel(''); composer.input.current?.focus();
+          }} />}
         {panel === 'materials' && <MaterialsPanel customerId={customerId} timezone={timezone} canChat={canChat} onClose={() => setPanel('')}
           onSent={() => { stickToBottom.current = true; void load(true); onChanged(); void reloadOutreach(); }} />}
         <div className="bos-chat-tools">
@@ -402,6 +411,8 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
           <button type="button" className="bos-chat-chip" onClick={translateOut} disabled={busy === 'translate' || !text.trim() || !thread.ai.configured} title={thread.ai.configured ? '把输入框里的中文译成客户使用的语言' : '需要在服务器配置 DeepSeek'}>{busy === 'translate' ? <Loader2 size={14} /> : <Languages size={14} />}译成客户语言</button>
           {thread.sending.configured && !thread.sending.optedOut && <button type="button" className="bos-chat-chip" onClick={openTemplates}><LayoutTemplate size={14} />模板消息</button>}
           <Link className="bos-chat-chip" href={`/products/quotes/new?customerId=${encodeURIComponent(customerId)}`}><FileText size={14} />报价单</Link>
+          <button type="button" className="bos-chat-chip bos-chat-polish-chip" aria-expanded={panel === 'polish'} onClick={() => setPanel(panel === 'polish' ? '' : 'polish')}
+            disabled={!text.trim() || !canChat || !thread.ai.configured} title={!thread.ai.configured ? '需要在服务器配置 DeepSeek' : text.trim() ? '给输入框里这句话三种更好的写法' : '先在输入框写一句'}><Wand2 size={14} />优化话术</button>
         </div>
         {attachment && <span className="bos-chat-attachment"><Paperclip size={13} aria-hidden="true" /><span>{attachment.fileName}</span><button type="button" className="bos-chat-icon-button" style={{ width: 26, height: 26 }} onClick={() => setAttachment(undefined)} aria-label="移除附件"><X size={14} /></button></span>}
         <div className="bos-chat-input">
@@ -422,7 +433,7 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
           </div>
           <button type="button" className="bos-chat-icon-button is-primary bos-chat-send" onClick={send} disabled={!canChat || busy === 'send' || (!text.trim() && !attachment)} aria-label="发送">{busy === 'send' ? <Loader2 size={19} /> : <Send size={19} />}</button>
         </div>
-        {original && <p className="bos-chat-original"><span>已译成{original.language} · 原文：{original.text}</span><button type="button" onClick={() => { setText(original.text); setOriginal(undefined); }}><Undo2 size={13} aria-hidden="true" />还原</button></p>}
+        {original && <p className="bos-chat-original"><span>{original.label ? `已用「${original.label}」的写法 · 你写的：${original.text}` : `已译成${original.language} · 原文：${original.text}`}</span><button type="button" onClick={() => { setText(original.text); setOriginal(undefined); }}><Undo2 size={13} aria-hidden="true" />还原</button></p>}
         {sendError && <p className="bos-chat-error" role="alert">{sendError}</p>}
         <p className="bos-chat-hint">{[composer.big ? 'Enter 换行 · ⌘ / Ctrl + Enter 发送 · 再点右上角还原' : coarse ? '' : `Enter 发送 · Shift + Enter 换行 · 拖动上方横杠调高度${composer.adjusted ? '（已记住）' : ''}`,
           `通过公司业务号${thread.sending.businessNumber ? ` ${thread.sending.businessNumber}` : ''}发出，记录自动存入客户档案`].filter(Boolean).join(' · ')}</p>

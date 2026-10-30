@@ -499,3 +499,31 @@ audio.bos-chat-media{width:280px;max-width:100%;height:40px}
 @media(max-width:760px){.bos-chat-grade-pop,.bos-chat-grade-toast{position:fixed;left:16px;right:16px;top:132px;width:auto;max-width:none}}
 /* 顶部按钮多了「自动翻译」：窄一些的屏幕上「标为待处理」只显示旗子图标，把位置留给客户名字。 */
 @media(max-width:1680px){.bos-chat .bos-chat-mark-button{width:38px;padding:0;justify-content:center}.bos-chat .bos-chat-mark-button span{display:none}}
+
+/* 优化话术（2026-10-30）：输入框里这句话的三种写法。 */
+.bos-chat .bos-chat-polish-chip{border-color:#b9d4c1;background:#f1f6f2;color:#164b3a;font-weight:600}
+.bos-chat .bos-chat-polish-chip[aria-expanded=true]{background:#174b3b;border-color:#174b3b;color:#fff}
+.bos-chat-polish .bos-chat-panel-head>strong{font-size:14px;white-space:nowrap}
+.bos-chat-polish .bos-chat-panel-head>small{font-size:11px;color:#6b7d70;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.bos-chat .bos-chat-polish-again{display:inline-flex;align-items:center;gap:5px;flex:none;height:30px;padding:0 11px;border:1px solid #dfe5dd;border-radius:9px;background:#fff;color:#1d3328;font-size:12px}
+.bos-chat .bos-chat-polish-again:disabled{opacity:.5;cursor:not-allowed}
+.bos-chat-polish-wait{display:flex;align-items:center;gap:8px;margin:0;padding:18px 4px;font-size:13px;color:#3d4a41}
+.bos-chat-polish-wait svg{animation:bos-chat-spin 1s linear infinite}
+@keyframes bos-chat-spin{to{transform:rotate(360deg)}}
+.bos-chat-polish-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-height:min(340px,40vh);overflow:auto}
+.bos-chat-polish-card{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:12px;background:#fff;box-shadow:inset 0 0 0 1px #e6e9e3}
+.bos-chat-polish-card p{margin:0}
+.bos-chat-polish-angle{align-self:flex-start;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
+.bos-chat-polish-angle.is-0{background:#e6f0e9;color:#164b3a}.bos-chat-polish-angle.is-1{background:#e3edfb;color:#1a4f9f}.bos-chat-polish-angle.is-2{background:#f0ebf7;color:#5b3f86}
+.bos-chat-polish-text{flex:1;font-size:13px;line-height:1.55;color:#1d1d1f;white-space:pre-wrap}
+.bos-chat-polish-zh{font-size:12px;line-height:1.5;color:#4a4a4f}
+.bos-chat-polish-why{padding:5px 7px;border-radius:6px;background:#fbf6ea;font-size:11px;line-height:1.5;color:#6b5a2c}
+.bos-chat-polish-warn{display:flex;gap:5px;align-items:flex-start;font-size:11px;line-height:1.5;color:#a44b36}
+.bos-chat-polish-warn svg{flex:none;margin-top:2px}
+.bos-chat .bos-chat-polish-card>button{height:32px;border:0;border-radius:9px;background:#164b3a;color:#fff;font-size:12px;font-weight:600}
+.bos-chat .bos-chat-polish-card>button:hover{background:#205f4b}
+/* 三条并排要够宽；聊天区窄（右侧资料打开、小屏）时改成一条一行。 */
+.bos-chat-polish{container-type:inline-size}
+@container (max-width:640px){.bos-chat-polish-list{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:760px){.bos-chat-polish .bos-chat-panel-head>small{display:none}}
+@media(prefers-reduced-motion:reduce){.bos-chat-polish-wait svg{animation:none}}
