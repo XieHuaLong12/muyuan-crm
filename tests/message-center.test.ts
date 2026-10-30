@@ -9,7 +9,7 @@ import { db } from '../lib/db';
 import { parseGupshup } from '../lib/gupshup';
 import { hashPassword } from '../lib/auth';
 import { ingestWhatsAppWebhook } from '../services/whatsapp-webhook-service';
-import { archiveInboundMedia, inboundMediaRef, messageMediaAsset, messageMediaHref, signedMediaUrl } from '../services/whatsapp-media-service';
+import { archiveMessageMedia, providerMediaRef, messageMediaAsset, messageMediaHref, signedMediaUrl } from '../services/whatsapp-media-service';
 import { inboxConversations, inboxThread, linkCandidates, linkUnmatchedNumber, retryUnmatchedNumbers, unreadConversationCount } from '../services/inbox-service';
 import { identityKey } from '../lib/contact-identity';
 import { listTemplates, renderTemplate, sendTemplateMessage, templateVariables } from '../services/whatsapp-template-service';
@@ -53,6 +53,7 @@ test('received photos, voice notes, videos and documents are copied into storage
     t.mock.method(globalThis, 'fetch', async (input: string | URL) => {
       const url = String(input); requests.push(url);
       if (url.includes('voice.ogg')) return new Response(new Uint8Array([79, 103, 103, 83]), { headers: { 'content-type': 'audio/ogg; codecs=opus' } });
+      if (url.includes('catalog.pdf')) return new Response(new Uint8Array([37, 80, 68, 70]), { headers: { 'content-type': 'application/pdf' } });
       if (url.includes('huge.mp4')) return new Response(new Uint8Array(4), { headers: { 'content-length': String(40 * 1024 * 1024) } });
       if (url.includes('expired')) return new Response('gone', { status: 404 });
       if (url.includes('moved.jpg')) return new Response(null, { status: 302, headers: { location: 'http://127.0.0.1/internal' } });
@@ -66,8 +67,8 @@ test('received photos, voice notes, videos and documents are copied into storage
       const voice = await db.whatsAppMessage.findUniqueOrThrow({ where: { id: result.mediaMessageIds[0] } });
       assert.equal(voice.messageType, 'AUDIO');
       assert.equal(messageMediaHref(voice), `/api/whatsapp/messages/${voice.id}/media`);
-      const assetId = await archiveInboundMedia(voice.id);
-      assert.equal(await archiveInboundMedia(voice.id), assetId, 'second copy reuses the first');
+      const assetId = await archiveMessageMedia(voice.id);
+      assert.equal(await archiveMessageMedia(voice.id), assetId, 'second copy reuses the first');
       const archived = await db.whatsAppMessage.findUniqueOrThrow({ where: { id: voice.id } });
       assert.equal(archived.mediaUrl, `/api/whatsapp/media/${assetId}`);
       assert.equal(archived.mimeType, 'audio/ogg; codecs=opus');
@@ -85,14 +86,14 @@ test('received photos, voice notes, videos and documents are copied into storage
 
       // A file that is gone or larger than 32 MB is reported, not stored; other hosts are never fetched.
       const video = (await ingestWhatsAppWebhook(v2(`video-${marker}`, phone, 'video', { url: 'https://filemanager.gupshup.io/wa/huge.mp4', contentType: 'video/mp4' }))).mediaMessageIds[0];
-      await assert.rejects(archiveInboundMedia(video), (e: { status?: number }) => e.status === 413);
+      await assert.rejects(archiveMessageMedia(video), (e: { status?: number }) => e.status === 413);
       const gone = (await ingestWhatsAppWebhook(v2(`image-${marker}`, phone, 'image', { url: 'https://filemanager.gupshup.io/wa/expired.jpg', contentType: 'image/jpeg', caption: 'showroom' }))).mediaMessageIds[0];
-      await assert.rejects(archiveInboundMedia(gone), (e: { status?: number }) => e.status === 404);
+      await assert.rejects(archiveMessageMedia(gone), (e: { status?: number }) => e.status === 404);
       const moved = (await ingestWhatsAppWebhook(v2(`moved-${marker}`, phone, 'image', { url: 'https://filemanager.gupshup.io/wa/moved.jpg', contentType: 'image/jpeg' }))).mediaMessageIds[0];
-      await assert.rejects(archiveInboundMedia(moved), (e: { status?: number }) => e.status === 502, 'a redirect off HTTPS is not followed');
+      await assert.rejects(archiveMessageMedia(moved), (e: { status?: number }) => e.status === 502, 'a redirect off HTTPS is not followed');
       assert.ok(!requests.some(url => url.startsWith('http://127.0.0.1')));
       const foreign = (await ingestWhatsAppWebhook(v2(`doc-${marker}`, phone, 'file', { url: 'https://evil.example.com/a.pdf', contentType: 'application/pdf', name: 'a.pdf' }))).mediaMessageIds[0];
-      await assert.rejects(archiveInboundMedia(foreign), (e: { status?: number }) => e.status === 400);
+      await assert.rejects(archiveMessageMedia(foreign), (e: { status?: number }) => e.status === 400);
       assert.ok(!requests.some(url => url.includes('evil.example.com')));
       assert.equal((await db.whatsAppMessage.findUniqueOrThrow({ where: { id: foreign } })).fileName, 'a.pdf');
 
@@ -101,12 +102,27 @@ test('received photos, voice notes, videos and documents are copied into storage
         audio: { id: 'meta-media-id', mime_type: 'audio/ogg; codecs=opus', voice: true, url: 'https://filemanager.gupshup.io/wa/voice.ogg' } }));
       const v3Message = await db.whatsAppMessage.findUniqueOrThrow({ where: { id: v3.mediaMessageIds[0] } });
       assert.equal(v3Message.mediaUrl, 'https://filemanager.gupshup.io/wa/voice.ogg');
-      assert.equal(inboundMediaRef(v3Message)?.mediaId, 'meta-media-id');
+      assert.equal(providerMediaRef(v3Message)?.mediaId, 'meta-media-id');
+
+      // A catalogue sent from the WhatsApp Business app on the phone comes back as an echo: shown and kept like a received file.
+      const echo = await ingestWhatsAppWebhook({ object: 'whatsapp_business_account', gs_app_id: 'inbox-test-app', entry: [{ changes: [{ field: 'smb_message_echoes', value: {
+        metadata: { display_phone_number: business, phone_number_id: 'inbox-phone-id' }, message_echoes: [{ id: `echo-${marker}`, from: business.slice(1), to: phone.slice(1),
+          timestamp: String(Math.floor(Date.now() / 1000)), type: 'document',
+          document: { id: 'meta-doc-id', filename: 'LVANJU_2026_Product_Catalog.pdf', mime_type: 'application/pdf', url: 'https://filemanager.gupshup.io/wa/catalog.pdf' } }] } }] }] });
+      assert.equal(echo.mediaMessageIds.length, 1, 'copied right away, like a received file');
+      const sent = await db.whatsAppMessage.findUniqueOrThrow({ where: { id: echo.mediaMessageIds[0] } });
+      assert.equal(sent.direction, 'OUTBOUND');
+      assert.equal(sent.content, '[文件] LVANJU_2026_Product_Catalog.pdf');
+      assert.equal(messageMediaHref(sent), `/api/whatsapp/messages/${sent.id}/media`);
+      const catalogue = await archiveMessageMedia(sent.id);
+      assert.deepEqual(await db.mediaAsset.findUniqueOrThrow({ where: { id: catalogue }, select: { fileName: true, mimeType: true } }),
+        { fileName: 'LVANJU_2026_Product_Catalog.pdf', mimeType: 'application/pdf' });
+      assert.equal(messageMediaHref(await db.whatsAppMessage.findUniqueOrThrow({ where: { id: sent.id } })), `/api/whatsapp/media/${catalogue}`);
 
       // Meta Cloud API only sends an id: the file is fetched with the connected account's token.
       const cloudMessage = await db.whatsAppMessage.create({ data: { customerId: voice.customerId, source: 'cloud_api', direction: 'INBOUND', messageType: 'IMAGE', content: '[图片]', status: 'RECEIVED', sentAt: new Date(),
         raw: JSON.stringify({ id: 'wamid', type: 'image', image: { id: '1234567890', mime_type: 'image/jpeg' } }) } });
-      await assert.rejects(archiveInboundMedia(cloudMessage.id), (e: { status?: number }) => e.status === 404, 'no connected Cloud API account');
+      await assert.rejects(archiveMessageMedia(cloudMessage.id), (e: { status?: number }) => e.status === 404, 'no connected Cloud API account');
       assert.ok(!requests.some(url => url.startsWith('https://graph.facebook.com/')));
 
       // Opening someone else's customer's file is refused before anything is fetched.

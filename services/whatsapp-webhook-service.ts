@@ -67,7 +67,7 @@ export type WhatsAppWebhookResult = {
   duplicateMessages: number;
   ambiguous: number;
   statusesUpdated: number;
-  /** Newly stored inbound photos, videos, voice notes and documents whose files still need copying. */
+  /** Newly stored photos, videos, voice notes and documents (received, or sent from the phone) whose files still need copying. */
   mediaMessageIds: string[];
   /** Customers with a newly stored message in either direction (phone sends included), for the outreach engine. */
   messageCustomerIds: string[];
@@ -211,7 +211,7 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
       sender: input.sender || (direction === 'INBOUND' ? waId : 'BUSINESS'), content: input.content,
       messageType: input.messageType, mediaUrl: input.mediaUrl?.startsWith('https://') ? input.mediaUrl : null, mimeType: input.mimeType, fileName: input.fileName, status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT',
       sentAt: input.sentAt, raw: JSON.stringify(input.raw) }, select: { id: true } });
-    if (direction === 'INBOUND' && MEDIA_MESSAGE_TYPES.has(input.messageType)) delta.mediaMessageIds.push(stored.id);
+    if (MEDIA_MESSAGE_TYPES.has(input.messageType)) delta.mediaMessageIds.push(stored.id);
     delta.messageCustomerIds.push(customerId);
     await messageFacts(tx,customerId,input.sentAt,direction);
     if(direction==='INBOUND'&&input.providerOccurredAt){

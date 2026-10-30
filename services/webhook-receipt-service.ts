@@ -5,7 +5,7 @@ import { gupshupSource } from '@/lib/gupshup';
 import { validateWhatsAppWebhook, ingestWhatsAppWebhook } from './whatsapp-webhook-service';
 import { syncCustomerWorkflow } from './workflow-service';
 import { updateWhatsAppStage } from './whatsapp-stage-service';
-import { archiveInboundMediaQuietly } from './whatsapp-media-service';
+import { archiveMessageMediaQuietly } from './whatsapp-media-service';
 
 type ReceiptKind = 'WHATSAPP' | 'META_LEADS';
 const kindSchema = z.enum(['WHATSAPP', 'META_LEADS']);
@@ -40,8 +40,8 @@ export async function processWebhookReceipt(id: string) {
     }
     const result = await ingestWhatsAppWebhook(detail.payload);
     await db.syncJob.update({ where: { id }, data: { status: 'OK', completedAt: new Date(), processed: result.received + result.outboundEchoes, succeeded: result.matchedCustomers } });
-    // Copy received photos, voice notes and videos before the provider's link expires; a failure is retried on viewing.
-    await archiveInboundMediaQuietly(result.mediaMessageIds);
+    // Copy photos, voice notes, videos and documents (received, or sent from the phone) before the provider's link expires; a failure is retried on viewing.
+    await archiveMessageMediaQuietly(result.mediaMessageIds);
     // New WhatsApp leads ring the phones like ad forms do.
     try { await (await import('./lead-alert-service')).deliverLeadAlerts(); }
     catch { console.error('[Lead alerts] RETRY_PENDING'); }

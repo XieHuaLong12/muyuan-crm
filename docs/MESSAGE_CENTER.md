@@ -29,7 +29,7 @@
 
 没有新表、新字段或迁移。
 
-- 客户发来的媒体复制为 `MediaAsset`（`createdBy='SYSTEM'`，文件写入 `MEDIA_STORAGE_DIR`），并把该消息的 `mediaUrl` 改为 `/api/whatsapp/media/<assetId>`。服务商原始链接仍在 `raw` 里。
+- 客户发来的媒体，以及在手机 WhatsApp Business App 上发出的图片和文件（Meta 回传的 echo），复制为 `MediaAsset`（`createdBy='SYSTEM'`，文件写入 `MEDIA_STORAGE_DIR`），并把该消息的 `mediaUrl` 改为 `/api/whatsapp/media/<assetId>`。服务商原始链接仍在 `raw` 里。
 - 未读使用已有的 `WhatsAppReadState`（每人每客户一行），打开会话即写入。
 - 模板清单每次从 Gupshup 读取（缓存 5 分钟），不在本地编造或保存。模板消息存为 `messageType='TEMPLATE'` 的出站消息，`raw` 只记模板 id、名称和语言。
 
@@ -45,7 +45,7 @@
 | `POST /api/inbox/translate-out {customerId,text}` | 把销售写的中文译成客户的语言，结果放回输入框，不发送（需要 DeepSeek） | 同上 |
 | `GET/POST /api/inbox/link` | 未关联号码的候选客户 / 关联 | 管理员 |
 | `GET /api/whatsapp/templates?customerId=` · `POST {customerId,templateId,params,requestId}` | 已审核文字模板清单，`fills` 是每个模板按客户资料填好的变量（值、来源、为什么空着）；还没联系过的广告线索另带 `suggestion`（推荐的首条模板）/ 发送模板 | 客户负责人或管理员 |
-| `GET /api/whatsapp/messages/[id]/media` | 打开一条客户消息里的文件；未保存过就先从服务商下载 | 客户负责人或管理员 |
+| `GET /api/whatsapp/messages/[id]/media` | 打开一条消息里的文件（客户发来的，或在手机上发出的）；未保存过就先从服务商下载 | 客户负责人或管理员 |
 | `POST /api/whatsapp/send`、`GET /api/whatsapp/messages`、`POST /api/whatsapp/media`、`POST /api/whatsapp/ai-reply` | 原有接口，由“仅管理员”改为按客户负责人限制 | 客户负责人或管理员 |
 
 `/api/whatsapp/media/[id]` 支持 `Range`（Safari 播放语音和视频需要），只有图片、音频、MP4/3GP 视频在页面内显示，其他类型（含 SVG、HTML、Office）一律作为下载，并加 `Content-Security-Policy: sandbox`。
@@ -107,6 +107,8 @@ Gupshup 的变量只有编号，系统看变量前后的文字判断它是什么
 | Meta Cloud API 直连 | 只有媒体 id | 用已连接账号的令牌经 Graph API 取下载地址 |
 
 后台下载失败时，有人打开这条消息会再试一次；仍然失败就显示“文件已过期或无法下载，请在手机 WhatsApp 中查看”。只从 Gupshup、Meta、WhatsApp 的域名下载，重定向必须保持 HTTPS 且不能指向 IP 地址；单个文件上限 32 MB。
+
+**在手机上发出的文件**（2026-10-30）。在手机 WhatsApp Business App 里发给客户的图片、视频、语音和文件，Meta 通过 `smb_message_echoes` 回传，和客户发来的文件一样处理：Webhook 处理完立即下载保存，聊天里显示图片或文件卡片。以前只下载客户发来的文件，手机上发的文件只存了文件名，气泡里又把「[文件] 文件名」当占位隐藏了，结果是一个只有时间的空气泡；已经入库的这类消息在打开会话时按需下载（Meta 的媒体 id 有效期内）。下载不了的文件至少显示文件名，不再是空气泡。
 
 ### 销售阶段、客户标签与待处理（2026-10-30）
 
