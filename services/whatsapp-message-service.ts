@@ -17,7 +17,9 @@ import { customerServiceWindow, requireOpenWindow } from './whatsapp-window-serv
 import { replayWhatsAppReceipts } from './whatsapp-webhook-service';
 
 export const sendMessageSchema = z.object({ customerId: z.string().min(1).max(191),
-  content: z.string().trim().max(4096).default(''), mediaAssetId: z.string().min(1).optional(), requestId: z.string().uuid() }).refine(v=>v.content.length>0||!!v.mediaAssetId,'请输入消息或选择附件');
+  content: z.string().trim().max(4096).default(''), mediaAssetId: z.string().min(1).optional(), requestId: z.string().uuid(),
+  // The Chinese the salesperson wrote before 译成客户语言 (or a quick reply's Chinese), kept with the message.
+  original: z.string().trim().max(4000).default('') }).refine(v=>v.content.length>0||!!v.mediaAssetId,'请输入消息或选择附件');
 export const messageSelect = { id: true, customerId: true, waMessageId: true, source: true, sourceMessageId: true, attachmentMetadata: true, content: true,
   mediaUrl: true, mimeType: true, fileName: true, sender: true, direction: true, messageType: true, status: true, sentAt: true, createdAt: true, updatedAt: true } as const;
 
@@ -40,7 +42,7 @@ export async function listWhatsAppMessages(customerId: string, user: Actor, befo
 }
 
 export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: string) {
-  const { customerId, content, requestId, mediaAssetId } = sendMessageSchema.parse(input);
+  const { customerId, content, requestId, mediaAssetId, original } = sendMessageSchema.parse(input);
   const customer = await accessible(customerId, user);
   const asset = mediaAssetId ? await db.mediaAsset.findFirst({where:{id:mediaAssetId,customerId}}) : null;
   if(mediaAssetId && !asset)throw new HttpError(404,'附件不存在或不属于此客户');
@@ -106,6 +108,7 @@ export async function sendWhatsAppMessage(input: unknown, user: Actor, origin?: 
     }
     throw error;
   }
+  if (original) await (await import('./message-translation-service')).keepOriginal(message.id, original).catch(() => undefined);
 
   let providerMessageId = '';
   try {

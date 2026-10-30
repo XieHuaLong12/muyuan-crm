@@ -349,3 +349,153 @@ audio.bos-chat-media{width:280px;max-width:100%;height:40px}
 .bos-chat-tag-picker{width:100%;min-width:240px}
 .bos .bos-chat-popover input:focus-visible{outline-width:2px;outline-offset:-2px}
 .bos-chat-meta .bos-chat-label{max-width:80px}
+
+/* 客户等级（2026-10-30）：头像就是等级。A 橙、B 蓝实心最显眼，C 浅绿、D 灰，没评级是虚线「未评」。颜色已核对对比度。 */
+.bos-chat-grade{box-sizing:border-box;font-weight:800;font-size:19px;letter-spacing:0}
+.bos-chat-grade.is-A{background:#c2410c;color:#fff}
+.bos-chat-grade.is-B{background:#1d5fc4;color:#fff}
+.bos-chat-grade.is-C{background:#dff3e6;color:#17603d;box-shadow:inset 0 0 0 1.5px #3f9a66}
+.bos-chat-grade.is-D{background:#ececec;color:#4a4a4a;box-shadow:inset 0 0 0 1.5px #d4d4d1}
+.bos-chat-grade.is-none{background:#fff;color:#4a4a4a;border:1.5px dashed #9aa79d;font-size:11px;font-weight:600}
+.bos-chat-grade.is-large{font-size:23px}.bos-chat-grade.is-large.is-none{font-size:13px}
+.bos-chat-grade.is-small{width:24px;height:24px;border-radius:7px;font-size:12px}
+.bos-chat-rail-item .bos-chat-grade{width:38px;height:38px;font-size:17px}.bos-chat-rail-item .bos-chat-grade.is-none{font-size:10px}
+.bos-chat-grade-follow{flex:none;padding:1px 7px;border-radius:6px;font-size:11px;line-height:16px;font-weight:700;white-space:nowrap}
+.bos-chat-grade-follow.is-A{background:#fdebe1;color:#9a3412}.bos-chat-grade-follow.is-B{background:#e3edfb;color:#1a4f9f}
+.bos-chat-grade-follow.is-C{background:#e7f4ec;color:#17603d}.bos-chat-grade-follow.is-D{background:#f0f0f0;color:#4a4a4a}
+.bos-chat-grade-control{position:relative;flex:none}
+.bos-chat .bos-chat-grade-control>button.bos-chat-grade{padding:0;border:0;cursor:pointer}
+.bos-chat .bos-chat-grade-control>button.bos-chat-grade.is-none{border:1.5px dashed #9aa79d}
+.bos-chat-grade-control>button:focus-visible{outline:2px solid #498b73;outline-offset:2px}
+.bos-chat-grade-dot{position:absolute;top:-4px;right:-4px;width:13px;height:13px;border-radius:50%;background:#c2410c;box-shadow:0 0 0 2px #fff;pointer-events:none}
+.bos-chat-grade-pop{position:absolute;top:50px;left:0;z-index:30;width:min(360px,calc(100vw - 32px));display:flex;flex-direction:column;gap:12px;padding:14px;background:#fff;border:1px solid #e3e8e1;border-radius:14px;box-shadow:0 18px 44px rgba(14,36,28,.18);color:#1d3328}
+.bos-chat-grade-suggest{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:#fdf3ec;border:1px solid #f3d6c3}
+.bos-chat-grade-suggest>div:first-child{display:flex;align-items:center;gap:8px;font-size:14px;color:#7c2d12}
+.bos-chat-grade-suggest p{margin:0;font-size:12px;line-height:1.6;color:#5b3a24}
+.bos-chat-grade-suggest .bos-chat-actions button.is-primary{background:#c2410c;border-color:#c2410c}
+.bos-chat-grade-facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 8px;margin:0;font-size:12px;line-height:1.6;color:#3d4a41}
+.bos-chat-grade-facts dt{color:#6b7d70}.bos-chat-grade-facts dd{margin:0}
+.bos-chat-grade-facts dd:first-of-type{grid-column:1/-1;font-size:14px;color:#1d1d1f}
+.bos-chat-grade-choices{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.bos-chat .bos-chat-grade-choices button{min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:0;border-radius:10px;background:#fff;color:#2c3a30;box-shadow:inset 0 0 0 1.5px #dfe5dd}
+.bos-chat-grade-choices strong{font-size:16px}.bos-chat-grade-choices small{font-size:11px}
+.bos-chat .bos-chat-grade-choices button[aria-checked=true].is-A{background:#c2410c;color:#fff;box-shadow:none}
+.bos-chat .bos-chat-grade-choices button[aria-checked=true].is-B{background:#1d5fc4;color:#fff;box-shadow:none}
+.bos-chat .bos-chat-grade-choices button[aria-checked=true].is-C{background:#dff3e6;color:#17603d;box-shadow:inset 0 0 0 1.5px #3f9a66}
+.bos-chat .bos-chat-grade-choices button[aria-checked=true].is-D{background:#ececec;color:#4a4a4a;box-shadow:inset 0 0 0 1.5px #b9b9b6}
+.bos-chat-grade-toast{position:absolute;top:50px;left:0;z-index:29;width:max-content;max-width:min(340px,calc(100vw - 32px))}
+.bos-chat-grade-filter{display:flex;align-items:center;gap:5px;padding:10px 16px 0;font-size:12px;color:#4a4a4f}
+.bos-chat-grade-filter>span{margin-right:2px}
+.bos-chat .bos-chat-grade-filter button{min-width:34px;height:30px;padding:0 7px;border:0;border-radius:9px;background:#fff;font-size:12px;font-weight:700}
+.bos-chat .bos-chat-grade-filter button.bos-chat-link{min-width:0;margin-left:auto;font-weight:500;background:transparent;color:#1d5c3f}
+.bos-chat-grade-filter button.is-A{color:#c2410c;box-shadow:inset 0 0 0 1.5px #c2410c}.bos-chat-grade-filter button.is-B{color:#1d5fc4;box-shadow:inset 0 0 0 1.5px #1d5fc4}
+.bos-chat-grade-filter button.is-C{color:#17603d;box-shadow:inset 0 0 0 1.5px #3f9a66}.bos-chat-grade-filter button.is-D{color:#4a4a4a;box-shadow:inset 0 0 0 1.5px #c9c9c6}
+.bos-chat-grade-filter button.is-none{color:#4a4a4a;box-shadow:inset 0 0 0 1.5px #b9c4b9}
+.bos-chat .bos-chat-grade-filter button[aria-pressed=true].is-A{background:#c2410c;color:#fff}
+.bos-chat .bos-chat-grade-filter button[aria-pressed=true].is-B{background:#1d5fc4;color:#fff}
+.bos-chat .bos-chat-grade-filter button[aria-pressed=true].is-C{background:#dff3e6}
+.bos-chat .bos-chat-grade-filter button[aria-pressed=true].is-D{background:#ececec}
+.bos-chat .bos-chat-grade-filter button[aria-pressed=true].is-none{background:#4a4a4a;color:#fff}
+
+/* 输入框可以调高度（2026-10-30）：打字自动变高，上沿横杠拖动（记在浏览器里），右上角放大写长消息。 */
+.bos-chat-resize{display:grid;place-items:center;width:100%;height:14px;margin:-6px 0 4px;padding:0;border:0;border-radius:6px;background:transparent;cursor:ns-resize;touch-action:none}
+.bos-chat-resize span{width:44px;height:4px;border-radius:2px;background:#c6cfc6;transition:background .16s}
+.bos-chat-resize:hover span,.bos-chat-resize.is-dragging span{background:#498b73}
+.bos-chat-resize.is-dragging{background:#e6efe7}
+.bos-chat-resize:focus-visible{outline:2px solid #498b73;outline-offset:1px}
+.bos-chat-input-box{position:relative;flex:1;min-width:0;display:flex}
+.bos-chat-input .bos-chat-input-box textarea{box-sizing:border-box;width:100%;max-height:none;min-height:64px;padding-right:44px;overflow-y:auto}
+.bos-chat .bos-chat-expand{position:absolute;top:7px;right:7px;display:grid;place-items:center;width:30px;height:30px;padding:0;border:0;border-radius:8px;background:#f1f4ef;color:#2c4535}
+.bos-chat .bos-chat-expand:hover,.bos-chat .bos-chat-expand[aria-pressed=true]{background:#e2ece4;color:#174b3b}
+
+/* 自动翻译（2026-10-30）：中文显示在原文下面；我们发出的消息下面是业务员写的中文。 */
+.bos-chat-translation{font-size:13px;line-height:1.6;color:#3d4a41}
+.bos-chat-bubble.is-out .bos-chat-translation{border-top-color:#b9d4c1;color:#2c4a37}
+.bos-chat-translation span{display:inline-block;margin-right:6px;padding:0 5px;border-radius:4px;background:#f0f1ee;color:#4a4a4f;font-size:10px;line-height:16px;vertical-align:1px}
+.bos-chat-bubble.is-out .bos-chat-translation span{background:#cfe6d6;color:#2c4a37}
+.bos-chat-translation.is-status{color:#6b7d70}
+.bos-chat .bos-chat-auto-translate{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 10px;border:1px solid #dfe5dd;border-radius:11px;background:#fff;color:#1d3328;font-size:12px;font-weight:600;white-space:nowrap}
+.bos-chat-auto-translate i{position:relative;width:30px;height:18px;border-radius:9px;background:#c9d0c8;transition:background .16s}
+.bos-chat-auto-translate i::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .16s}
+.bos-chat-auto-translate[aria-checked=true] i{background:#174b3b}
+.bos-chat-auto-translate[aria-checked=true] i::after{left:14px}
+.bos-chat-auto-translate:focus-visible{outline:2px solid #498b73;outline-offset:2px}
+@media(max-width:1100px){.bos-chat .bos-chat-auto-translate span{display:none}.bos-chat .bos-chat-auto-translate{padding:0 8px}}
+
+/* 输入框上方的面板（2026-10-30）：产品资料、常用回复。 */
+.bos-chat .bos-chat-chip[aria-expanded=true]{background:#174b3b;border-color:#174b3b;color:#fff}
+.bos-chat-panel{display:flex;flex-direction:column;gap:10px;margin:0 0 10px;padding:12px;border:1px solid #e2e8df;border-radius:14px;background:#fff;box-shadow:0 10px 28px rgba(14,36,28,.08)}
+.bos-chat-panel-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bos-chat-segments{display:flex;gap:3px;padding:3px;border-radius:10px;background:#f1f4ef}
+.bos-chat .bos-chat-segments button{height:30px;padding:0 11px;border:0;border-radius:8px;background:transparent;color:#4a4a4f;font-size:12px;white-space:nowrap}
+.bos-chat .bos-chat-segments button[aria-selected=true]{background:#fff;color:#164b3a;font-weight:700;box-shadow:0 1px 4px rgba(29,58,36,.12)}
+.bos-chat-panel-search{flex:1;min-width:160px;display:flex;align-items:center;gap:6px;height:36px;padding:0 10px;border:1px solid #e3e6e0;border-radius:10px;color:#84988a}
+.bos-chat-panel-search:focus-within{outline:2px solid #498b73;outline-offset:1px}
+.bos-chat-panel-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:13px;color:#1d3328}
+.bos-chat-panel-body{display:flex;flex-direction:column;gap:6px;max-height:min(300px,34vh);overflow:auto}
+.bos-chat-panel-note{margin:0;padding:8px 10px;border-radius:9px;background:#faf1e6;color:#85521b;font-size:12px;line-height:1.6}
+.bos-chat-panel-empty{margin:0;padding:18px 10px;text-align:center;font-size:12px;line-height:1.7;color:#4a4a4f}
+.bos-chat .bos-chat-pick-row{display:flex;align-items:center;gap:10px;min-height:50px;padding:6px 10px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1px #eef0ec;text-align:left;color:#1d1d1f}
+.bos-chat .bos-chat-pick-row[aria-pressed=true]{background:#f1f6f2;box-shadow:inset 0 0 0 1px #cfe2d5}
+.bos-chat-pick-row>span{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.bos-chat-pick-row strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bos-chat-pick-row small{font-size:11px;color:#4a4a4f}
+.bos-chat-pick-row em{flex:none;padding:2px 7px;border-radius:6px;background:#f0f1ee;color:#4a4a4a;font-size:11px;font-weight:700;font-style:normal}
+.bos-chat-pick-row em.is-match{background:#e1ecfb;color:#1c4f99}
+.bos-chat-check{display:grid;place-items:center;flex:none;width:18px;height:18px;border-radius:5px;background:#fff;color:#fff;box-shadow:inset 0 0 0 1.5px #b9c4b9}
+[aria-pressed=true]>.bos-chat-check{background:#164b3a;box-shadow:none}
+.bos-chat-file-badge{display:grid;place-items:center;flex:none;width:34px;height:40px;border-radius:6px;background:#fbe4e2;color:#9b2c25;font-size:10px;font-weight:800}
+.bos-chat-pick-product{display:flex;flex-direction:column;gap:6px}
+.bos-chat-pick-product>span{font-size:12px;color:#3d4a41}
+.bos-chat-pick-product>div{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+.bos-chat .bos-chat-pick-product button{position:relative;flex:none;width:96px;height:72px;padding:0;border:0;border-radius:10px;overflow:hidden;background:#eef0ec;box-shadow:inset 0 0 0 1px #e3e6e0}
+.bos-chat .bos-chat-pick-product button[aria-pressed=true]{box-shadow:0 0 0 2px #164b3a}
+.bos-chat-pick-product img{width:100%;height:100%;object-fit:cover}
+.bos-chat-pick-product .bos-chat-check{position:absolute;top:5px;right:5px}
+.bos-chat-pick-product small{position:absolute;left:5px;bottom:5px;padding:0 5px;border-radius:4px;background:rgba(255,255,255,.92);color:#2c4535;font-size:10px;line-height:16px}
+.bos-chat-panel-foot{display:flex;align-items:center;gap:10px;padding-top:10px;border-top:1px solid #eef0ec;font-size:13px;color:#1d3328;font-weight:600}
+.bos-chat-panel-foot>span{flex:none}
+.bos-chat-panel-foot label{flex:1;min-width:0}
+.bos-chat-panel-foot input{width:100%;height:36px;box-sizing:border-box;border:1px solid #e3e6e0;border-radius:10px;padding:0 10px;font:inherit;font-size:13px;font-weight:400;color:#1d3328}
+.bos-chat-panel-foot input:focus-visible{outline:2px solid #498b73;outline-offset:1px}
+.bos-chat .bos-chat-panel-send{display:inline-flex;align-items:center;gap:6px;flex:none;height:36px;padding:0 16px;border:0;border-radius:10px;background:#174b3b;color:#fff;font-size:13px;font-weight:600}
+.bos-chat .bos-chat-panel-send:disabled{background:#c9d2cb;cursor:not-allowed}
+.bos-chat-panel-tip{margin:0;font-size:11px;color:#6b7d70}
+.bos-chat-panel-tip a,.bos-chat-panel-head a{color:#1d5c3f}
+@media(max-width:760px){.bos-chat-panel-foot{flex-wrap:wrap}.bos-chat-panel-foot label{flex-basis:100%;order:3}.bos-chat-panel-body{max-height:40vh}}
+/* 常用回复 */
+.bos-chat-replies .bos-chat-panel-head>strong{font-size:14px}
+.bos-chat-replies .bos-chat-panel-head>small{font-size:11px;color:#6b7d70}
+.bos-chat-reply-cats{display:flex;flex-wrap:wrap;gap:6px}
+.bos-chat .bos-chat-reply-cats button{height:28px;padding:0 11px;border:1px solid #e3e6e0;border-radius:14px;background:#fff;color:#2c4535;font-size:12px}
+.bos-chat .bos-chat-reply-cats button[aria-selected=true]{background:#174b3b;border-color:#174b3b;color:#fff;font-weight:600}
+.bos-chat .bos-chat-reply{display:flex;flex-direction:column;align-items:flex-start;gap:5px;width:100%;padding:9px 12px;border:0;border-radius:10px;background:#fff;box-shadow:inset 0 0 0 1px #eef0ec;text-align:left;color:#1d1d1f}
+.bos-chat .bos-chat-reply[aria-selected=true]{background:#f1f6f2;box-shadow:inset 0 0 0 1px #cfe2d5}
+.bos-chat .bos-chat-reply:disabled{opacity:.55;cursor:not-allowed}
+.bos-chat-reply-head{display:flex;align-items:center;gap:6px;width:100%}
+.bos-chat-reply-head strong{font-size:13px}
+.bos-chat-reply-head em{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:5px;background:#f0f1ee;color:#4a4a4a;font-size:11px;font-style:normal}
+.bos-chat-reply-head em.is-top{background:#fff1d6;color:#7a4b00;font-weight:700}
+.bos-chat-reply-head small{margin-left:auto;font-size:11px;color:#1d5c3f;font-weight:600}
+.bos-chat-reply-text{font-size:13px;line-height:1.55;white-space:pre-wrap}
+.bos-chat-reply-zh{font-size:12px;line-height:1.5;color:#4a4a4f;white-space:pre-wrap}
+.bos-chat-reply mark{padding:0 3px;border-radius:4px;background:#fff1d6;color:#7a4b00;font-weight:600}
+.bos-chat-reply-missing{font-size:11px;color:#85521b}
+/* 顶部：名字优先；后面的小标签放得下几个显示几个，放不下的整个折到看不见的第二行，不会被挤成半截。
+   弹层里的说明可以换行（顶部的 p 是单行省略）。 */
+.bos-chat-thread-title>div{flex-wrap:wrap;align-content:flex-start;height:22px;overflow:hidden}
+.bos-chat-thread-title h2{flex:0 1 auto;min-width:0;line-height:22px}
+.bos-chat-thread-title>div>:not(h2){flex:none}
+.bos-chat-grade-pop p{margin:0;white-space:normal;overflow:visible;font-size:12px;line-height:1.6}
+.bos-chat-grade-pop .bos-chat-grade-suggest p{color:#5b3a24}
+.bos-chat-grade-toast span{white-space:nowrap}
+@media(max-width:1680px){.bos-chat .bos-chat-auto-translate span{display:none}.bos-chat .bos-chat-auto-translate{padding:0 8px}}
+.bos-chat-panel-head{flex-wrap:nowrap}
+.bos-chat-panel-search{min-width:0}
+@media(max-width:760px){.bos-chat-panel-head{flex-wrap:wrap}.bos-chat-panel-search{flex-basis:100%;order:3}}
+.bos .bos-chat-panel-search input:focus-visible{outline:none}
+@media(max-width:760px){.bos-chat .bos-chat-auto-translate svg{display:none}.bos-chat .bos-chat-auto-translate{padding:0 7px}}
+/* 手机：等级弹层和提示贴着屏幕两边，不跟着头像溢出右边。 */
+@media(max-width:760px){.bos-chat-grade-pop,.bos-chat-grade-toast{position:fixed;left:16px;right:16px;top:132px;width:auto;max-width:none}}
+/* 顶部按钮多了「自动翻译」：窄一些的屏幕上「标为待处理」只显示旗子图标，把位置留给客户名字。 */
+@media(max-width:1680px){.bos-chat .bos-chat-mark-button{width:38px;padding:0;justify-content:center}.bos-chat .bos-chat-mark-button span{display:none}}

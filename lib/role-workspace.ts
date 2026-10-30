@@ -47,6 +47,7 @@ const adminSections: readonly NavSection[] = [
     { href: '/products', label: '产品库' },
     { href: '/products/quotes', label: '报价单' },
     { href: '/products/freight', label: '运费库' },
+    { href: '/products/materials', label: '资料文件' },
     { href: '/products/margin', label: '利润' },
   ] },
   { href: '/analytics/ads', label: '广告与线索', icon: 'growth', keepPeriod: true, tabs: [
@@ -82,6 +83,7 @@ const salesSections: readonly NavSection[] = [
     { href: '/products', label: '产品库' },
     { href: '/products/quotes', label: '报价单' },
     { href: '/products/freight', label: '运费库' },
+    { href: '/products/materials', label: '资料文件' },
   ] },
   { href: '/orders', label: '我的订单', icon: 'orders' },
   { href: '/sales/performance', label: '我的业绩', icon: 'performance' },

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { retryTransaction } from '@/lib/transaction-retry';
-import { DELETED_SCRIPT, GRADES, MATCH_TYPES, OVERRIDE_REASONS, POSITION_LABELS, QUALITIES, SIGNALS, gradeEnum, matchTypeEnum, qualityEnum, signalEnum, type Position } from '@/lib/outreach';
+import { DELETED_SCRIPT, GRADES, MATCH_TYPES, OVERRIDE_REASONS, POSITION_LABELS, QUALITIES, SIGNALS, matchTypeEnum, qualityEnum, signalEnum, type Position } from '@/lib/outreach';
 import { lockCustomer } from './contact-identity-service';
 import { reconcileOutreach } from './outreach-engine-service';
 import { currentCustomers } from '@/lib/customer-group';
@@ -127,42 +127,74 @@ export async function correctReply(replyId: string, input: unknown, user: Actor)
   return { id: replyId, changed: changes.length };
 }
 
+/** What a grade change replaced, so 撤销 can put it back: the earlier grade with its source, and the suggestions it settled. */
+const undoSnapshot = z.object({
+  grade: z.enum(['', 'A', 'B', 'C', 'D']), source: z.enum(['', 'AI', 'RULE', 'HUMAN']), reason: z.string().max(500), gradedAt: z.string().datetime().nullable(),
+  // The grade the change set: undo only applies while it is still the customer's grade.
+  setGrade: z.enum(['A', 'B', 'C', 'D']),
+  replyIds: z.array(id).max(20),
+});
+export type GradeUndo = z.infer<typeof undoSnapshot>;
+/** How long 撤销 stays possible after a change (the chat shows it for a few seconds; this leaves room for a slow network). */
+export const GRADE_UNDO_MS = 10 * 60_000;
+
 const gradeDecision = z.discriminatedUnion('action', [
   z.object({ action: z.literal('ACCEPT'), replyId: id }),
   z.object({ action: z.literal('DISMISS'), replyId: id, reason: reasonEnum, note }),
-  z.object({ action: z.literal('SET'), customerId: id, grade: gradeEnum, note }),
+  // People may also mark a lead D (无效); automatic grading never overwrites a grade a person set.
+  z.object({ action: z.literal('SET'), customerId: id, grade: z.enum(['A', 'B', 'C', 'D']), note }),
+  z.object({ action: z.literal('UNDO'), customerId: id, undo: undoSnapshot }),
 ]);
 
 /**
  * Grades: accept DeepSeek's suggestion with one click, dismiss it (logged as a correction of the AI), or set the grade
- * by hand. A grade a person set (leadGradeSource HUMAN) is not overwritten by later automatic grading.
+ * by hand. A grade a person set (leadGradeSource HUMAN) is not overwritten by later automatic grading. Accepting and
+ * setting return `undo`, which puts the earlier grade and the settled suggestions back for a few minutes.
  */
 export async function decideGrade(input: unknown, user: Actor) {
   const v = gradeDecision.parse(input);
-  const reply = v.action === 'SET' ? null : await db.outreachReply.findUnique({ where: { id: v.replyId } });
-  if (v.action !== 'SET' && (!reply || reply.gradeSuggestionStatus !== 'PENDING')) throw new HttpError(409, '这条等级建议已处理过');
-  const customerId = v.action === 'SET' ? v.customerId : reply!.customerId;
+  const reply = v.action === 'ACCEPT' || v.action === 'DISMISS' ? await db.outreachReply.findUnique({ where: { id: v.replyId } }) : null;
+  if ((v.action === 'ACCEPT' || v.action === 'DISMISS') && (!reply || reply.gradeSuggestionStatus !== 'PENDING')) throw new HttpError(409, '这条等级建议已处理过');
+  const customerId = v.action === 'SET' || v.action === 'UNDO' ? v.customerId : reply!.customerId;
   await visibleCustomer(customerId, user);
   const now = new Date();
-  await retryTransaction(() => db.$transaction(async tx => {
+  const undo = await retryTransaction(() => db.$transaction(async (tx): Promise<GradeUndo | null> => {
     await lockCustomer(tx, customerId);
-    const current = await tx.customer.findUniqueOrThrow({ where: { id: customerId }, select: { updatedAt: true, leadGrade: true } });
+    const current = await tx.customer.findUniqueOrThrow({ where: { id: customerId }, select: { updatedAt: true, leadGrade: true, leadGradeSource: true, leadGradeReason: true, leadGradedAt: true } });
+    const before = { grade: (current.leadGrade || '') as GradeUndo['grade'], source: (['AI', 'RULE', 'HUMAN'].includes(current.leadGradeSource) ? current.leadGradeSource : '') as GradeUndo['source'],
+      reason: current.leadGradeReason, gradedAt: current.leadGradedAt?.toISOString() ?? null };
     const setGrade = (grade: string, why: string) => tx.customer.update({ where: { id: customerId }, data: {
       leadGrade: grade, leadGradeSource: 'HUMAN', leadGradeReason: why.slice(0, 500), leadGradedAt: now, updatedAt: current.updatedAt } });
     if (v.action === 'ACCEPT') {
       await setGrade(reply!.gradeSuggestion, `${user.name} 确认 AI 根据客户回复给出的建议（原 ${current.leadGrade || '未评级'}）：${reply!.reason}`);
       await tx.outreachReply.update({ where: { id: reply!.id }, data: { gradeSuggestionStatus: 'ACCEPTED' } });
-    } else if (v.action === 'DISMISS') {
+      return { ...before, setGrade: reply!.gradeSuggestion as GradeUndo['setGrade'], replyIds: [reply!.id] };
+    }
+    if (v.action === 'DISMISS') {
       await tx.outreachOverride.create({ data: { replyId: reply!.id, field: 'GRADE', oldValue: reply!.gradeSuggestion, newValue: current.leadGrade, reason: v.reason, note: v.note, aiOriginal: true, actorId: user.id } });
       await tx.outreachReply.update({ where: { id: reply!.id }, data: { gradeSuggestionStatus: 'DISMISSED' } });
-    } else {
-      await setGrade(v.grade, `${user.name} 手动调整（原 ${current.leadGrade || '未评级'}）${v.note ? `：${v.note}` : ''}`);
-      // A pending suggestion is settled by the manual grade: accepted when it says the same, dismissed otherwise.
-      await tx.outreachReply.updateMany({ where: { customerId, gradeSuggestionStatus: 'PENDING', gradeSuggestion: v.grade }, data: { gradeSuggestionStatus: 'ACCEPTED' } });
-      await tx.outreachReply.updateMany({ where: { customerId, gradeSuggestionStatus: 'PENDING' }, data: { gradeSuggestionStatus: 'DISMISSED' } });
+      return null;
     }
+    if (v.action === 'UNDO') {
+      const u = v.undo;
+      // Only while the change being undone is still in place and recent: a later change or automatic grade wins.
+      if (current.leadGrade !== u.setGrade || current.leadGradeSource !== 'HUMAN' || !current.leadGradedAt || now.getTime() - current.leadGradedAt.getTime() > GRADE_UNDO_MS)
+        throw new HttpError(409, '等级已经又改过或超过撤销时间，请直接重新选择');
+      await tx.customer.update({ where: { id: customerId }, data: { leadGrade: u.grade, leadGradeSource: u.source, leadGradeReason: u.reason,
+        leadGradedAt: u.gradedAt ? new Date(u.gradedAt) : null, updatedAt: current.updatedAt } });
+      if (u.replyIds.length) await tx.outreachReply.updateMany({ where: { id: { in: u.replyIds }, customerId, gradeSuggestionStatus: { in: ['ACCEPTED', 'DISMISSED'] } },
+        data: { gradeSuggestionStatus: 'PENDING' } });
+      return null;
+    }
+    await setGrade(v.grade, `${user.name} 手动调整（原 ${current.leadGrade || '未评级'}）${v.note ? `：${v.note}` : ''}`);
+    // A pending suggestion is settled by the manual grade: accepted when it says the same, dismissed otherwise.
+    const pending = await tx.outreachReply.findMany({ where: { customerId, gradeSuggestionStatus: 'PENDING' }, select: { id: true }, take: 20 });
+    await tx.outreachReply.updateMany({ where: { customerId, gradeSuggestionStatus: 'PENDING', gradeSuggestion: v.grade }, data: { gradeSuggestionStatus: 'ACCEPTED' } });
+    await tx.outreachReply.updateMany({ where: { customerId, gradeSuggestionStatus: 'PENDING' }, data: { gradeSuggestionStatus: 'DISMISSED' } });
+    return { ...before, setGrade: v.grade, replyIds: pending.map(r => r.id) };
   }));
-  return { customerId, grade: v.action === 'SET' ? v.grade : v.action === 'ACCEPT' ? reply!.gradeSuggestion : null };
+  const grade = v.action === 'SET' ? v.grade : v.action === 'ACCEPT' ? reply!.gradeSuggestion : v.action === 'UNDO' ? v.undo.grade : null;
+  return { customerId, grade, undo };
 }
 
 export const REVIEW_LABELS = { qualities: QUALITIES, signals: SIGNALS, matchTypes: MATCH_TYPES, reasons: OVERRIDE_REASONS, grades: GRADES };

@@ -37,11 +37,11 @@ export function todoWhere(now: Date, endOfToday: Date): Prisma.CustomerWhereInpu
   ] };
 }
 
-export type TodoQuery = { q: string; ownerId: string; tagId: string; page: number };
+export type TodoQuery = { q: string; ownerId: string; tagId: string; grades: string; page: number };
 
 const select = {
   id: true, name: true, companyName: true, country: true, countryCode: true, stage: true, owner: { select: { id: true, name: true } },
-  leadGrade: true, purchaseType: true, aiIntent: true, aiScore: true, bestReplyQuality: true, inquiryAt: true, createdAt: true,
+  leadGrade: true, leadGradeReason: true, purchaseType: true, aiIntent: true, aiScore: true, bestReplyQuality: true, inquiryAt: true, createdAt: true,
   firstContactDueAt: true, firstContactAt: true, contactedAt: true, lastInboundAt: true, lastOutboundAt: true, lastFollowUpAt: true, lastContactAt: true, nextFollowUpAt: true,
   pendingMark: { select: { note: true, dueAt: true } },
   whatsappMessages: { orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { content: true, direction: true, sentAt: true, messageType: true, fileName: true } },
@@ -52,6 +52,7 @@ export type TodoItem = {
   group: TodoGroup; groupLabel: string; reasons: string[]; marked: boolean;
   lastMessage: { preview: string; direction: string; sentAt: Date } | null;
   tags: { id: string; name: string; color: string }[];
+  grade: string; gradeReason: string;
 };
 
 /** The 待处理 list: grouped (已超时, 今天要做, 我标记的) and, within a group, in 今日跟进's order. */
@@ -82,7 +83,8 @@ export async function todoCustomers(user: Actor, scopeWhere: Prisma.CustomerWher
     const last = c.whatsappMessages[0];
     return { id: c.id, name: c.name, companyName: c.companyName, country: c.country, countryCode: c.countryCode, stage: c.stage, owner: c.owner,
       group, groupLabel: TODO_GROUPS[group], reasons, marked: !!c.pendingMark,
-      lastMessage: last ? { preview: messagePreview(last), direction: last.direction, sentAt: last.sentAt } : null, tags: tags.get(c.id) ?? [] };
+      lastMessage: last ? { preview: messagePreview(last), direction: last.direction, sentAt: last.sentAt } : null, tags: tags.get(c.id) ?? [],
+      grade: c.leadGrade, gradeReason: c.leadGradeReason };
   });
   return { todo, hasMore: ranked.length > skip + pageSize };
 }

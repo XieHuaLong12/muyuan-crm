@@ -133,6 +133,8 @@ model Customer {
  outreachAssignments OutreachAssignment[]
  tagLinks CustomerTagLink[]
  pendingMark PendingMark?
+ // 消息页「自动翻译」开关：开着时客户的外语消息自动带中文（存在 MessageTranslation）；关掉后点「翻译」才翻。
+ autoTranslate Boolean @default(true)
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -327,9 +329,12 @@ model WhatsAppMessage {
  sentById String?
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
+ translation MessageTranslation?
  @@index([conversationId, sentAt, id])
  @@index([customerId, sentAt])
  @@index([waId])
+ // 产品资料「最近发过」：自己最近发过的文件
+ @@index([sentById, sentAt])
 }
 
 model WhatsAppSyncToken {
@@ -1719,4 +1724,57 @@ model PendingMark {
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
  @@index([dueAt])
+}
+
+// 消息的中文：客户外语消息的机器翻译（MACHINE），或我们用「译成客户语言」发出时业务员写的中文（ORIGINAL）。
+// 每条消息最多一条，翻过就存下来，换电脑、换同事打开不再重新翻。
+model MessageTranslation {
+ id String @id @default(cuid())
+ messageId String @unique
+ message WhatsAppMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+ // MACHINE | ORIGINAL
+ kind String @db.VarChar(8)
+ text String @db.Text
+ createdAt DateTime @default(now())
+}
+
+// 资料库：管理员上传一次的产品目录、规格表、工厂介绍，聊天里直接选了发。文件在媒体存储目录的 materials/ 下。
+model SalesMaterial {
+ id String @id @default(cuid())
+ title String @db.VarChar(120)
+ // CATALOG 产品目录 | SPEC 规格表 | FACTORY 工厂介绍 | OTHER 其他
+ category String @default("CATALOG") @db.VarChar(12)
+ // 文件语言 en | fr | ar；空 = 通用
+ language String @default("") @db.VarChar(4)
+ // 适用产品线（lib/constants.ts FIRST_TOUCH_PRODUCT_LINES）；空 = 全系列
+ productLine String @default("") @db.VarChar(40)
+ fileName String @db.VarChar(191)
+ mimeType String @db.VarChar(100)
+ size Int
+ storageKey String @unique @db.VarChar(191)
+ sort Int @default(0)
+ createdBy String
+ deletedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([deletedAt, category])
+}
+
+// 常用回复：ownerId 为空是公司共用（管理员维护），否则是这个人自己的。点了只填进输入框，不直接发。
+model QuickReply {
+ id String @id @default(cuid())
+ ownerId String?
+ title String @db.VarChar(60)
+ // LEAD_TIME 交期 | MOQ 起订量 | SHIPPING 运费 | PAYMENT 付款 | INFO 要资料 | OTHER 其他
+ category String @default("OTHER") @db.VarChar(12)
+ // 中文原文（必填），以及各语言版本 {"en":"…","fr":"…","ar":"…"}
+ zh String @db.Text
+ bodies Json
+ useCount Int @default(0)
+ lastUsedAt DateTime?
+ createdBy String
+ deletedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([ownerId, deletedAt])
 }

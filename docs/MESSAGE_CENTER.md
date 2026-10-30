@@ -128,6 +128,22 @@ Gupshup 的变量只有编号，系统看变量前后的文字判断它是什么
 
 数据库：新增 `CustomerTag`、`CustomerTagLink`、`PendingMark` 三张表（迁移 `20261030090000_customer_tags_and_pending`，只加表）。接口：`GET /api/inbox/tags`，`PATCH|DELETE /api/inbox/tags/:id`（管理员），`POST|DELETE /api/inbox/customer-tags`，`POST|DELETE /api/inbox/todo-mark`；`GET /api/inbox/conversations` 增加 `filter=todo` 和 `tagId`，返回里多了 `todo`、`todoTotal` 和每行的 `tags`；`GET /api/inbox/thread` 多了 `tags`、`pendingMark`、阶段变化的 `by`。
 
+### 客户等级、可调输入框、自动翻译、产品资料、常用回复（2026-10-30）
+
+设计稿 ⑧–⑫ 经确认后一起实现。
+
+**头像就是等级**（`components/messages/Grade.tsx`）。客户没有头像，会话列表、待首联、待处理、收起后的头像栏、聊天顶部和右侧资料里的头像都换成等级：A 橙、B 蓝（实心）、C 浅绿、D 灰，没评级是虚线「未评」（颜色核对过对比度）。鼠标停在列表头像上显示等级和依据（`leadGradeReason`），点头像仍然是打开聊天。待首联原来的「A 级」小标签去掉。聊天顶部名字后面加「B 类 · 优先跟进」。点顶部头像弹出：现在的等级、依据、谁定的（AI 判定 / 规则判定 / 人工调整 + 时间），A/B/C/D 点一下就改（记为人工调整，自动评级不再覆盖；可以改成 D），改完 6 秒内可以「撤销」，撤销把原等级、来源、理由、评级时间原样放回。AI 根据客户回复给出的等级建议（`OutreachReply.gradeSuggestion` 待处理）在头像右上角显示小圆点，弹层里直接「接受」或「不改」（不改记为 AI 判错，和人工复核页同一条记录）；接受和手动改都能撤销，撤销会把被处理掉的建议恢复成待处理。列表上方加「等级 A B C D 未评」筛选，可多选，和负责人、标签、待处理、待首联一起用。接口：`POST /api/outreach/grade` 的 `SET` 允许 D，`SET` / `ACCEPT` 返回 `undo`，新增 `UNDO`（只在这次改动仍是当前等级且 10 分钟内有效）；`GET /api/inbox/conversations` 增加 `grades=A,B,none`，每行多 `grade`、`gradeReason`；`GET /api/inbox/thread` 多 `gradeSuggestion` 和等级来源、时间。
+
+**输入框可以调高度**（`components/messages/Composer.tsx`）。打字自动变高，最多约 8 行，再多在框里滚动，发出后回到原高度。输入框上沿有一条横杠，按住上下拖调高度（最矮两行，最高到聊天区一半多），也可以聚焦后用上下方向键调；高度记在这台电脑的浏览器里，双击横杠恢复默认。右上角「放大」占聊天区大半，适合写长消息：放大时 Enter 换行、⌘ / Ctrl + Enter 发送，再点一下还原。手机上不显示横杠（拖动容易和滚动冲突）。
+
+**自动翻译**（`services/message-translation-service.ts`、`lib/message-translation.ts`）。聊天顶部「自动翻译」开关按客户保存（`Customer.autoTranslate`，默认开）。开着时，聊天里还没有中文的外语消息（每次最多 10 条，最新的先翻）自动翻成中文，显示在原文下面，标「机器翻译」；翻过的存进 `MessageTranslation`，换电脑、换同事打开都不再重新翻。中文、纯数字、表情、图片占位和文件名不翻。用「译成客户语言」或常用回复发出的消息，下面保存发送时的中文（标「你写的中文」，`POST /api/whatsapp/send` 新增可选 `original`）；手机上直接发的外语消息也会机器翻译。关掉开关后回到原来的样子：每条客户消息旁边一个「翻译」，点了才翻（结果同样保存）。翻译先用线索导入里配置的翻译服务，没有或失败时用 DeepSeek；两者都不可用时不再自动请求，显示「翻译」按钮。接口：`POST /api/inbox/translate-batch`、`PATCH /api/inbox/auto-translate`，`POST /api/inbox/translate` 改为先查已保存的译文。机器翻译只帮助看懂，报价、数量以原文为准。
+
+**产品资料**（`services/sales-material-service.ts`、`components/messages/Materials.tsx`、`components/bos/MaterialLibrary.tsx`）。输入框上方「产品资料」打开面板，三栏：**目录与资料**（资料库文件，客户语言的排最前，然后是通用、英语，其余在后；客户语言按客户档案的语言，没有时按国家判断法语 / 阿语，否则英语）、**产品图**（产品库里已上传的产品图，按型号或名字搜）、**最近发过**（自己最近 60 天在 BOS 发过的文件和图片）。可以勾几个，附一句话，点「一起发送」：选中的文件先复制成这位客户的附件（`MediaAsset`），再按顺序一条条走正常发送（24 小时窗口、退订、话术限制、记录都照旧），那句话跟第一个文件一起发。窗口关闭时面板提示先发模板，不能发送。资料库在「产品库 · 资料文件」（`/products/materials`）：管理员上传 PDF、图片、Office 文档（最大 20 MB），填名称、分类（产品目录 / 规格表 / 工厂介绍 / 其他）、语言（英 / 法 / 阿 / 通用）、适用产品线；「换新版」替换文件后大家发的都是新版，删除只是从资料库移除（已发给客户的文件不受影响）。销售可以查看、下载。文件存在媒体目录（`MEDIA_STORAGE_DIR`）的 `materials/` 下。接口：`GET|POST /api/inbox/materials`，`GET|POST /api/materials`，`PATCH|PUT|DELETE /api/materials/:id`，`GET /api/materials/:id/file`。
+
+**常用回复**（`services/quick-reply-service.ts`、`lib/quick-replies.ts`、`components/messages/QuickReplies.tsx`、`/messages/replies`）。输入框上方「常用回复」，或在输入框第一个字打「/」再打关键词（如 /交期、/运费）直接搜。分「公司共用」（管理员维护）和「我的」，按分类（交期、起订量、运费、付款、要资料、其他）筛选；用得最多的 3 条标「最常用」排在前面。每条显示客户语言的版本、下面一行中文意思；`{客户名}`、`{我的名字}` 自动换成客户名字（取名）和自己的名字。**点了（或 ↑↓ 选中按回车）只填进输入框，不会直接发**；打「/」搜索时回车只会选回复，永远不会把「/…」发出去。客户语言没有对应版本时填英语版并提示，连英语版也没有时填中文、提示先「译成客户语言」。填入的中文作为原文保存，发送后显示在消息下面。管理页里写中文后可以「AI 生成各语言初稿」（DeepSeek，只填空着的语言），人看过改好再保存。**常用回复里不能放价格**（带货币的金额，如 $120、80 元、EUR 50），保存时会被拒：价格、折扣一律用报价单。接口：`GET|POST /api/quick-replies`，`PATCH|DELETE /api/quick-replies/:id`，`POST /api/quick-replies/:id/use`，`POST /api/quick-replies/draft`。
+
+数据库：迁移 `20261030120000_chat_translate_materials_replies` 新增 `MessageTranslation`、`SalesMaterial`、`QuickReply` 三张表和 `Customer.autoTranslate`（默认 true），只加不改。会话列表在聊天里改了东西后刷新时，总是按当前的筛选取数，且只采用最新一次请求的结果（以前先发出、后返回的刷新可能把筛选后的列表覆盖回去）。
+
 ## 7. 上线与验证
 
 ### 上线前需要的配置

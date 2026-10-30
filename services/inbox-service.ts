@@ -19,6 +19,7 @@ import { messagePreview } from '@/lib/message-preview';
 import type { CustomerTagView } from '@/lib/customer-tags';
 import { tagsOf } from './customer-tag-service';
 import { todoCount, todoCustomers, type TodoItem } from './todo-service';
+import { storedTranslations } from './message-translation-service';
 
 /**
  * Message center: one conversation per customer with WhatsApp messages, newest first.
@@ -45,8 +46,31 @@ export const inboxQuery = z.object({
   ownerId: z.string().trim().max(191).default(''),
   // Only customers carrying this tag, on every filter.
   tagId: z.string().trim().max(191).default(''),
+  // Customer grades to show, comma separated: A, B, C, D and none (未评). Empty = every grade.
+  grades: z.string().trim().max(40).default('').transform(value => value.split(',').filter(isGradeKey).join(',')),
   page: z.coerce.number().int().min(1).max(1000).default(1),
 });
+
+/** Grade filter keys: the four lead grades, and none for customers without one. */
+export const GRADE_KEYS = ['A', 'B', 'C', 'D', 'none'] as const;
+type GradeKey = (typeof GRADE_KEYS)[number];
+const isGradeKey = (value: string): value is GradeKey => (GRADE_KEYS as readonly string[]).includes(value);
+const LETTERS = ['A', 'B', 'C', 'D'];
+const gradeKeys = (grades: string) => grades.split(',').filter(isGradeKey);
+
+function gradeCondition(grades: string) {
+  const keys = gradeKeys(grades);
+  if (!keys.length) return Prisma.empty;
+  const letters = keys.filter(k => k !== 'none'), none = keys.includes('none');
+  const parts = [...(letters.length ? [Prisma.sql`c.leadGrade IN (${Prisma.join(letters)})`] : []), ...(none ? [Prisma.sql`c.leadGrade NOT IN (${Prisma.join(LETTERS)})`] : [])];
+  return Prisma.sql`AND (${Prisma.join(parts, ' OR ')})`;
+}
+function gradeWhere(grades: string): Prisma.CustomerWhereInput {
+  const keys = gradeKeys(grades);
+  if (!keys.length) return {};
+  const letters = keys.filter(k => k !== 'none');
+  return { OR: [...(letters.length ? [{ leadGrade: { in: letters } }] : []), ...(keys.includes('none') ? [{ leadGrade: { notIn: LETTERS } }] : [])] };
+}
 
 type Row = { customerId: string; lastMessageAt: Date; lastOutboundAt: Date | null; unread: bigint | number };
 
@@ -71,7 +95,7 @@ function conversationRows(user: Actor, query: z.infer<typeof inboxQuery>, page: 
     JOIN Customer c ON c.id = t.customerId
     LEFT JOIN WhatsAppReadState r ON r.customerId = t.customerId AND r.userId = ${user.id}
     ${unreadJoin('LEFT')}
-    WHERE c.deletedAt IS NULL ${ownerCondition(user, query.ownerId)} ${search} ${tag} ${awaiting}
+    WHERE c.deletedAt IS NULL ${ownerCondition(user, query.ownerId)} ${search} ${tag} ${gradeCondition(query.grades)} ${awaiting}
     GROUP BY t.customerId, t.lastMessageAt, t.lastOutboundAt
     ${unread}
     ORDER BY t.lastMessageAt DESC, t.customerId ASC
@@ -127,11 +151,13 @@ export type InboxConversation = {
   lastMessage: { preview: string; direction: string; status: string } | null;
   window: { status: 'OPEN' | 'CLOSED' | 'UNKNOWN'; expiresAt: Date | null };
   tags: CustomerTagView[];
+  /** A/B/C/D or empty, and why (shown when the pointer rests on the avatar). */
+  grade: string; gradeReason: string;
 };
 export type UnmatchedNumber = { key: string; peerPhone: string | null; peerName: string; lastMessage: string; lastMessageAt: Date; reason: string; count: number };
 export type PendingCustomer = { id: string; name: string; companyName: string; country: string; countryCode: string; source: string; leadGrade: string;
   purchaseType: string; productInterest: string; quantity: number | null; owner: { id: string; name: string }; assignedAt: Date | null; firstContactDueAt: Date | null;
-  tags: CustomerTagView[] };
+  tags: CustomerTagView[]; gradeReason: string };
 export type InboxPage = { query: z.infer<typeof inboxQuery>; conversations: InboxConversation[]; pending: PendingCustomer[]; pendingTotal: number;
   todo: TodoItem[]; todoTotal: number; hasMore: boolean; unmatchedTotal: number; numbers: UnmatchedNumber[]; sales: { id: string; name: string; role: string }[] };
 
@@ -145,7 +171,7 @@ function ownerWhere(user: Actor, ownerId: string): Prisma.CustomerWhereInput {
 function listWhere(user: Actor, query: z.infer<typeof inboxQuery>): Prisma.CustomerWhereInput {
   const search: Prisma.CustomerWhereInput = query.q ? { OR: [{ name: { contains: query.q } }, { companyName: { contains: query.q } }, { country: { contains: query.q } },
     { whatsapp: { contains: query.q } }, { phone: { contains: query.q } }, { tagLinks: { some: { tag: { name: { contains: query.q } } } } }] } : {};
-  return { AND: [scope(user), ownerWhere(user, query.ownerId), search, query.tagId ? { tagLinks: { some: { tagId: query.tagId } } } : {}] };
+  return { AND: [scope(user), ownerWhere(user, query.ownerId), search, query.tagId ? { tagLinks: { some: { tagId: query.tagId } } } : {}, gradeWhere(query.grades)] };
 }
 
 /** 待首联: the work queue's "new assignment, not contacted yet" customers, so the number matches 今日工作 and the top bar. */
@@ -155,7 +181,7 @@ const PENDING_LIMIT = 500;
 /** Pending customers ranked like 今日工作 (late first, then good forms and soon deadlines), one page at a time. */
 async function pendingCustomers(user: Actor, query: z.infer<typeof inboxQuery>, now: Date) {
   const rows = await db.customer.findMany({ where: { AND: [listWhere(user, query), queueFilters(now).new] }, orderBy: [{ firstContactDueAt: 'asc' }, { id: 'asc' }], take: PENDING_LIMIT,
-    select: { id: true, name: true, companyName: true, country: true, countryCode: true, source: true, leadGrade: true, purchaseType: true, productInterest: true, quantity: true,
+    select: { id: true, name: true, companyName: true, country: true, countryCode: true, source: true, leadGrade: true, leadGradeReason: true, purchaseType: true, productInterest: true, quantity: true,
       owner: { select: { id: true, name: true } }, assignedAt: true, firstContactDueAt: true, aiIntent: true, aiScore: true, lastInboundAt: true, lastContactAt: true } });
   const ranked = rows.map(c => ({ c, score: workPriority({ deadline: c.firstContactDueAt, firstContactPending: true, leadGrade: c.leadGrade, purchaseType: c.purchaseType,
     aiIntent: c.aiIntent, aiScore: c.aiScore, lastInboundAt: c.lastInboundAt, lastOutboundAt: null, lastFollowUpAt: null, lastContactAt: c.lastContactAt, staleQuoteSentAt: null }, now).score }))
@@ -164,7 +190,7 @@ async function pendingCustomers(user: Actor, query: z.infer<typeof inboxQuery>, 
   const tags = await tagsOf(shown.map(({ c }) => c.id));
   const pending = shown.map(({ c }): PendingCustomer => ({ id: c.id, name: c.name, companyName: c.companyName, country: c.country,
     countryCode: c.countryCode, source: c.source, leadGrade: c.leadGrade, purchaseType: c.purchaseType, productInterest: c.productInterest, quantity: c.quantity,
-    owner: c.owner, assignedAt: c.assignedAt, firstContactDueAt: c.firstContactDueAt, tags: tags.get(c.id) ?? [] }));
+    owner: c.owner, assignedAt: c.assignedAt, firstContactDueAt: c.firstContactDueAt, tags: tags.get(c.id) ?? [], gradeReason: c.leadGradeReason }));
   return { pending, hasMore: ranked.length > skip + PAGE_SIZE };
 }
 
@@ -189,7 +215,7 @@ export async function inboxConversations(user: Actor, input: unknown): Promise<I
   const rows = await conversationRows(user, query, { take: PAGE_SIZE + 1, skip: (query.page - 1) * PAGE_SIZE });
   const page = rows.slice(0, PAGE_SIZE), ids = page.map(row => row.customerId);
   const [customers, live, tags] = await Promise.all([
-    ids.length ? db.customer.findMany({ where: { AND: [scope(user), { id: { in: ids } }] }, select: { id: true, name: true, companyName: true, country: true, countryCode: true, stage: true,
+    ids.length ? db.customer.findMany({ where: { AND: [scope(user), { id: { in: ids } }] }, select: { id: true, name: true, companyName: true, country: true, countryCode: true, stage: true, leadGrade: true, leadGradeReason: true,
       firstContactDueAt: true, firstContactAt: true, inquiryAt: true, createdAt: true, owner: { select: { id: true, name: true } },
       whatsappMessages: { orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], take: 1, select: { content: true, direction: true, messageType: true, status: true, fileName: true } } } }) : [],
     windows(ids),
@@ -207,7 +233,8 @@ export async function inboxConversations(user: Actor, input: unknown): Promise<I
       firstContactOverdue: !customer.firstContactAt && !!customer.firstContactDueAt && customer.firstContactDueAt < now,
       legacy: isLegacyCustomer(customer),
       lastMessage: last ? { preview: messagePreview(last), direction: last.direction, status: last.status } : null,
-      window: { status: window.conversationWindowStatus, expiresAt: window.conversationWindowExpiresAt }, tags: tags.get(customer.id) ?? [] }];
+      window: { status: window.conversationWindowStatus, expiresAt: window.conversationWindowExpiresAt }, tags: tags.get(customer.id) ?? [],
+      grade: customer.leadGrade, gradeReason: customer.leadGradeReason }];
   });
   const unmatched = user.role === 'ADMIN' ? await db.whatsAppUnmatchedMessage.count({ where: { status: 'PENDING', provider: { in: ['gupshup', 'cloud_api'] } } }) : 0;
   return { query, conversations, ...totals, hasMore: rows.length > PAGE_SIZE, unmatchedTotal: unmatched, numbers: [], sales: await salesOptions(user) };
@@ -297,45 +324,34 @@ const threadQuery = z.object({ customerId: z.string().trim().min(1).max(191), be
 export async function inboxThread(user: Actor, input: unknown) {
   const { customerId, before } = threadQuery.parse(input);
   await accessible(customerId, user);
-  const [chat, customer, task, events, tags, mark, deals] = await Promise.all([
+  const [chat, customer, task, events, tags, mark, deals, suggestion] = await Promise.all([
     listWhatsAppMessages(customerId, user, before),
     db.customer.findUniqueOrThrow({ where: { id: customerId }, select: { id: true, name: true, companyName: true, country: true, countryCode: true, city: true,
       whatsapp: true, phone: true, phoneE164: true, language: true, stage: true, source: true, purchaseType: true, productInterest: true, productModel: true,
       quantity: true, inquiryAt: true, createdAt: true, whatsappOptInStatus: true, owner: { select: { id: true, name: true } },
-      aiSummary: true, aiNextAction: true, aiLastAnalyzedAt: true, leadGrade: true, leadGradeReason: true, invalidReason: true, currency: true } }),
+      aiSummary: true, aiNextAction: true, aiLastAnalyzedAt: true, leadGrade: true, leadGradeReason: true, leadGradeSource: true, leadGradedAt: true,
+      invalidReason: true, currency: true, autoTranslate: true } }),
     db.task.findFirst({ where: { customerId, deletedAt: null, status: { not: 'DONE' } }, orderBy: { dueDate: 'asc' }, select: { id: true, title: true, dueDate: true } }),
     db.stageHistory.findMany({ where: { customerId }, orderBy: { changedAt: 'desc' }, take: 4, select: { id: true, fromStage: true, toStage: true, changedAt: true, note: true, changedBy: true } }),
     tagsOf([customerId]),
     db.pendingMark.findUnique({ where: { customerId }, select: { note: true, dueAt: true } }),
     db.deal.count({ where: { customerId } }),
+    // DeepSeek's newest open grade suggestion from a customer reply (accepted or dismissed from the avatar).
+    db.outreachReply.findFirst({ where: { customerId, gradeSuggestionStatus: 'PENDING' }, orderBy: { receivedAt: 'desc' },
+      select: { id: true, gradeSuggestion: true, reason: true, receivedAt: true } }),
   ]);
   // Who changed the stage: a person's name, or 系统 for message facts and deals recorded automatically.
   const people = new Map((await db.user.findMany({ where: { id: { in: [...new Set(events.map(e => e.changedBy))] } }, select: { id: true, name: true } })).map(u => [u.id, u.name]));
   const stageEvents = events.map(({ changedBy, ...e }) => ({ ...e, by: e.note.startsWith('SYSTEM') ? '系统' : people.get(changedBy) ?? '—' }));
+  const translated = await storedTranslations(chat.messages.map(message => message.id));
   const messages = chat.messages.map(message => ({ id: message.id, direction: message.direction, messageType: message.messageType, content: message.content,
     status: message.status, source: message.source, sentAt: message.sentAt, fileName: message.fileName, mimeType: message.mimeType,
-    attachmentMetadata: message.attachmentMetadata, mediaHref: messageMediaHref(message) }));
+    attachmentMetadata: message.attachmentMetadata, mediaHref: messageMediaHref(message), translation: translated.get(message.id) ?? null }));
   return { customer: { ...customer, legacy: isLegacyCustomer(customer), hasDeal: deals > 0 }, nextTask: task, stageEvents, tags: tags.get(customerId) ?? [], pendingMark: mark,
+    gradeSuggestion: suggestion && suggestion.gradeSuggestion && suggestion.gradeSuggestion !== customer.leadGrade ? suggestion : null,
     messages, nextCursor: chat.nextCursor,
     window: { status: chat.conversationWindowStatus, expiresAt: chat.conversationWindowExpiresAt, lastCustomerMessageAt: chat.lastCustomerMessageAt },
     sending: { configured: chat.configured, businessNumber: gupshupSource(), templates: templatesConfigured(), optedOut: customer.whatsappOptInStatus === 'OPTED_OUT' },
     // AI drafts, translation and summaries need DeepSeek; the chat shows why when it is missing.
     ai: { configured: !!process.env.DEEPSEEK_API_KEY?.trim() } };
-}
-
-/** On-demand Chinese translation of one customer message, through the translation service configured for lead imports. */
-export async function translateMessage(user: Actor, input: unknown) {
-  const { messageId } = z.object({ messageId: z.string().trim().min(1).max(191) }).parse(input);
-  const message = await db.whatsAppMessage.findUnique({ where: { id: messageId }, select: { customerId: true, content: true } });
-  if (!message) throw new HttpError(404, '消息不存在');
-  await accessible(message.customerId, user);
-  if (!message.content.trim() || /^\[[^\]]*\]$/.test(message.content.trim())) throw new HttpError(400, '这条消息没有可翻译的文字');
-  const { translator } = await import('./meta-translation-service');
-  const result = await (await translator()).translate(message.content.slice(0, 4000));
-  if (!result.pending) return { text: result.text };
-  // No translation service set up (or it failed): DeepSeek translates when configured.
-  const { translateToChinese } = await import('./sales-copilot-service');
-  const text = await translateToChinese(message.content).catch(() => null);
-  if (!text) throw new HttpError(503, '翻译暂不可用：需要配置 DeepSeek，或在线索导入的「翻译服务配置」中设置翻译服务');
-  return { text };
 }
