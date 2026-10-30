@@ -56,8 +56,37 @@ export async function processWebhookReceipt(id: string) {
     // Touch records and reply judgements, for customer messages and for what salespeople sent from the phone.
     await (await import('./outreach-engine-service')).processOutreachQuietly(result.messageCustomerIds);
   } catch {
-    // Acknowledged evidence remains available if background ingestion fails or the process stops.
-    await db.syncJob.update({ where: { id }, data: { status: 'FAILED', completedAt: new Date(), failed: 1, error: 'WEBHOOK_PROCESSING_FAILED' } });
+    // Acknowledged evidence remains available if background ingestion fails or the process stops; retryWebhookReceipts()
+    // processes it again. `failed` counts the attempts.
+    await db.syncJob.update({ where: { id }, data: { status: 'FAILED', completedAt: new Date(), failed: Math.max(receipt.failed, 1), error: 'WEBHOOK_PROCESSING_FAILED' } });
     console.error('[Webhook Background] WEBHOOK_PROCESSING_FAILED');
   }
+}
+
+const RETRY_AFTER_MS = 2 * 60_000, STALLED_MS = 10 * 60_000, MAX_ATTEMPTS = 6, KEEP_TRYING_MS = 7 * 86_400_000;
+/**
+ * Webhooks whose processing failed (a busy database) or never finished (the server restarted after acknowledging
+ * them) are processed again, oldest first: their messages and receipts would otherwise never reach the chat.
+ * Processing is idempotent (messages by source key, receipts by receipt key), and each receipt is claimed first, so
+ * overlapping runs never process it twice. Up to five retries over a week; the open CRM and the scheduled jobs call it.
+ */
+export async function retryWebhookReceipts(limit = 20) {
+  const now = Date.now();
+  const rows = await db.syncJob.findMany({
+    where: { provider: { in: ['GUPSHUP', 'WHATSAPP', 'META'] }, jobType: 'WEBHOOK_INBOX', startedAt: { gte: new Date(now - KEEP_TRYING_MS) }, failed: { lt: MAX_ATTEMPTS }, OR: [
+      { status: 'FAILED', completedAt: { lt: new Date(now - RETRY_AFTER_MS) } },
+      { status: { in: ['PENDING', 'RUNNING'] }, startedAt: { lt: new Date(now - STALLED_MS) }, OR: [{ completedAt: null }, { completedAt: { lt: new Date(now - STALLED_MS) } }] },
+    ] },
+    select: { id: true, status: true, completedAt: true, failed: true }, orderBy: { startedAt: 'asc' }, take: limit,
+  });
+  let retried = 0;
+  for (const row of rows) {
+    // completedAt marks the attempt, so a parallel run no longer matches this receipt.
+    const claim = await db.syncJob.updateMany({ where: { id: row.id, status: row.status, completedAt: row.completedAt, failed: row.failed },
+      data: { status: 'RUNNING', completedAt: new Date(), failed: { increment: 1 } } });
+    if (!claim.count) continue;
+    await processWebhookReceipt(row.id);
+    retried++;
+  }
+  return { retried };
 }

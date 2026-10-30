@@ -221,7 +221,9 @@ async function storeMessage(input: Incoming, result: WhatsAppWebhookResult) {
       await tx.customer.update({where:{id:customerId},data:{whatsappOptInStatus:'OPTED_OUT',whatsappOptOutAt:input.providerOccurredAt||new Date()}});
       await tx.identityAudit.create({data:{entityType:'WHATSAPP_CONSENT',entityId:customerId,actorId:'SYSTEM',reason:'客户明确退订',detail:{messageId:input.id,provider:input.source}}});
     }
-  }));
+  // Wait for the locks instead of giving up after Prisma's default 5 s: recomputing a customer's follow-up holds their
+  // record for seconds, and a message arriving meanwhile (a customer writing three lines in a row) was lost.
+  },{maxWait:10_000,timeout:60_000}));
   result.customerIds.push(...delta.customerIds);result.mediaMessageIds.push(...delta.mediaMessageIds);result.messageCustomerIds.push(...delta.messageCustomerIds);result.matchedCustomers+=delta.matchedCustomers;result.duplicateMessages+=delta.duplicateMessages;result.ambiguous+=delta.ambiguous;result.createdCustomers+=delta.createdCustomers;
 }
 

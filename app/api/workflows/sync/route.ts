@@ -18,6 +18,9 @@ export async function POST() {
     // AI reading rule-graded leads) also run without a scheduled job, while anyone has the CRM open. They may wait for
     // the AI, so they run after the response.
     afterResponse(async () => {
+      // WhatsApp webhooks whose processing failed or stopped: their messages would otherwise never reach the chat.
+      const { retryWebhookReceipts } = await import('@/services/webhook-receipt-service');
+      await retryWebhookReceipts();
       const { checkAnomalies, deliverDailyBrief } = await import('@/services/boss-brief-service');
       await checkAnomalies();
       await deliverDailyBrief();
