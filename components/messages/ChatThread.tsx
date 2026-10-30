@@ -21,10 +21,10 @@ const MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'AUDIO', 'VOICE', 'DOCUMENT', 'FI
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,audio/mpeg,audio/ogg,audio/mp4,audio/aac,audio/amr,application/pdf,text/plain,application/zip,.docx,.xlsx';
 const label = (map: Record<string, string>, key: string | null | undefined) => (key && map[key]) || key || '—';
 
-/** Placeholder bodies such as "[IMAGE]" or the file name are not shown when the file itself is displayed. */
+/** Placeholder bodies such as "[IMAGE]" or the file name are not shown when the file itself is displayed; without a file they are all there is. */
 function visibleText(message: ChatMessage) {
   const text = message.content.trim();
-  if (!MEDIA_TYPES.has(message.messageType.toUpperCase())) return message.content;
+  if (!MEDIA_TYPES.has(message.messageType.toUpperCase()) || !(message.mediaHref || message.attachmentMetadata)) return message.content;
   if (/^\[[^\]]*\]$/.test(text) || (message.fileName && (text === message.fileName || text === `[文件] ${message.fileName}`))) return '';
   return message.content;
 }
@@ -53,7 +53,7 @@ function Media({ message, broken, onBroken, onLoad }: { message: ChatMessage; br
   if (type === 'IMAGE' || type === 'STICKER' || (/^image\/(jpeg|png|webp|gif)/.test(mime) && !['DOCUMENT', 'FILE'].includes(type)))
     // Authenticated media from our own API: next/image would proxy it without the session cookie.
     // eslint-disable-next-line @next/next/no-img-element
-    return <a href={href} target="_blank" rel="noreferrer"><img className="bos-chat-media" src={href} alt={message.fileName || '客户图片'} loading="lazy" onError={onBroken} onLoad={onLoad} /></a>;
+    return <a href={href} target="_blank" rel="noreferrer"><img className="bos-chat-media" src={href} alt={message.fileName || '图片'} loading="lazy" onError={onBroken} onLoad={onLoad} /></a>;
   if (type === 'VIDEO' || mime.startsWith('video/')) return <video className="bos-chat-media" src={href} controls preload="metadata" onError={onBroken} onLoadedMetadata={onLoad} />;
   if (type === 'AUDIO' || type === 'VOICE' || mime.startsWith('audio/'))
     return <><audio className="bos-chat-media" src={href} controls preload="none" onError={onBroken} /><a className="bos-chat-link" href={href} download>下载语音</a></>;

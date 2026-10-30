@@ -35,12 +35,13 @@ export async function readMedia(id:string){const asset=await db.mediaAsset.findU
 const INLINE_TYPES=/^(image\/(jpeg|png|webp|gif)|audio\/[\w.+-]+|video\/(mp4|3gpp))(;.*)?$/;
 export const inlineMedia=(mimeType:string)=>INLINE_TYPES.test(mimeType);
 
-// ── Inbound media ──
-// Provider links expire (Gupshup gives a urlExpiry; Meta's need a token), so customer media is copied into
-// our own storage once and then served like any uploaded attachment.
+// ── Provider media ──
+// Files customers send, and files we send from the WhatsApp Business app on the phone (Meta echoes them back).
+// Provider links expire (Gupshup gives a urlExpiry; Meta's need a token), so the file is copied into our own
+// storage once and then served like any uploaded attachment. Files sent from BOS are stored before sending.
 export const MEDIA_MESSAGE_TYPES=new Set(['IMAGE','VIDEO','AUDIO','VOICE','DOCUMENT','FILE','STICKER']);
 const LIVE_SOURCES=new Set(['gupshup','cloud_api']);
-const INBOUND_MAX_BYTES=32*1024*1024;
+const MEDIA_MAX_BYTES=32*1024*1024;
 // Only the providers' own media hosts are fetched; a webhook can never make the server request an arbitrary address.
 const TRUSTED_MEDIA_HOSTS=[/(^|\.)gupshup\.io$/i,/(^|\.)fbsbx\.com$/i,/(^|\.)fbcdn\.net$/i,/(^|\.)whatsapp\.net$/i,/(^|\.)facebook\.com$/i];
 const archived=(mediaUrl:string|null)=>!!mediaUrl&&mediaUrl.startsWith('/api/whatsapp/media/');
@@ -54,10 +55,10 @@ function cleanMime(value:unknown){
 const record=(value:unknown)=>value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:null;
 const text=(value:unknown)=>typeof value==='string'&&value.trim()?value.trim():undefined;
 
-type MediaMessage={id:string;source:string;direction:string;messageType:string;mediaUrl:string|null;mimeType:string|null;fileName:string|null;raw:string};
+type MediaMessage={id:string;source:string;messageType:string;mediaUrl:string|null;mimeType:string|null;fileName:string|null;raw:string};
 /** Where the provider keeps this message's file: Gupshup V2 `payload.url`, V3/Cloud `<type>.url` or a Cloud media id. */
-export function inboundMediaRef(message:MediaMessage){
-  if(message.direction!=='INBOUND'||!LIVE_SOURCES.has(message.source)||!MEDIA_MESSAGE_TYPES.has(message.messageType.toUpperCase()))return null;
+export function providerMediaRef(message:MediaMessage){
+  if(!LIVE_SOURCES.has(message.source)||!MEDIA_MESSAGE_TYPES.has(message.messageType.toUpperCase()))return null;
   let raw:Record<string,unknown>|null=null;
   try{raw=record(JSON.parse(message.raw));}catch{raw=null;}
   const v2=record(raw?.payload),type=typeof raw?.type==='string'?raw.type:'',cloud=record(raw?.[type]);
@@ -70,11 +71,11 @@ export function inboundMediaRef(message:MediaMessage){
 
 async function readCapped(response:Response){
   const declared=Number(response.headers.get('content-length')||0);
-  if(declared>INBOUND_MAX_BYTES)throw new HttpError(413,'客户发送的文件超过 32 MB，请在手机 WhatsApp 中查看');
+  if(declared>MEDIA_MAX_BYTES)throw new HttpError(413,'文件超过 32 MB，请在手机 WhatsApp 中查看');
   const reader=response.body?.getReader();if(!reader)return Buffer.alloc(0);
   const chunks:Buffer[]=[];let size=0;
   for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;
-    if(size>INBOUND_MAX_BYTES){await reader.cancel().catch(()=>{});throw new HttpError(413,'客户发送的文件超过 32 MB，请在手机 WhatsApp 中查看');}
+    if(size>MEDIA_MAX_BYTES){await reader.cancel().catch(()=>{});throw new HttpError(413,'文件超过 32 MB，请在手机 WhatsApp 中查看');}
     chunks.push(Buffer.from(value));}
   return Buffer.concat(chunks);
 }
@@ -103,7 +104,7 @@ async function cloudAccessToken(){
   const {decryptWhatsAppAccessToken}=await import('./whatsapp-connect-service');
   try{return decryptWhatsAppAccessToken(integration.encryptedAccessToken);}catch{return '';}
 }
-async function fetchProviderMedia(message:MediaMessage,ref:NonNullable<ReturnType<typeof inboundMediaRef>>){
+async function fetchProviderMedia(message:MediaMessage,ref:NonNullable<ReturnType<typeof providerMediaRef>>){
   const unavailable=new HttpError(404,'媒体文件已过期或无法从 WhatsApp 下载，请在手机 WhatsApp 中查看');
   if(ref.url){
     const url=trustedUrl(ref.url);if(!url)throw new HttpError(400,'媒体文件不在 WhatsApp 服务商域名下，已拒绝下载');
@@ -125,12 +126,12 @@ async function fetchProviderMedia(message:MediaMessage,ref:NonNullable<ReturnTyp
   return {buffer:await readCapped(response),mimeType:cleanMime(body.mime_type)||cleanMime(response.headers.get('content-type'))};
 }
 
-/** Copies a received photo, video, voice note or document into storage; returns the asset id (idempotent). */
-export async function archiveInboundMedia(messageId:string){
-  const message=await db.whatsAppMessage.findUnique({where:{id:messageId},select:{id:true,customerId:true,source:true,direction:true,messageType:true,mediaUrl:true,mimeType:true,fileName:true,raw:true}});
+/** Copies a message's photo, video, voice note or document into storage; returns the asset id (idempotent). */
+export async function archiveMessageMedia(messageId:string){
+  const message=await db.whatsAppMessage.findUnique({where:{id:messageId},select:{id:true,customerId:true,source:true,messageType:true,mediaUrl:true,mimeType:true,fileName:true,raw:true}});
   if(!message)throw new HttpError(404,'消息不存在');
   if(archived(message.mediaUrl))return message.mediaUrl!.slice('/api/whatsapp/media/'.length);
-  const ref=inboundMediaRef(message);
+  const ref=providerMediaRef(message);
   if(!ref)throw new HttpError(404,'这条消息没有可下载的文件');
   const file=await fetchProviderMedia(message,ref);
   if(!file.buffer.length)throw new HttpError(404,'媒体文件为空，请在手机 WhatsApp 中查看');
@@ -152,20 +153,20 @@ export async function messageMediaAsset(messageId:string,user:Actor){
   const message=await db.whatsAppMessage.findUnique({where:{id:messageId},select:{customerId:true}});
   if(!message)throw new HttpError(404,'消息不存在');
   await accessible(message.customerId,user);
-  return archiveInboundMedia(messageId);
+  return archiveMessageMedia(messageId);
 }
 
 /** Background copy after a webhook; failures are retried when someone opens the message. */
-export async function archiveInboundMediaQuietly(messageIds:string[]){
+export async function archiveMessageMediaQuietly(messageIds:string[]){
   for(const id of messageIds){
-    try{await archiveInboundMedia(id);}
+    try{await archiveMessageMedia(id);}
     catch(error){console.error('[WhatsApp Media] ARCHIVE_DEFERRED',error instanceof HttpError?error.status:'NETWORK');}
   }
 }
 
-/** The link the chat shows for a message's file: archived copy, on-demand copy for live media, or none. */
-export function messageMediaHref(message:Pick<MediaMessage,'id'|'source'|'direction'|'messageType'|'mediaUrl'>){
+/** The link the chat shows for a message's file: archived copy, on-demand copy for live media (received or sent from the phone), or none. */
+export function messageMediaHref(message:Pick<MediaMessage,'id'|'source'|'messageType'|'mediaUrl'>){
   if(archived(message.mediaUrl))return message.mediaUrl;
-  if(message.direction==='INBOUND'&&LIVE_SOURCES.has(message.source)&&MEDIA_MESSAGE_TYPES.has(message.messageType.toUpperCase()))return `/api/whatsapp/messages/${message.id}/media`;
+  if(LIVE_SOURCES.has(message.source)&&MEDIA_MESSAGE_TYPES.has(message.messageType.toUpperCase()))return `/api/whatsapp/messages/${message.id}/media`;
   return null;
 }
