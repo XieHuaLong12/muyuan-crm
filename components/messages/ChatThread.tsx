@@ -3,9 +3,12 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight, Check, CheckCheck, CircleAlert, Clock3, FileText, Languages, LayoutTemplate, Loader2, Maximize2, Minimize2, PanelRight, Paperclip, RefreshCw, Send, Sparkles, Undo2, X } from 'lucide-react';
 import { api } from '@/lib/client';
-import { FIRST_TOUCH_PRODUCT_LINES, pipeline, purchases, sources, stages } from '@/lib/constants';
+import { FIRST_TOUCH_PRODUCT_LINES, purchases, sources, stages } from '@/lib/constants';
 import { formatDateTime, formatDay, formatTime, initial, requestId, toneOf, windowLeft, type ChatMessage, type TemplateList, type Thread } from './types';
 import { LegacyTag, OutreachBar, OutreachProfile, useOutreach } from './OutreachPanel';
+import { StageControl } from './StageControl';
+import { TagEditor } from './Tags';
+import { TodoMarkBanner, TodoMarkButton } from './TodoMark';
 
 const POLL_MS = 8_000;
 const MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'AUDIO', 'VOICE', 'DOCUMENT', 'FILE', 'STICKER']);
@@ -59,8 +62,8 @@ function mergeMessages(current: ChatMessage[], latest: ChatMessage[]) {
   return [...current.filter(m => !ids.has(m.id) && m.sentAt < oldest), ...latest];
 }
 
-export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile, onBack, onChanged, onRead, fullscreen, onToggleFullscreen, autoTemplate = false, onTemplateSent }: {
-  customerId: string; timezone: string; profileOpen: boolean; onToggleProfile: () => void; onBack: () => void; onChanged: () => void; onRead: (customerId: string) => void;
+export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleProfile, onBack, onChanged, onRead, fullscreen, onToggleFullscreen, autoTemplate = false, onTemplateSent }: {
+  customerId: string; timezone: string; admin: boolean; profileOpen: boolean; onToggleProfile: () => void; onBack: () => void; onChanged: () => void; onRead: (customerId: string) => void;
   fullscreen: boolean; onToggleFullscreen: () => void;
   /** Opened from 待首联: show the suggested greeting as soon as the thread loads, if only a template can go out. */
   autoTemplate?: boolean; onTemplateSent?: () => void;
@@ -222,7 +225,8 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
   // Which profile facts the chosen template uses, shown next to them while the template panel is open.
   const usedBy = templates.open ? fills.reduce<Record<string, string[]>>((all, fill, i) => fill.source ? { ...all, [fill.source]: [...(all[fill.source] ?? []), `{{${i + 1}}}`] } : all, {}) : {};
   const used = (source: string) => usedBy[source] ? <span className="bos-chat-used">{usedBy[source].join(' ')}</span> : null;
-  const stageIndex = customer ? pipeline.indexOf(customer.stage as (typeof pipeline)[number]) : -1;
+  // Stage, tags and the 待处理 mark change what the list shows too.
+  const profileChanged = () => { void load(true); onChanged(); };
   const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
   return <>
@@ -237,10 +241,12 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
           <p>{customer ? [customer.companyName, [customer.country, customer.city].filter(Boolean).join(' '), customer.whatsapp || customer.phone, `负责人 ${customer.owner.name}`].filter(Boolean).join(' · ') : ''}</p>
         </div>
         <div className="bos-chat-thread-actions">
+          {thread && <TodoMarkButton customerId={customerId} mark={thread.pendingMark} timezone={timezone} onChanged={profileChanged} />}
           <button type="button" className="bos-chat-icon-button" onClick={onToggleFullscreen} aria-pressed={fullscreen} aria-label={fullscreen ? '退出全屏聊天' : '全屏聊天'} title={fullscreen ? '退出全屏（Esc）' : '全屏聊天'}>{fullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>
           <button type="button" className="bos-chat-icon-button" onClick={onToggleProfile} aria-pressed={profileOpen} aria-label={profileOpen ? '收起客户资料' : '查看客户资料'}><PanelRight size={18} /></button>
         </div>
       </header>
+      {thread?.pendingMark && <TodoMarkBanner key={thread.pendingMark.dueAt + thread.pendingMark.note} customerId={customerId} mark={thread.pendingMark} timezone={timezone} onChanged={profileChanged} />}
 
       <div className="bos-chat-log" ref={log} onScroll={e => { const el = e.currentTarget; stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}><div className="bos-chat-log-inner" ref={content}>
         {error && <p className="bos-chat-error" role="alert">{error}</p>}
@@ -353,10 +359,10 @@ export function ChatThread({ customerId, timezone, profileOpen, onToggleProfile,
       {customer && <>
         <div className="bos-chat-person"><span className={`bos-chat-avatar is-large bos-chat-tone-${toneOf(customerId)}`} aria-hidden="true">{initial(customer.name)}</span>
           <div><strong>{customer.name}{used('firstName')}</strong><span>{customer.companyName || '公司待补充'}</span><span>{[customer.country, customer.city].filter(Boolean).join(' · ') || '国家待补充'}{customer.language ? ` · ${customer.language}` : ''}</span></div></div>
-        <div>
-          <div className="bos-chat-section-title"><span>销售阶段</span><strong>{label(stages, customer.stage)}{stageIndex >= 0 ? ` · 第 ${stageIndex + 1} / ${pipeline.length} 步` : ''}</strong></div>
-          {stageIndex >= 0 && <div className="bos-chat-progress" role="img" aria-label={`销售进度：${label(stages, customer.stage)}`}>{pipeline.map((stage, i) => <span key={stage} className={i <= stageIndex ? 'is-done' : undefined} />)}</div>}
-        </div>
+        <TagEditor customerId={customerId} tags={thread.tags} admin={admin} onChanged={profileChanged} />
+        <StageControl customerId={customerId} stage={customer.stage} hasDeal={customer.hasDeal} invalidReason={customer.invalidReason} currency={customer.currency}
+          last={thread.stageEvents[0] ? { by: thread.stageEvents[0].by, changedAt: thread.stageEvents[0].changedAt, toStage: thread.stageEvents[0].toStage } : null}
+          timezone={timezone} onChanged={profileChanged} />
         <dl className="bos-chat-facts">
           <dt>意向产品</dt><dd>{[customer.productInterest, customer.productModel].filter(Boolean).join(' · ') || '—'}{used('productLine')}</dd>
           <dt>采购类型</dt><dd>{customer.purchaseType === 'OTHER' ? '—' : label(purchases, customer.purchaseType)}</dd>

@@ -10,7 +10,9 @@ export const dynamic = 'force-dynamic';
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const { user, boot } = await workspacePage();
   const query = await searchParams;
-  const initialList = jsonForClient<InboxList>(await inboxConversations(user, { filter: 'all' }));
+  // Links may open a list directly (/messages?filter=todo, the workbench's ?filter=awaiting); anything else shows 全部.
+  const filter = ['todo', 'unread', 'awaiting', 'pending'].includes(query.filter ?? '') ? query.filter : 'all';
+  const initialList = jsonForClient<InboxList>(await inboxConversations(user, { filter }));
   const customer = typeof query.customer === 'string' && query.customer.length <= 191 ? query.customer : null;
   return <BOSShell boot={boot}>
     <MessageCenter initialList={initialList} initialCustomerId={customer} timezone={boot.settings.timezone} admin={user.role === 'ADMIN'} />

@@ -131,6 +131,8 @@ model Customer {
  outreachTouches OutreachTouch[]
  outreachReplies OutreachReply[]
  outreachAssignments OutreachAssignment[]
+ tagLinks CustomerTagLink[]
+ pendingMark PendingMark?
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -1681,4 +1683,40 @@ model FocusProgressLog {
  createdAt DateTime @default(now())
  @@index([focusId, createdAt])
  @@index([date])
+}
+
+// 客户标签（消息页）：全公司共用一套标签，颜色从 lib/customer-tags.ts 的 8 种里选。
+model CustomerTag {
+ id String @id @default(cuid())
+ name String @unique @db.VarChar(32)
+ // green | blue | purple | orange | red | yellow | teal | gray
+ color String @default("green") @db.VarChar(8)
+ createdBy String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ customers CustomerTagLink[]
+}
+
+model CustomerTagLink {
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ tagId String
+ tag CustomerTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+ createdBy String
+ createdAt DateTime @default(now())
+ @@id([customerId, tagId])
+ @@index([tagId])
+}
+
+// 手动「标为待处理」：每位客户最多一条，到 dueAt 出现在消息页的待处理里，点「处理完」删除。
+model PendingMark {
+ id String @id @default(cuid())
+ customerId String @unique
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ note String @default("") @db.VarChar(200)
+ dueAt DateTime
+ createdBy String
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([dueAt])
 }
