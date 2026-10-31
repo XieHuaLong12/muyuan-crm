@@ -97,7 +97,7 @@ test('chart slots and the comparison period follow the selected period', () => {
 const NOW = at('2026-10-29T12:00:00+08:00');
 const SEPTEMBER = { range: 'custom', startDate: '2026-09-01', endDate: '2026-09-30' };
 
-test('客户分析: grades, funnel, places, owners and grading for the period\'s leads', async () => {
+test('客户分析: new leads, A / B and effective customers, where they come from and what they cost in ads', async () => {
   const admin = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } });
   const actor = { id: admin.id, name: admin.name, email: admin.email, role: admin.role };
   const tag = randomUUID().slice(0, 8), country = `测试国${tag}`;
@@ -115,40 +115,52 @@ test('客户分析: grades, funnel, places, owners and grading for the period\'s
     await make('August', { leadGrade: 'B', inquiryAt: at('2026-08-20T03:00:00Z'), stage: 'REPLIED', isQualified: true });
     await make('October', { leadGrade: 'A', inquiryAt: at('2026-10-02T03:00:00Z') });
 
+    // The ad the won customer came from, and a day of that campaign's spend.
+    const campaign = await db.campaign.create({ data: { name: `床垫_FR ${tag}`, channel: 'FACEBOOK', externalId: `camp-${tag}`, currency: 'CNY', status: 'ACTIVE', createdBy: admin.id } });
+    await db.marketingMetric.create({ data: { campaignId: campaign.id, metricDate: at('2026-09-15T00:00:00Z'), spend: 300, impressions: 1000, clicks: 50, leads: 4 } });
+    await db.customerLeadAttribution.create({ data: { leadKey: `analytics-${tag}`, customerId: won.id, source: 'META_LEAD_ADS', status: 'MATCHED', occurredAt: inquiry,
+      campaignId: `camp-${tag}`, campaignName: `床垫_FR ${tag}`, adsetId: `set-${tag}`, adsetName: '法国 25-55', adId: `ad-${tag}`, adName: '卷包展开视频' } });
+
     const data = await customerAnalytics(actor, { ...SEPTEMBER, country }, NOW);
+    // 新增线索 counts every lead; the rest only A / B, and 有效 only those who answered.
     assert.equal(data.total, 5);
     assert.equal(data.previousTotal, 1);
     assert.deepEqual(data.grades.map(grade => [grade.label, grade.count]), [['A', 2], ['B', 1], ['C', 1], ['D', 0], ['未评级', 1]]);
-    assert.deepEqual(data.good, { count: 3, share: 60, previousShare: 100, points: -40 });
-    assert.deepEqual(data.qualified, { count: 1, rate: 20, previousRate: 100, points: -80 });
-    assert.equal(data.quoted, 1);
-    assert.equal(data.won, 1, 'a deal after the period still counts: the lead got that far');
+    assert.deepEqual(data.ab, { count: 3, A: 2, B: 1, share: 60, previousShare: 100, points: -40 });
+    assert.deepEqual(data.effective, { count: 1, A: 1, B: 0, previous: 1, rate: 33.3, previousRate: 100, points: -66.7 });
+    assert.deepEqual([data.quoted, data.won, data.quotedRate, data.wonRate, data.previousQuoted, data.previousWon], [1, 1, 100, 100, 0, 0], 'a deal after the period still counts');
+    assert.deepEqual(data.spread, { effective: 1, waiting: 2, other: 1, ungraded: 1 });
     assert.deepEqual({ ...data.firstContact }, { onTime: 1, late: 1, rate: 50, overdue: 1, medianMinutes: 3 });
-    assert.deepEqual(data.funnel.rows.find(row => row.key === 'all')!.counts, [5, 3, 1, 1, 1, 1]);
-    assert.deepEqual(data.funnel.rows.find(row => row.key === 'A')!.counts, [2, 2, 1, 1, 1, 1]);
-    assert.deepEqual(Object.fromEntries(data.statuses.map(status => [status.key, status.count])), { WON: 1, ICEBREAK: 1, FIRST_CONTACT: 1, INVALID: 1, POOL: 1 });
-    const daily = data.daily.points.filter(point => point.A + point.B + point.C + point.other);
-    assert.deepEqual(daily.map(point => [point.start, point.A, point.B, point.C, point.other]), [['2026-09-10', 1, 0, 0, 0], ['2026-09-11', 1, 0, 0, 0], ['2026-09-12', 0, 1, 1, 0], ['2026-09-20', 0, 0, 0, 1]]);
-    assert.deepEqual(data.sources.map(source => [source.key, source.total, source.qualifiedRate]), [['FACEBOOK', 4, 25], ['META_CLICK_TO_WHATSAPP', 1, 0]]);
-    assert.deepEqual(data.countries.map(row => [row.label, row.total, row.A + row.B]), [[country, 5, 3]]);
-    assert.deepEqual(data.owners.map(owner => [owner.name, owner.total, owner.onTimeRate]), [[admin.name, 3, 0], [`Seller ${tag}`, 1, 100], ['待分配', 1, null]]);
-    assert.deepEqual(data.grading, { ai: 2, rule: 1, human: 1, changed: 1, ungraded: 1, changes: [{ label: 'C → A', count: 1 }] });
+    assert.deepEqual(data.stuck, { count: 1, overTwoDays: 1 }, 'Icebreak was contacted and has not answered');
+    const daily = data.daily.points.filter(point => point.A + point.B + point.waiting);
+    assert.deepEqual(daily.map(point => [point.start, point.A, point.B, point.waiting]), [['2026-09-10', 1, 0, 0], ['2026-09-11', 0, 0, 1], ['2026-09-12', 0, 0, 1]]);
+    assert.equal(data.daily.points.find(point => point.start === '2026-09-15')?.spend, 300);
+    assert.deepEqual(data.steps.map(step => [step.label, step.count]), [['已回复', 0], ['需求确认', 0], ['已报价', 0], ['成交', 1]]);
+    assert.deepEqual(data.sources.map(row => [row.key, row.ab, row.effective, row.rate, row.won]), [['FACEBOOK', 2, 1, 50, 1], ['META_CLICK_TO_WHATSAPP', 1, 0, 0, 0]]);
+    assert.deepEqual(data.owners.map(row => [row.label, row.ab, row.effective]), [[admin.name, 2, 1], [`Seller ${tag}`, 1, 0]]);
+    assert.deepEqual(data.people.map(person => [person.name, person.grade, person.from, person.step]), [[`Won ${tag}`, 'A', '卷包展开视频', '成交']]);
+    // 广告效果: the campaign's spend against the effective customers it brought.
+    const row = data.ads.campaigns.find(c => c.key === `camp-${tag}`)!;
+    assert.deepEqual([row.spend, row.ab, row.effective, row.won, row.perEffective], [300, 1, 1, 1, 300]);
+    assert.ok(data.ads.ads.some(ad => ad.key === `ad-${tag}` && ad.effective === 1 && ad.rate === 100));
+    assert.ok(data.ads.adsets.some(set => set.key === `set-${tag}` && set.name === '法国 25-55'));
     assert.ok(data.options.countries.includes(country));
 
     const onlyA = await customerAnalytics(actor, { ...SEPTEMBER, country, grade: 'A' }, NOW);
-    assert.equal(onlyA.total, 2);
-    const bad = await customerAnalytics(actor, { ...SEPTEMBER, country, grade: 'Z' }, NOW);
-    assert.equal(bad.filters.grade, '', 'a wrong filter in the address shows everything instead of failing');
+    assert.deepEqual([onlyA.total, onlyA.ab.count, onlyA.effective.count], [5, 2, 1], 'the grade narrows A / B, not 新增线索');
+    const bad = await customerAnalytics(actor, { ...SEPTEMBER, country, grade: 'C' }, NOW);
+    assert.equal(bad.filters.grade, '', 'C is not on this page: a wrong filter in the address shows A + B');
     // A salesperson sees their own leads only.
     const own = await customerAnalytics({ id: seller.id, name: seller.name, email: seller.email, role: 'SALES' }, { ...SEPTEMBER, country }, NOW);
-    assert.equal(own.total, 1);
+    assert.deepEqual([own.total, own.ab.count, own.effective.count], [1, 1, 0]);
   } finally {
+    await db.campaign.deleteMany({ where: { externalId: `camp-${tag}` } });
     await deleteTestCustomers({ where: { name: { endsWith: ` ${tag}` } } });
     await db.user.delete({ where: { id: seller.id } });
   }
 });
 
-test('消息分析: groups, reply rate, response speed, templates and the week grid', async () => {
+test('消息分析: only the chats with effective customers — groups, response speed, who waits and the week grid', async () => {
   const admin = await db.user.findUniqueOrThrow({ where: { email: 'admin@example.com' } });
   const actor = { id: admin.id, name: admin.name, email: admin.email, role: admin.role };
   const tag = randomUUID().slice(0, 8), country = `测试国${tag}`;
@@ -156,50 +168,47 @@ test('消息分析: groups, reply rate, response speed, templates and the week g
   const message = (customerId: string, direction: 'INBOUND' | 'OUTBOUND', iso: string, extra: object = {}) =>
     db.whatsAppMessage.create({ data: { customerId, direction, sentAt: at(iso), content: 'x', raw: '{}', status: direction === 'INBOUND' ? 'RECEIVED' : 'SENT', ...extra } });
   try {
-    const a = await make('Template', { leadGrade: 'A', outreachState: 'CONVERSING' });
-    const b = await make('Phone', { leadGrade: 'B', outreachState: 'ICEBREAK' });
-    const c = await make('Quick', { leadGrade: 'C', outreachState: 'SILENT' });
+    // Only Template is an effective customer: Phone never answered, Quick is a C lead.
+    const a = await make('Template', { leadGrade: 'A', isQualified: true, stage: 'REPLIED', lastInboundAt: at('2026-09-11T05:00:00Z'), lastOutboundAt: at('2026-09-10T03:30:00Z') });
+    const b = await make('Phone', { leadGrade: 'B' });
+    const c = await make('Quick', { leadGrade: 'C', isQualified: true, stage: 'REPLIED', lastInboundAt: at('2026-09-13T02:00:00Z') });
     await message(a.id, 'OUTBOUND', '2026-09-10T02:00:00Z', { requestId: `t-${tag}`, messageType: 'TEMPLATE' });
     await message(a.id, 'INBOUND', '2026-09-10T03:00:00Z');
     await message(a.id, 'INBOUND', '2026-09-10T03:20:00Z');
     await message(a.id, 'OUTBOUND', '2026-09-10T03:30:00Z', { requestId: `f-${tag}` });
     await message(a.id, 'INBOUND', '2026-09-11T05:00:00Z');
     await message(a.id, 'OUTBOUND', '2026-09-11T06:00:00Z', { requestId: `x-${tag}`, status: 'FAILED' });
+    await message(a.id, 'INBOUND', '2026-08-20T02:00:00Z');
     await message(b.id, 'OUTBOUND', '2026-09-12T02:00:00Z');
     await message(c.id, 'INBOUND', '2026-09-13T02:00:00Z');
     await message(c.id, 'OUTBOUND', '2026-09-13T02:03:00Z', { requestId: `q-${tag}` });
-    await message(c.id, 'INBOUND', '2026-08-20T02:00:00Z');
-    await message(c.id, 'OUTBOUND', '2026-08-20T03:00:00Z', { requestId: `p-${tag}` });
 
     const data = await messageAnalytics(actor, { ...SEPTEMBER, country }, NOW);
-    assert.deepEqual(data.inbound, { groups: 4, customers: 2, change: 300 });
-    assert.equal(data.outbound.groups, 4, 'a failed send is not counted');
-    assert.deepEqual(data.outbound.channels.map(channel => [channel.key, channel.groups]), [['BOS_FREE', 2], ['BOS_TEMPLATE', 1], ['PHONE', 1]]);
-    assert.deepEqual({ customers: data.replyRate.customers, replied: data.replyRate.replied, rate: data.replyRate.rate }, { customers: 3, replied: 1, rate: 33.3 });
-    assert.deepEqual(data.replyRate.byGrade.map(row => [row.grade, row.rate]), [['A', 100], ['B', 0], ['C', 0]]);
-    assert.equal(data.speed.median, 30, 'turns of 30 minutes, 3 minutes and never');
-    assert.equal(data.speed.decided, 3);
-    assert.equal(data.speed.within5, 33.3);
-    assert.deepEqual(data.speed.buckets.map(bucket => bucket.count), [1, 1, 0, 0, 0, 1]);
-    assert.equal(data.speed.previousMedian, 60);
-    assert.deepEqual(data.speed.byGrade.map(row => [row.grade, row.median]), [['A', 30], ['B', null], ['C', 3]]);
-    assert.deepEqual(data.templates, { sent: 1, outsideWindow: 1, replyRate: 100, capped: 0, cap: 2 });
-    assert.equal(data.heatmap.cells.flat().reduce((sum, value) => sum + value, 0), 4);
+    assert.equal(data.effectiveCustomers, 1);
+    assert.deepEqual(data.inbound, { groups: 3, customers: 1, change: 200, previous: 1 });
+    assert.equal(data.outbound.groups, 2, 'a failed send is not counted, nor messages to customers who are not effective');
+    assert.deepEqual(data.outbound.channels.map(channel => [channel.key, channel.groups]), [['BOS_FREE', 1], ['BOS_TEMPLATE', 1], ['PHONE', 0]]);
+    assert.equal(data.speed.median, 30, 'turns of 30 minutes and never');
+    assert.equal(data.speed.decided, 2);
+    assert.deepEqual(data.speed.buckets.map(bucket => bucket.count), [0, 1, 0, 0, 0, 1]);
+    assert.equal(data.daily.points.find(point => point.start === '2026-09-10')?.speed, 30);
+    assert.equal(data.heatmap.cells.flat().reduce((sum, value) => sum + value, 0), 3);
     // 2026-09-10 03:00 and 03:20 UTC are Thursday 11 o'clock in Beijing.
     assert.equal(data.heatmap.cells[3][11], 2);
-    assert.equal(data.talked, 3);
-    assert.deepEqual(data.states.map(state => [state.key, state.count]), [['ICEBREAK', 1], ['CONVERSING', 1], ['SILENT', 1], ['DORMANT', 0], ['STOPPED', 0]]);
+    assert.deepEqual({ total: data.waiting.total, late: data.waiting.late, lateA: data.waiting.lateA, names: data.waiting.people.map(p => p.name) },
+      { total: 1, late: 1, lateA: 1, names: [`Template ${tag}`] }, 'the customer wrote last and is still waiting');
+    assert.deepEqual(data.states.map(state => [state.key, state.count]), [['US', 1], ['THEM', 0], ['QUIET', 0]]);
+    assert.deepEqual(data.owners.map(owner => [owner.name, owner.sent, owner.received, owner.customers, owner.median, owner.waiting]), [[admin.name, 2, 3, 1, 30, 1]]);
 
     const local = await messageAnalytics(actor, { ...SEPTEMBER, country, clock: 'local' }, NOW);
     assert.equal(local.heatmap.cells[3][5], 2, 'the same messages are at 5 in Paris');
     assert.equal(local.clock.unknown, 0);
 
     const phone = await messageAnalytics(actor, { ...SEPTEMBER, country, channel: 'PHONE' }, NOW);
-    assert.equal(phone.outbound.groups, 1);
-    assert.deepEqual({ customers: phone.replyRate.customers, rate: phone.replyRate.rate }, { customers: 1, rate: 0 });
-    assert.equal(phone.inbound.groups, 4, 'the sending filter only narrows our messages');
-    const onlyC = await messageAnalytics(actor, { ...SEPTEMBER, country, grade: 'C' }, NOW);
-    assert.deepEqual([onlyC.inbound.groups, onlyC.outbound.groups], [1, 1]);
+    assert.equal(phone.outbound.groups, 0);
+    assert.equal(phone.inbound.groups, 3, 'the sending filter only narrows our messages');
+    const onlyB = await messageAnalytics(actor, { ...SEPTEMBER, country, grade: 'B' }, NOW);
+    assert.deepEqual([onlyB.inbound.groups, onlyB.outbound.groups, onlyB.effectiveCustomers], [0, 0, 0]);
   } finally {
     await deleteTestCustomers({ where: { name: { endsWith: ` ${tag}` } } });
     await db.$disconnect();

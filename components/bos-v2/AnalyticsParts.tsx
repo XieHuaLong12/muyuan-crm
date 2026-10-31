@@ -5,6 +5,10 @@ import { ArrowUpRight } from 'lucide-react';
 /** Shared pieces of 客户分析 and 消息分析: numbers, change wording, KPI cards and section heads. */
 export const number = (value: number) => new Intl.NumberFormat('zh-CN').format(value);
 export const percent = (value: number | null) => value === null ? '—' : `${value}%`;
+/** Ad money in the ad account's currency: 「¥2,930.40」; a bare number when the currency is unknown. */
+export const money = (value: number, currency: string | null) => currency
+  ? new Intl.NumberFormat('zh-CN', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
+  : new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 /** 「↑ 22%」 / 「↓ 5%」, or null without a comparison. */
 export const changeText = (value: number | null) => value === null ? null : `${value >= 0 ? '↑' : '↓'} ${Math.abs(value)}%`;
 /** 「↑ 6 个百分点」 for a change between two rates. */
