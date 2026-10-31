@@ -13,6 +13,13 @@ export const gradeKey = (grade: string): GradeKey => (GRADE_KEYS as readonly str
 export const gradeLabel = (grade: string) => grade || '未评级';
 /** A and B are the leads worth the most attention (优质线索). */
 export const isGoodGrade = (grade: string) => grade === 'A' || grade === 'B';
+/**
+ * 有效客户 on the analysis pages (from 2026-10-31): an A or B lead who answered after our first message (the shared
+ * 有效 rule, lib/metrics isQualified). C, D and ungraded customers do not count, whether they answered or not.
+ */
+export const isEffective = (c: { leadGrade: string; stage: string; isQualified: boolean | null }) => isGoodGrade(c.leadGrade) && isQualified(c);
+/** Where an effective customer has got to, by the furthest funnel step (funnelDepth 2–5). */
+export const EFFECTIVE_STEPS = { 2: '已回复', 3: '需求确认', 4: '已报价', 5: '成交' } as const;
 
 export const FUNNEL_STEPS = ['线索', '已联系', '已回复 · 有效', '需求确认', '已报价', '成交'] as const;
 const NEEDS_STAGES = ['NEEDS_CONFIRMED', 'PRODUCT_CONFIRMED'];

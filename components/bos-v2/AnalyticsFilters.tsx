@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { SlidersHorizontal } from 'lucide-react';
 
-export type FilterField = { name: string; label: string; value: string; options: { value: string; label: string }[] };
+/** `emptyLabel`: what no choice means for this field (「全部」 unless said otherwise). */
+export type FilterField = { name: string; label: string; value: string; options: { value: string; label: string }[]; emptyLabel?: string };
 
 /**
  * Filters for the analysis pages: each choice reloads the page with it in the address, so the link can be shared and
@@ -24,7 +25,7 @@ export function AnalyticsFilters({ basePath, keep, fields }: { basePath: string;
         <label key={field.name}>
           <span>{field.label}</span>
           <select value={field.value} onChange={event => go(field.name, event.target.value)}>
-            <option value="">全部</option>
+            <option value="">{field.emptyLabel ?? '全部'}</option>
             {field.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
