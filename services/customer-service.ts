@@ -144,6 +144,9 @@ export async function saveCustomer(input: unknown, user: Actor, id?: string, opt
   }
   // A date-only edit of the same day preserves legacy precision and attribution.
   if (old && v.inquiryAt === dayKey(inquiryDate(old), settings.timezone)) effectiveInquiry = inquiryDate(old);
+  // 进线时间: a customer entered by hand today came in now; an earlier date has no clock time (lib/entry-time).
+  const now = new Date();
+  if (!old && v.inquiryAt === dayKey(now, settings.timezone)) effectiveInquiry = now;
   if (old && effectiveInquiry.getTime() !== inquiryDate(old).getTime()) {
     const earliestFollow = await db.followUp.findFirst({ where: { customerId: old.id }, orderBy: { followUpAt: 'asc' } });
     const events = [old.contactedAt, old.firstReplyAt, old.needsConfirmedAt, old.quotedAt, old.wonAt, earliestFollow?.followUpAt, ...old.deals.map(d => d.dealDate)]

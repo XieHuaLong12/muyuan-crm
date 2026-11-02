@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
 import { dayKey, localDate, periodRange, type Period } from '@/lib/time';
-import { contactNumber } from '@/lib/phone-country';
 import { CUSTOMER_SORT_KEYS } from '@/lib/customer-columns';
 import { customerGroupWhere } from '@/lib/customer-group';
+import { customerZone, entryOf, inWorkHours, workHoursOf } from '@/lib/entry-time';
+import { contactNumber, countryCodeOf } from '@/lib/phone-country';
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).or(z.literal('')).default('');
 export const customerListQuery = z.object({
@@ -28,6 +29,8 @@ export const customerListQuery = z.object({
   date: dateKey,
   assign: z.enum(['', 'pending']).default(''),
   grade: z.enum(['', 'A', 'B', 'C', 'D', 'none']).default(''),
+  // 进线时间 inside or outside the working hours (lib/entry-time); only customers with a known clock time match either.
+  entry: z.enum(['', 'off', 'in']).default(''),
   // Every sortable column a user can add in 「定制列」 (lib/customer-columns.ts); productInterest is one of them, so older bookmarked links still open.
   sort: z.enum(['priority', ...CUSTOMER_SORT_KEYS]).default('priority'),
   dir: z.enum(['asc', 'desc']).default('asc'),
@@ -49,7 +52,7 @@ function inquiryWindow(range: Prisma.DateTimeFilter): Prisma.CustomerWhereInput 
 
 const groupWhere = (group: CustomerListQuery['group']): Prisma.CustomerWhereInput => group === 'all' ? {} : customerGroupWhere(group);
 /** Filters that narrow the list (not the page, sort or group): links from dashboards set them. */
-const NARROWING = ['q', 'stage', 'country', 'source', 'owner', 'product', 'from', 'to', 'wonFrom', 'wonTo', 'qualified', 'behavior', 'period', 'assign', 'grade'] as const;
+const NARROWING = ['q', 'stage', 'country', 'source', 'owner', 'product', 'from', 'to', 'wonFrom', 'wonTo', 'qualified', 'behavior', 'period', 'assign', 'grade', 'entry'] as const;
 
 function listWhere(user: Actor, q: CustomerListQuery, timezone: string): Prisma.CustomerWhereInput {
   const and: Prisma.CustomerWhereInput[] = [scope(user), groupWhere(q.group)];
@@ -95,15 +98,24 @@ export const GRADE_TABS = ['A', 'B', 'C'] as const;
 /** Paged customer list. Filtering and sorting happen in the database; only the requested page is loaded. */
 export async function customerList(user: Actor, input: unknown) {
   const q = customerListQuery.parse(input);
-  const { timezone } = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { timezone: true } });
-  const where = listWhere(user, q, timezone);
+  const settings = await db.setting.findUniqueOrThrow({ where: { id: 'system' }, select: { timezone: true, workStartHour: true, workEndHour: true } });
+  const timezone = settings.timezone;
+  // The hour of day is read in the company's time zone, which the database cannot do portably: narrow by id.
+  const byEntry = async (base: Prisma.CustomerWhereInput): Promise<Prisma.CustomerWhereInput> => {
+    if (!q.entry) return base;
+    const hours = workHoursOf(settings);
+    const keys = await db.customer.findMany({ where: base, select: { id: true, inquiryAt: true, createdAt: true } });
+    const ids = keys.filter(c => { const entry = entryOf(c, timezone); return entry.exact && inWorkHours(entry.at, timezone, hours) === (q.entry === 'in'); }).map(c => c.id);
+    return { AND: [base, { id: { in: ids } }] };
+  };
+  const where = await byEntry(listWhere(user, q, timezone));
   const skip = (q.page - 1) * q.pageSize;
   const group = groupWhere(q.group);
   // A dashboard link (a stage, an owner, a period) counts both groups; say how many of them sit on the other page.
   const other = q.group === 'all' || !NARROWING.some(key => q[key]) ? null : q.group === 'legacy' ? 'current' : 'legacy';
   const [total, otherTotal, countries, pool, grades] = await Promise.all([
     db.customer.count({ where }),
-    other ? db.customer.count({ where: listWhere(user, { ...q, group: other }, timezone) }) : Promise.resolve(0),
+    other ? byEntry(listWhere(user, { ...q, group: other }, timezone)).then(w => db.customer.count({ where: w })) : Promise.resolve(0),
     db.customer.groupBy({ by: ['country'], where: { AND: [scope(user), group, { country: { not: '' } }] }, orderBy: { country: 'asc' } }),
     user.role === 'ADMIN' ? db.customer.count({ where: { AND: [{ deletedAt: null, pendingAssignment: true }, group] } }) : Promise.resolve(0),
     // A / B / C tabs: how many of the page's customers each automatic form grade holds, whatever the other filters.
@@ -134,7 +146,7 @@ export async function customerList(user: Actor, input: unknown) {
     rows = await db.customer.findMany({ where, include, orderBy: [orderBy, { id: 'asc' }], skip, take: q.pageSize });
   }
   return {
-    rows: rows.map(c => ({ ...c, contact: contactNumber(c) })), total, otherTotal, page: q.page, pageSize: q.pageSize, countries: countries.map(c => c.country), pool,
+    rows: rows.map(c => ({ ...c, contact: contactNumber(c), entryZone: customerZone(countryCodeOf(c)) })), total, otherTotal, page: q.page, pageSize: q.pageSize, countries: countries.map(c => c.country), pool,
     grades: Object.fromEntries(GRADE_TABS.map(grade => [grade, grades.find(g => g.leadGrade === grade)?._count._all ?? 0])) as Record<(typeof GRADE_TABS)[number], number>,
   };
 }

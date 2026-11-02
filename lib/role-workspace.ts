@@ -34,6 +34,8 @@ const adminSections: readonly NavSection[] = [
     { href: '/finance', label: '财务' },
     { href: '/command-center/customers', label: '客户分析' },
     { href: '/command-center/messages', label: '消息分析' },
+    { href: '/command-center/countries', label: '国家作战卡' },
+    { href: '/command-center/plan', label: 'AI 计划' },
   ] },
   { href: '/customers', label: '客户', icon: 'customers', badge: 'pool', tabs: [
     ...customerTabs,

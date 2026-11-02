@@ -135,6 +135,9 @@ model Customer {
  pendingMark PendingMark?
  // 消息页「自动翻译」开关：开着时客户的外语消息自动带中文（存在 MessageTranslation）；关掉后点「翻译」才翻。
  autoTranslate Boolean @default(true)
+ // 需求画像（CustomerDemandField）最近一次从聊天里提取的时间；客户之后又发了消息就重新提取。
+ demandScannedAt DateTime?
+ demandFields CustomerDemandField[]
  @@index([stage])
  @@index([source])
  @@index([country])
@@ -273,6 +276,9 @@ model Setting {
  outreachConfig Json?
  // 话术记录的起点：话术引擎第一次运行时写入。之前的消息只用来推算会话状态，不生成触达记录。
  outreachStartedAt DateTime?
+ // 工作时间（按公司时区的整点，默认 8:00–22:00）：进线时间判断「工作时间外」、热力图画工作时段、AI 计划排时间都用它。
+ workStartHour Int @default(8)
+ workEndHour Int @default(22)
 }
 
 model LeadSubmission {
@@ -1777,4 +1783,70 @@ model QuickReply {
  createdAt DateTime @default(now())
  updatedAt DateTime @updatedAt
  @@index([ownerId, deletedAt])
+}
+
+// 需求画像：从聊天和表单里摘出来的结构化需求，一个客户每项一行。AI / 规则摘出来是「待确认」，人点了才「已确认」；
+// 只有确认过的进分析、带进报价单。人确认或改过的值，之后重新提取不会覆盖。
+model CustomerDemandField {
+ id String @id @default(cuid())
+ customerId String
+ customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+ // buyer | category | size | quantity | packaging | port | deadline | budget | certification | incoterm（lib/demand-profile.ts）
+ field String @db.VarChar(16)
+ value String @db.VarChar(200)
+ // 客户的原话（AI 摘取必须能在消息里找到这句），以及那条消息的时间
+ evidence String @default("") @db.VarChar(500)
+ evidenceAt DateTime?
+ // AI | RULE | HUMAN
+ source String @db.VarChar(8)
+ // SUGGESTED | CONFIRMED
+ status String @default("SUGGESTED") @db.VarChar(12)
+ confirmedById String?
+ confirmedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([customerId, field])
+ @@index([field, status])
+}
+
+// Meta 广告按小时的花费（hourly_stats_aggregated_by_advertiser_time_zone）：hour 是广告账户时区的整点。
+// 只用于「哪个投放时段值钱」；和 AdDailyMetric 是不同粒度，不能相加。
+model AdHourlyMetric {
+ id String @id @default(cuid())
+ accountId String @db.VarChar(191)
+ adId String @db.VarChar(191)
+ metricDate DateTime @db.Date
+ hour Int
+ currency String @db.VarChar(3)
+ spend Decimal @db.Decimal(14, 2)
+ impressions Int @default(0)
+ clicks Int @default(0)
+ leads Int @default(0)
+ syncedAt DateTime @default(now())
+ @@unique([accountId, adId, metricDate, hour])
+ @@index([metricDate])
+}
+
+// AI 计划里的广告预算建议：系统按数据算出来，人点「采纳 / 忽略」；采纳 7 天后自动复盘。系统从不自己改广告。
+model PlanSuggestion {
+ id String @id @default(cuid())
+ // 同一条建议同一周只出一次：kind:country:周一日期
+ key String @unique @db.VarChar(191)
+ // WEEKDAY_BUDGET | DAYPART | CREATIVE
+ kind String @db.VarChar(24)
+ country String @default("") @db.VarChar(100)
+ title String @db.VarChar(200)
+ body String @db.Text
+ basis String @db.VarChar(300)
+ // 复盘要比的指标和采纳前的值
+ metric Json
+ // PENDING | ADOPTED | IGNORED
+ status String @default("PENDING") @db.VarChar(12)
+ decidedById String?
+ decidedAt DateTime?
+ reviewAt DateTime?
+ review Json?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([status, createdAt])
 }

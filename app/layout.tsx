@@ -6,6 +6,7 @@ import './bos.css';
 import './bos-v2.css';
 import './business-cockpit.css';
 import './analytics.css';
+import './insights.css';
 import './motion.css';
 import './messages.css';
 import './workbench.css';

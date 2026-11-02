@@ -20,6 +20,7 @@ const UNDO_MS = 6000;
 const label = (stage: string) => stages[stage as keyof typeof stages] ?? stage;
 
 type LastChange = { by: string; changedAt: string; toStage: string } | null;
+type LossHint = { hint: { reason: string; quote: string; at: string | null; competitorPrice: string } | null; ourPrice: string };
 
 /**
  * 销售阶段 in the chat's profile: every step of the main line is a button that changes the stage at once (an
@@ -32,6 +33,8 @@ export function StageControl({ customerId, stage: saved, hasDeal, invalidReason,
 }) {
   const [more, setMore] = useState(false), [pending, setPending] = useState<string | null>(null), [reason, setReason] = useState(''), [note, setNote] = useState('');
   const [deal, setDeal] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  // 流失原因 pre-pick (lib/demand-profile lossHint): what the customer's words point to, a competitor price they named, our quoted price.
+  const [hint, setHint] = useState<LossHint | null>(null), [competitor, setCompetitor] = useState('');
   const [toast, setToast] = useState<{ text: string; undo: { from: string; to: string; reason: string } | null } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -62,7 +65,15 @@ export function StageControl({ customerId, stage: saved, hasDeal, invalidReason,
   function pick(to: string) {
     if (won) return;
     if (to === 'WON') { setDeal(true); setPending(null); return; }
-    if (KANBAN_REASON_STAGES.includes(to as never)) { setPending(to); setReason(''); setNote(''); setDeal(false); return; }
+    if (KANBAN_REASON_STAGES.includes(to as never)) {
+      setPending(to); setReason(''); setNote(''); setDeal(false); setHint(null); setCompetitor('');
+      if (to === 'LOST' || to === 'PAUSED') api<LossHint>(`insights/loss-hint?customerId=${encodeURIComponent(customerId)}`).then(h => {
+        setHint(h);
+        if (h.hint && REASONS[to].includes(h.hint.reason)) setReason(current => current || h.hint!.reason);
+        if (h.hint?.competitorPrice) setCompetitor(current => current || h.hint!.competitorPrice);
+      }).catch(() => undefined);
+      return;
+    }
     void move(to);
   }
   const undo = () => {
@@ -93,9 +104,14 @@ export function StageControl({ customerId, stage: saved, hasDeal, invalidReason,
       <small>结束跟进（要选原因）</small>
       <div className="bos-chat-stage-chips is-end">{KANBAN_REASON_STAGES.map(key => <button key={key} type="button" aria-pressed={stage === key || pending === key} disabled={busy} onClick={() => pick(key)}>{label(key)}</button>)}</div>
     </div>}
-    {pending && <form className="bos-chat-stage-form is-reason" onSubmit={e => { e.preventDefault(); if (reason) void move(pending, [reason, note.trim()].filter(Boolean).join('：').slice(0, 190)); }}>
+    {pending && <form className="bos-chat-stage-form is-reason" onSubmit={e => { e.preventDefault(); if (reason) void move(pending, [reason, pending === 'LOST' && competitor.trim() ? `别家 ${competitor.trim()}` : '', note.trim()].filter(Boolean).join('：').slice(0, 190)); }}>
       <strong>改为「{label(pending)}」，原因是？</strong>
-      <div className="bos-chat-stage-chips is-end" role="radiogroup" aria-label="原因">{REASONS[pending].map(r => <button key={r} type="button" role="radio" aria-checked={reason === r} onClick={() => setReason(r)}>{r}</button>)}</div>
+      <div className="bos-chat-stage-chips is-end" role="radiogroup" aria-label="原因">{REASONS[pending].map(r => <button key={r} type="button" role="radio" aria-checked={reason === r} onClick={() => setReason(r)}>{r}{hint?.hint?.reason === r ? ' · 按聊天预选' : ''}</button>)}</div>
+      {hint?.hint && <p className="loss-hint">按聊天预选「{hint.hint.reason}」：{hint.hint.at ? `客户 ${formatDateTime(hint.hint.at, timezone)} 说` : ''}「{hint.hint.quote}」</p>}
+      {pending === 'LOST' && <div className="loss-prices">
+        <label>对方说的别家价格（可选）<input value={competitor} maxLength={40} onChange={e => setCompetitor(e.target.value)} placeholder="比如 €72 / 张" /></label>
+        <span><small>我们报的价格</small><b>{hint?.ourPrice || '还没发过报价单'}</b></span>
+      </div>}
       <label>补充一句（可选）<input value={note} maxLength={120} onChange={e => setNote(e.target.value)} placeholder="比如：要的是 C-301 的价格" /></label>
       <div className="bos-chat-actions"><button type="submit" className="is-primary" disabled={!reason || busy}>确认改为{label(pending)}</button><button type="button" onClick={() => setPending(null)}>取消</button></div>
     </form>}

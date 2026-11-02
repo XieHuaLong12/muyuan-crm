@@ -6,6 +6,7 @@ import { QuotationPanel } from './workspace/QuotationPanel';
 import { inquiryDate } from '@/lib/customer-date';
 import { isLegacyCustomer } from '@/lib/customer-group';
 import { LeadHistory } from './lead-history';
+import { Journey } from './insights/Journey';
 import { Customer, Bootstrap, Deal } from '@/lib/types';
 import { Badge, Due, GradeChip } from './customer-table';
 import { api, money, dateText } from '@/lib/client';
@@ -103,6 +104,10 @@ export function CustomerDetail({ customer: c, boot, backHref, onEdit, onFollow, 
                 </dl>
                 <h3>客户备注</h3>
                 <p className="pre-wrap">{c.notes || '暂无备注'}</p>
+              </section>
+              <section className="card">
+                <h3>从进线到现在</h3>
+                <Journey customerId={c.id} revision={Date.parse(c.updatedAt ?? '') || 0} />
               </section>
               {admin && (won
                 ? <p className="muted">已成交客户不能删除；如成交录入有误，请先在「成交订单」中作废。</p>

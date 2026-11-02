@@ -40,7 +40,8 @@ export const CUSTOMER_COLUMNS = {
   quotedAmount: { label: '报价金额', group: 'sales', sortable: true },
   deals: { label: '成交笔数', group: 'sales', sortable: true },
   aiScore: { label: 'AI 评分', group: 'sales', sortable: true },
-  inquiryAt: { label: '询盘日期', group: 'timeline', sortable: true },
+  // 进线时间：线索第一次进入系统的时刻（Customer.inquiryAt，lib/entry-time），带客户当地时间和「工作时间外」。
+  inquiryAt: { label: '进线时间', group: 'timeline', sortable: true },
   createdAt: { label: '录入时间', group: 'timeline', sortable: true },
   contactedAt: { label: '首次联系', group: 'timeline', sortable: true },
   firstReplyAt: { label: '首次回复', group: 'timeline', sortable: true },

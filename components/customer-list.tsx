@@ -12,6 +12,7 @@ import { Options } from './forms';
 import { BatchCustomerTable } from './customer-batch';
 import { ColumnPicker } from './customer-columns';
 import { CustomerPreview } from './customer-preview';
+import { workHoursOf, workHoursText } from '@/lib/entry-time';
 
 /** Remembered so "back to list" from a customer returns to the same filters and page. */
 export const LIST_URL_KEY = 'crm:customer-list-url';
@@ -21,7 +22,7 @@ export function rememberedListUrl() {
 
 /** Automatic form grades with their own tab (D stays in the grade filter). */
 const GRADE_TABS = ['A', 'B', 'C'] as const;
-const FILTER_KEYS = ['q', 'stage', 'country', 'source', 'owner', 'product', 'grade', 'from', 'to', 'wonFrom', 'wonTo', 'qualified', 'behavior', 'period', 'date', 'assign'] as const;
+const FILTER_KEYS = ['q', 'stage', 'country', 'source', 'owner', 'product', 'grade', 'entry', 'from', 'to', 'wonFrom', 'wonTo', 'qualified', 'behavior', 'period', 'date', 'assign'] as const;
 
 /**
  * Customer list whose filters, sort and page live in the URL: they survive refreshes, opening a customer
@@ -126,10 +127,15 @@ export function CustomerList({ boot, revision, group = 'current', initialColumns
         <input aria-label="产品筛选" placeholder="产品 / 型号" defaultValue={get('product')} key={`product-${get('product')}`}
           onBlur={e => { if (e.target.value !== get('product')) update({ product: e.target.value }); }}
           onKeyDown={e => { if (e.key === 'Enter') update({ product: (e.target as HTMLInputElement).value }); }} />
+        <div className="entry-toggle" role="group" aria-label={`进线时间（工作时间 ${workHoursText(workHoursOf(boot.settings))}）`}>
+          {([['', '全部进线'], ['off', '工作时间外'], ['in', '工作时间内']] as const).map(([value, label]) => (
+            <button key={value || 'all'} type="button" aria-pressed={get('entry') === value} onClick={() => update({ entry: value })}>{label}</button>
+          ))}
+        </div>
         <details open={!!(get('from') || get('to') || get('wonFrom') || get('wonTo'))}>
           <summary>日期筛选</summary>
           <div className="date-filters">
-            {([['from', '询盘起始'], ['to', '询盘截止'], ['wonFrom', '成交起始'], ['wonTo', '成交截止']] as const).map(([key, label]) => (
+            {([['from', '进线起始'], ['to', '进线截止'], ['wonFrom', '成交起始'], ['wonTo', '成交截止']] as const).map(([key, label]) => (
               <label key={key}>{label}<input type="date" value={get(key)} onChange={e => update({ [key]: e.target.value })} /></label>
             ))}
           </div>
@@ -138,6 +144,7 @@ export function CustomerList({ boot, revision, group = 'current', initialColumns
       </div>
       {!!data?.otherTotal && <div className="filter-hint">{group === 'legacy' ? '新客户' : '旧客户'}里还有 {data.otherTotal} 位符合当前筛选。<Link href={otherHref}>去{group === 'legacy' ? '新客户' : '旧客户'}查看 →</Link></div>}
       {get('period') && <div className="filter-hint">已按 {get('date')} 所在周期的新增客户筛选</div>}
+      {get('entry') && <div className="filter-hint">按进线时间筛选：工作时间是 {workHoursText(workHoursOf(boot.settings))}（{boot.settings.timezone === 'Asia/Shanghai' ? '北京时间' : boot.settings.timezone}）。只有日期、没有钟点的客户两边都不算。<Link href="/command-center/plan">改工作时间 →</Link></div>}
       {activeTab.startsWith('grade:') && <div className="filter-hint">按广告表单自动分级：A 优质、B 良好、C 一般。新表单进来时自动评级（配置了 DeepSeek 用 AI，否则按表单规则），漏评的由后台补上；没有表单的客户不评级。</div>}
       {activeTab === 'assign' && <div className="filter-hint">自动进入的线索在这里等待分配，请尽快处理：勾选客户后点击「分配 / 转交」。分配后开始计算首联期限，24 小时内的广告留资须在 {boot.settings.adLeadFirstContactMinutes ?? 5} 分钟内联系。</div>}
       {error && <div role="alert" className="error-banner">{error}<button onClick={() => setRetry(v => v + 1)}>重试</button></div>}
