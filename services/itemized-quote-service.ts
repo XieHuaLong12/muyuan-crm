@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { DEMAND_FIELDS, DEMAND_KEYS } from '@/lib/demand-profile';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { Actor, HttpError, scope } from '@/lib/auth';
@@ -408,6 +409,10 @@ export async function quoteBuilderData(user: Actor, input: unknown = {}) {
   }
   const history = customer ? await customerPriceHistory(user, { customerId: customer.id, excludeQuoteId: editing?.id ?? '' }) : [];
   const initialProduct = query.product ? catalog.find(v => v.productId === query.product)?.model ?? '' : '';
+  // 需求画像: what the customer confirmed they want (size, quantity, packing, port…), shown beside the builder. Prices never come from it.
+  const demand = customer ? (await db.customerDemandField.findMany({ where: { customerId: customer.id, status: 'CONFIRMED' }, select: { field: true, value: true } }))
+    .sort((a, b) => DEMAND_KEYS.indexOf(a.field as never) - DEMAND_KEYS.indexOf(b.field as never))
+    .map(f => ({ label: DEMAND_FIELDS[f.field as keyof typeof DEMAND_FIELDS] ?? f.field, value: f.value })) : [];
 
   return {
     today: dayKey(new Date(), timezone),
@@ -423,6 +428,7 @@ export async function quoteBuilderData(user: Actor, input: unknown = {}) {
     draft,
     editing,
     initialProduct,
+    demand,
     ...(draft ? { prefill: [], prefillMissing: [] } : prefillFrom(query.items, catalog)),
   };
 }

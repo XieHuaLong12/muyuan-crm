@@ -7,7 +7,7 @@ import { stages,sources,purchases,invalidReasons,stageQualifies } from '@/lib/co
 import { KANBAN_REASON_STAGES,KANBAN_STAGES,type KanbanStage } from '@/lib/bos-kanban';
 import { api,money,dateText,dateTimeText } from '@/lib/client';
 import { dayKey } from '@/lib/time';
-import { inquiryDate } from '@/lib/customer-date';
+import { DEFAULT_WORK_HOURS,entryLabel,entryOf,inWorkHours,type WorkHours } from '@/lib/entry-time';
 import { ReasonDialog } from './forms';
 import { LEAD_GRADES,isLeadGrade } from '@/lib/lead-grade';
 import { CUSTOMER_COLUMNS,DEFAULT_CUSTOMER_COLUMNS,type CustomerColumnKey } from '@/lib/customer-columns';
@@ -120,7 +120,22 @@ const amount=(value:string,currency:string)=>Number(value)?money(value,currency)
 /** Long free text stays on one line; the whole text is in the tooltip. */
 function Clamp({value}:{value:string}){return value?<span className="cell-clamp" title={value}>{value}</span>:<span className="muted">—</span>;}
 
-type CellContext={tz:string;onChanged?:(message:string)=>void};
+type CellContext={tz:string;hours:WorkHours;onChanged?:(message:string)=>void};
+
+/**
+ * 进线时间 (lib/entry-time): the company's time, the customer's own time under it, and whether it came in outside the
+ * working hours. A date without a clock time shows the date only; a record with no inquiry time is marked 估算.
+ */
+export function EntryCell({c,tz,hours}:{c:Customer;tz:string;hours:WorkHours}){
+ const entry=entryOf({inquiryAt:c.inquiryAt?new Date(c.inquiryAt):null,createdAt:new Date(c.createdAt)},tz);
+ // The customer's own zone comes with the row (services/customer-list-service): phone parsing stays on the server.
+ const zone=c.entryZone??null;
+ const off=entry.exact&&!inWorkHours(entry.at,tz,hours);
+ return <span className="entry-cell">
+  <span><strong>{entryLabel(entry.at,tz,entry.exact)}</strong>{off&&<em className="entry-off" title={`在工作时间 ${hours.start}:00–${hours.end}:00 之外进线`}>工作时间外</em>}{entry.estimated&&<em className="entry-estimated" title="没有询盘时间，用录入系统的时间代替">估算</em>}</span>
+  {entry.exact&&zone&&zone!==tz&&<small>当地 {entryLabel(entry.at,zone)}</small>}
+ </span>;
+}
 /** How each column the user can pick in 「定制列」 renders; labels, groups and sorting live in lib/customer-columns.ts. */
 const CELLS:Record<Exclude<CustomerColumnKey,'name'>,(c:Customer,ctx:CellContext)=>ReactNode>={
  companyName:c=><Clamp value={c.companyName}/>,
@@ -144,7 +159,7 @@ const CELLS:Record<Exclude<CustomerColumnKey,'name'>,(c:Customer,ctx:CellContext
  quotedAmount:c=>amount(c.quotedAmount,c.currency),
  deals:c=>c.deals.length?`${c.deals.length} 笔`:'—',
  aiScore:c=>c.aiLastAnalyzedAt?`${c.aiScore??0} / 100`:'—',
- inquiryAt:(c,{tz})=>fullDate(inquiryDate(c),tz),
+ inquiryAt:(c,{tz,hours})=><EntryCell c={c} tz={tz} hours={hours}/>,
  createdAt:(c,{tz})=>fullDate(c.createdAt,tz),
  contactedAt:(c,{tz})=>fullDate(c.contactedAt,tz),
  firstReplyAt:(c,{tz})=>fullDate(c.firstReplyAt,tz),
@@ -166,11 +181,11 @@ function CustomerCell({c,onPreview}:{c:Customer;onPreview?:(c:Customer,fromKeybo
  </div>;
 }
 
-export function CustomerTable({rows,tz,columns=DEFAULT_CUSTOMER_COLUMNS,onFollow,onSort,onChanged,onPreview,previewId,selection}:{
- rows:Customer[];tz:string;columns?:readonly CustomerColumnKey[];onFollow:(c:Customer)=>void;onSort?:(key:string)=>void;onChanged?:(message:string)=>void;
+export function CustomerTable({rows,tz,hours=DEFAULT_WORK_HOURS,columns=DEFAULT_CUSTOMER_COLUMNS,onFollow,onSort,onChanged,onPreview,previewId,selection}:{
+ rows:Customer[];tz:string;hours?:WorkHours;columns?:readonly CustomerColumnKey[];onFollow:(c:Customer)=>void;onSort?:(key:string)=>void;onChanged?:(message:string)=>void;
  onPreview?:(c:Customer,fromKeyboard?:boolean)=>void;previewId?:string;selection?:{header:ReactNode;cell:(c:Customer)=>ReactNode};
 }){
- const ctx:CellContext={tz,onChanged};
+ const ctx:CellContext={tz,hours,onChanged};
  // Clicks on the name link, the preview button or the checkbox keep their own meaning.
  const previewFromCell=(c:Customer)=>(e:React.MouseEvent)=>{if(!(e.target as HTMLElement).closest('a,button,input,select,label'))onPreview?.(c);};
  return <div className="table-scroll"><table>

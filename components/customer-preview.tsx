@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { Journey } from './insights/Journey';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { ArrowRight, Mail, MessageCircle, MessageSquare, Phone, UserRound, X } from 'lucide-react';
@@ -123,6 +124,10 @@ export function CustomerPreview({ customer: row, tz, revision, autoFocus, onClos
         <details className="customer-preview-section" open>
           <summary>关键信息</summary>
           <dl>{facts.map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}</dl>
+        </details>
+        <details className="customer-preview-section" open>
+          <summary>从进线到现在</summary>
+          <Journey customerId={c.id} revision={revision} />
         </details>
         <details className="customer-preview-section" open>
           <summary>最近跟进{fresh ? ` · 共 ${fresh.followUpCount} 条` : ''}</summary>

@@ -379,6 +379,8 @@ export function QuoteBuilder({ data }: { data: QuoteBuilderData }) {
         actions={<Link href="/products/quotes" className="bos-button">返回报价单</Link>}
       />
 
+      {!!data.demand.length && customer?.id === data.customer?.id && <p className="quote-demand"><b>客户确认过的需求</b>{data.demand.map(d => <span key={d.label}>{d.label}：{d.value}</span>)}<small>来自聊天里的需求画像；价格、起订量、交期以产品库为准</small></p>}
+
       <div className="bos-quote-mobile-switch bos-tabs" role="tablist" aria-label="编辑或预览">
         <button type="button" role="tab" aria-selected={mobileView === 'edit'} onClick={() => setMobileView('edit')}><PencilLine size={15} /> 编辑</button>
         <button type="button" role="tab" aria-selected={mobileView === 'preview'} onClick={() => setMobileView('preview')}><Eye size={15} /> 预览</button>

@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { workHoursOf } from '@/lib/entry-time';
 import { Bootstrap, Customer } from '@/lib/types';
 import { api } from '@/lib/client';
 import type { CustomerColumnKey } from '@/lib/customer-columns';
@@ -54,7 +55,7 @@ export function BatchCustomerTable({ rows, tz, boot, columns, previewId, tools, 
         </div>
       )}
       {!admin && tools && <div className="batch-toolbar table-tools">{tools}</div>}
-      <CustomerTable rows={rows} tz={tz} columns={columns} previewId={previewId} onPreview={onPreview}
+      <CustomerTable rows={rows} tz={tz} hours={workHoursOf(boot.settings)} columns={columns} previewId={previewId} onPreview={onPreview}
         onFollow={onFollow} onSort={onSort} onChanged={onChanged} selection={admin ? {
         header: <SelectionBox label="全选当前页客户" checked={rows.length > 0 && rows.every(c => selectedIds.has(c.id))}
           mixed={rows.some(c => selectedIds.has(c.id)) && !rows.every(c => selectedIds.has(c.id))} disabled={!rows.length} onChange={selectPage} />,

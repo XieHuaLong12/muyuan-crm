@@ -9,6 +9,7 @@ import { FIRST_TOUCH_PRODUCT_LINES, purchases, sources, stages } from '@/lib/con
 import { formatDateTime, formatDay, formatTime, requestId, windowLeft, type ChatMessage, type TemplateList, type Thread, type Translation } from './types';
 import { LegacyTag, OutreachBar, OutreachProfile, useOutreach } from './OutreachPanel';
 import { StageControl } from './StageControl';
+import { DemandCard } from './DemandCard';
 import { GradeAvatar, GradeControl, GradeFollow } from './Grade';
 import { ComposerHandle, useComposerSize } from './Composer';
 import { MaterialsPanel } from './Materials';
@@ -254,6 +255,8 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
 
   const customer = thread?.customer;
   const win = thread?.window, left = win?.status === 'OPEN' ? windowLeft(win.expiresAt) : null;
+  // The newest customer message: the demand profile reads the chat again after it.
+  const lastInboundAt = messages.reduce<string | null>((latest, m) => m.direction === 'INBOUND' && (!latest || m.sentAt > latest) ? m.sentAt : latest, null);
   const canChat = !!thread?.sending.configured && !thread.sending.optedOut && win?.status === 'OPEN';
   const chosenTemplate = templates.templates.find(t => t.id === templates.chosen);
   const fills = chosenTemplate ? templates.fills[chosenTemplate.id] ?? [] : [];
@@ -449,6 +452,7 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
         <StageControl customerId={customerId} stage={customer.stage} hasDeal={customer.hasDeal} invalidReason={customer.invalidReason} currency={customer.currency}
           last={thread.stageEvents[0] ? { by: thread.stageEvents[0].by, changedAt: thread.stageEvents[0].changedAt, toStage: thread.stageEvents[0].toStage } : null}
           timezone={timezone} onChanged={profileChanged} />
+        <DemandCard customerId={customerId} lastInboundAt={lastInboundAt} canChat={canChat} onAsk={line => { setText(current => current.trim() ? `${current.trim()} ${line}` : line); setOriginal(undefined); }} />
         <dl className="bos-chat-facts">
           <dt>意向产品</dt><dd>{[customer.productInterest, customer.productModel].filter(Boolean).join(' · ') || '—'}{used('productLine')}</dd>
           <dt>采购类型</dt><dd>{customer.purchaseType === 'OTHER' ? '—' : label(purchases, customer.purchaseType)}</dd>
