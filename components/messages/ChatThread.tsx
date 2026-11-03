@@ -19,6 +19,7 @@ import { TagEditor } from './Tags';
 import { TodoMarkBanner, TodoMarkButton } from './TodoMark';
 
 const POLL_MS = 8_000;
+const TRANSLATING = '翻译中…';
 const MEDIA_TYPES = new Set(['IMAGE', 'VIDEO', 'AUDIO', 'VOICE', 'DOCUMENT', 'FILE', 'STICKER']);
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,video/mp4,audio/mpeg,audio/ogg,audio/mp4,audio/aac,audio/amr,application/pdf,text/plain,application/zip,.docx,.xlsx';
 const label = (map: Record<string, string>, key: string | null | undefined) => (key && map[key]) || key || '—';
@@ -201,7 +202,7 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
   }
 
   async function translate(id: string) {
-    setTranslations(t => ({ ...t, [id]: '翻译中…' }));
+    setTranslations(t => ({ ...t, [id]: TRANSLATING }));
     try { const r = await api<Translation>('inbox/translate', 'POST', { messageId: id }); setTranslations(t => ({ ...t, [id]: r })); }
     catch (e) { setTranslations(t => ({ ...t, [id]: (e as Error).message })); }
   }
@@ -312,6 +313,7 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
           const stored = message.translation ?? autoTranslated[message.id];
           const clicked = translations[message.id];
           const chinese = stored && (stored.kind === 'ORIGINAL' || autoOn) ? stored : typeof clicked === 'object' ? clicked : undefined;
+          const failed = typeof clicked === 'string' && clicked !== TRANSLATING;
           return <Fragment key={message.id}>
             {day !== previous && <div className="bos-chat-day">{day}</div>}
             <article className={`bos-chat-bubble${out ? ' is-out' : ''}`}>
@@ -321,7 +323,7 @@ export function ChatThread({ customerId, timezone, admin, profileOpen, onToggleP
               {chinese ? <p className="bos-chat-translation"><span>{chinese.kind === 'ORIGINAL' ? (out ? '你写的中文' : '中文') : '机器翻译'}</span>{chinese.text}</p>
                 : typeof clicked === 'string' && <p className="bos-chat-translation is-status">{clicked}</p>}
               <div className="bos-chat-bubble-meta">
-                {!out && body.trim() && !chinese && !clicked && (!autoOn || autoDown) && needsTranslation(message) && <button type="button" className="bos-chat-translate" onClick={() => translate(message.id)}>翻译</button>}
+                {!out && body.trim() && !chinese && (!clicked || failed) && (!autoOn || autoDown) && needsTranslation(message) && <button type="button" className="bos-chat-translate" onClick={() => translate(message.id)}>{failed ? '重试' : '翻译'}</button>}
                 {message.source === 'whatsapp_web' && <span>本地同步</span>}
                 <time dateTime={message.sentAt}>{formatTime(message.sentAt, timezone)}</time>
                 {out && <Status status={message.status} />}

@@ -10,13 +10,31 @@ import { accessible } from './customer-service';
  * Chinese before 译成客户语言 is stored with the message they sent (ORIGINAL).
  */
 
-/** Chinese through the translation service set up for lead imports, then DeepSeek; null when neither works. */
-async function toChinese(text: string) {
+const NOT_CONFIGURED = '翻译暂不可用：需要配置 DeepSeek，或在线索导入的「翻译服务配置」中设置翻译服务';
+
+/** Why DeepSeek did not answer, in words a salesperson can act on. */
+function failureReason(error: unknown) {
+  const name = error instanceof Error ? error.name : '';
+  if (name === 'TimeoutError' || name === 'AbortError') return 'DeepSeek 响应超时';
+  const message = error instanceof Error ? error.message : '';
+  return message.startsWith('DeepSeek') ? message : `DeepSeek 连接失败${message ? `（${message}）` : ''}`;
+}
+
+/**
+ * Chinese through the translation service set up for lead imports, then DeepSeek. `error` says why there is none:
+ * nothing is set up, or the service that is set up failed this time (timeout, balance, rate limit…), which a retry may fix.
+ */
+async function toChinese(text: string): Promise<{ text: string } | { error: string }> {
   const { translator } = await import('./meta-translation-service');
   const result = await (await translator()).translate(text.slice(0, 4000));
-  if (!result.pending && result.text.trim()) return result.text;
+  if (!result.pending && result.text.trim()) return { text: result.text };
   const { translateToChinese } = await import('./sales-copilot-service');
-  return translateToChinese(text).catch(() => null);
+  try {
+    const translation = await translateToChinese(text);
+    return translation ? { text: translation } : { error: NOT_CONFIGURED };
+  } catch (error) {
+    return { error: `翻译失败：${failureReason(error)}，请稍后点「重试」` };
+  }
 }
 
 const translationSelect = { kind: true, text: true } as const;
@@ -40,9 +58,9 @@ export async function translateMessage(user: Actor, input: unknown) {
   await accessible(message.customerId, user);
   if (message.translation) return { text: message.translation.text, kind: message.translation.kind };
   if (!message.content.trim() || /^\[[^\]]*\]$/.test(message.content.trim())) throw new HttpError(400, '这条消息没有可翻译的文字');
-  const text = await toChinese(message.content);
-  if (!text) throw new HttpError(503, '翻译暂不可用：需要配置 DeepSeek，或在线索导入的「翻译服务配置」中设置翻译服务');
-  const saved = await store(messageId, 'MACHINE', text);
+  const result = await toChinese(message.content);
+  if ('error' in result) throw new HttpError(503, result.error);
+  const saved = await store(messageId, 'MACHINE', result.text);
   return { text: saved.text, kind: saved.kind };
 }
 
@@ -63,8 +81,8 @@ export async function translateBatch(user: Actor, input: unknown) {
   const translations: Record<string, { kind: string; text: string }> = {};
   let failed = 0;
   for (const message of messages.filter(needsTranslation)) {
-    const text = await toChinese(message.content);
-    if (text) translations[message.id] = await store(message.id, 'MACHINE', text);
+    const result = await toChinese(message.content);
+    if ('text' in result) translations[message.id] = await store(message.id, 'MACHINE', result.text);
     else failed++;
   }
   return { translations, unavailable: failed > 0 && !Object.keys(translations).length };
