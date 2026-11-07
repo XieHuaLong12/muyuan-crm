@@ -1,0 +1,382 @@
+# BOS 交付手册
+
+> **内部文档，不交给客户。** 生成客户版代码时删除本文件（见 2.2）。
+
+这是「收费帮别人搭这套系统」的作业手册。分三部分：
+
+- **第一部分 业务篇**：卖什么、怎么收费、合同写什么、风险在哪
+- **第二部分 交付篇**：一次性准备母版，之后每个客户按 8 个阶段交付
+- **第三部分 售后篇**：升级、维护、排障
+
+文中 `【填写】` 是需要你按自己的市场定的内容。工期是按工作量估的参考值，接几单后用实际数据替换。
+
+---
+
+# 第一部分 业务篇
+
+## 1.1 卖的是什么
+
+**一句话：** 给靠 Facebook / Instagram 广告和 WhatsApp 获客的外贸 B2B 团队，提供一套「广告线索自动进来 → 自动分配给销售 → 在 CRM 里用 WhatsApp 跟进 → 报价 → 成交 → 回头看哪条广告赚钱」的销售系统。
+
+**目标客户：** 3–30 人的外贸销售团队，主要渠道是 Meta 广告 + WhatsApp，现在用 Excel 或个人手机跟客户。家具、建材、家电这类有型号、有包装体积、要算运费的产品最合适（报价单、运费库是现成的）。
+
+**能拿出来讲的卖点（都是系统里已有的）：**
+
+| 客户的痛 | 系统怎么解决 | 相关页面 |
+| --- | --- | --- |
+| 广告线索漏掉、销售回得慢 | 表单线索实时入库，5 分钟没联系就提醒，手机推送 | 客户列表、消息、[Meta Lead Ads](META_LEAD_ADS.md) |
+| 销售用个人 WhatsApp，人走客户就走 | 公司业务号统一收发，聊天记录在公司系统里 | [消息中心](MESSAGE_CENTER.md) |
+| 不知道哪条广告真的带来订单 | 每个订单固定归因到广告，按广告看花费和成交 | 广告效果、[身份链](IDENTITY_CHAIN.md) |
+| 外语沟通慢、话术不统一 | 自动翻译、AI 优化话术、常用回复、话术效果对比 | 消息页、[话术与工作台](OUTREACH_AND_WORKBENCH.md) |
+| 报价靠手工 Excel | 选型号自动带价、自动算运费、中英法 PDF | [报价单与运费库](QUOTATION_SYSTEM.md) |
+| 老板看不到团队在干什么 | 经营总览、客户分析、消息分析、销售业绩 | 经营总览、[指标口径](METRICS.md) |
+
+**演示：** 准备一套演示站（用母版 + 演示数据，见 2.1），销售时现场演示比讲功能有用。演示站不要用你自己公司的真实数据。
+
+## 1.2 交付模式（二选一，或都提供）
+
+| | A. 一次性交付（客户自有服务器） | B. 托管（你来运维） |
+| --- | --- | --- |
+| 服务器 / 数据库 | 客户购买，在客户名下 | 你购买，每个客户独立的库和域名 |
+| 收费 | 搭建费 + 可选年度维护费 | 搭建费（可减免）+ 月 / 年服务费 |
+| 你的风险 | 低：交付完责任清楚 | 高：宕机、数据丢失、安全都是你的责任 |
+| 长期收入 | 少，靠维护费和二次开发 | 稳定的持续收入 |
+| 适合 | 有 IT 的客户、对数据很敏感的客户 | 小团队、没人懂技术的客户 |
+
+选 B 的话，一定要先把备份、监控、恢复演练做好再接第二个客户。
+
+## 1.3 套餐与报价结构
+
+| 套餐 | 包含 | 搭建费 | 维护 / 服务费 |
+| --- | --- | --- | --- |
+| 基础版 | CRM、客户分配、销售看板、WhatsApp（Gupshup）收发、报价单、手机 App | 【填写】 | 【填写】/年 |
+| 标准版 | 基础版 + Meta 广告线索实时接入 + 广告数据同步 + AI 翻译 / 话术 | 【填写】 | 【填写】/年 |
+| 定制 | 品牌和产品之外的功能改动，单独评估 | 按人天【填写】/天 | — |
+
+报价时一并说明的另收费用：
+
+- **产品资料录入**：客户给整理好的表格就包含；要你从图册 / 图片里整理的，按型号数量另算【填写】
+- **历史客户导入**：一次 Meta CSV 导入包含；其他格式另算【填写】
+- **培训**：包含一次线上培训【填写】小时，之后按次
+
+**第三方费用由客户直接付给平台**（合同里写清楚，不经你的手，免得变成你的成本）：
+
+| 项目 | 付给谁 | 说明 |
+| --- | --- | --- |
+| 服务器 / 托管 | 托管商（如 Hostinger）或云厂商 | 模式 B 时由你采购，打包进服务费 |
+| 域名、HTTPS | 域名注册商 | — |
+| MySQL 数据库 | 托管商 / 云厂商 | — |
+| WhatsApp 发送费 | Gupshup（含 Meta 会话费） | 按消息量计费 |
+| AI 调用 | DeepSeek | 按用量计费 |
+| 广告费 | Meta | 与本系统无关，但系统会读取 |
+
+## 1.4 工期参考
+
+| 阶段 | 你的工作量 | 等待时间（不在你控制内） |
+| --- | --- | --- |
+| 0 收资料 | 0.5 天 | 客户整理资料，常常是最慢的一步 |
+| 1 品牌与产品 | 0.5–1 天（产品另算） | — |
+| 2–4 服务器与首次部署 | 0.5–1 天 | 客户买服务器、域名解析生效 |
+| 5 接渠道 | 1–2 天 | Meta 企业认证、WhatsApp 号码注册、模板审核，可能要几天到几周 |
+| 6 定时任务 | 0.5 小时 | — |
+| 7 验收培训 | 0.5–1 天 | 客户安排时间 |
+
+对客户承诺工期时，只承诺「你的工作量」部分，等待部分写成「以平台审核为准」。
+
+## 1.5 合同要点
+
+- **范围**：写明套餐包含的功能清单，以第 7 阶段验收清单作为验收标准；清单外的都算定制
+- **账号归属**：Gupshup、Meta App、Facebook 主页、广告账户、DeepSeek 都注册在客户名下，你只拿操作权限；交付后客户可以收回
+- **数据归属**：客户数据归客户。模式 B 写明备份频率、保存多久、合同结束后怎么导出和删除
+- **源码**：说清楚是「授权使用」还是「源码交付」。授权使用的话，客户不能转售或再给第三方部署
+- **平台风险免责**：WhatsApp 号码被封、模板被拒、Meta 审核不通过、广告账户被限，属于平台规则，不在你的责任内；但你要提醒客户遵守平台规则（不群发营销、尊重退订）
+- **AI 免责**：AI 只给建议和草稿，不自动发消息，发出去的内容由销售确认
+- **售后期**：上线后【填写】天免费修 bug；之后按维护合同
+- **付款节点**：建议 签约【填写】% → 首次部署可登录【填写】% → 验收通过【填写】%
+
+## 1.6 风险清单
+
+| 风险 | 预防 |
+| --- | --- |
+| 客户把系统拿去转卖 | 合同写授权范围；交付不带 git 历史和本手册 |
+| 你自己公司的数据或联系方式出现在客户系统里 | 第 2.1 步做干净的母版，每次从母版出客户版 |
+| 每个客户都改了代码，升级时合并成本越来越高 | 改动尽量只动第 2.3 表里的文件；长期做「品牌配置化」（见文末） |
+| 托管客户的数据丢失 | 每日备份 + 每月一次恢复演练 |
+| 一个客户的密钥泄露影响别的客户 | 每个客户独立的库、独立的全部密钥，绝不共用 |
+
+---
+
+# 第二部分 交付篇
+
+## 2.1 一次性准备：做一个干净的「母版」
+
+现在这个仓库是你自己公司在用的版本，里面有你的品牌、联系方式、产品、运营计划。直接复制给客户，会把这些交出去。先做一个母版仓库（只做一次，之后每个客户都从母版出）。
+
+**要清理掉的内容：**
+
+| 内容 | 位置 |
+| --- | --- |
+| 公司名、电话、邮箱、阿里巴巴店铺 | `lib/quote-i18n.ts`、`services/whatsapp-connect-service.ts`、`scripts/meta-lead-doctor.mjs`、`tests/whatsapp-webhook.test.ts` |
+| 品牌名 LVANJU / 木远 / 绿安居 | 见 2.3 的表 |
+| 你的产品目录和产品图 | `prisma/seed-product-os.ts`、`prisma/products-2026.ts`、`prisma/products-2026-run.ts`、`prisma/catalog-2026.mjs`、`public/products/`、`docs/product-os/` |
+| 你的运营计划和话术 | `lib/workbench.ts`（月 / 周重心）、`components/outreach/ScriptLibrary.tsx` |
+| 你的域名 | `docs/META_LEAD_ADS.md` 里的示例域名 |
+| 内部验收截图和记录 | `docs/identity-acceptance/`、`docs/v3-preview/`、`docs/V3-CHANGED-FILES.md` 等开发过程文档 |
+
+查漏命令（结果为空才算干净）：
+
+```bash
+grep -rn "木远\|LVANJU\|lvanju\|绿安居\|Mianxuanhui\|15815694430\|avenlee\|avenee" --exclude-dir=node_modules --exclude-dir=.git .
+```
+
+**产品种子要特别处理。** `scripts/production-init.mjs` 每次 `build` / `start` 都会：产品库为空时导入种子产品；按 `catalog-2026.mjs` 校正 Y 系列；补上 `products-2026` 里缺的型号；按 `public/products/<型号>.jpg` 补主图。母版里要把第 2、3 步去掉，种子文件换成空的或通用演示产品，否则客户删掉的型号下次部署又会被补回来。
+
+**同时准备一个演示站**：母版 + `pnpm db:seed` 演示数据 + 一套演示产品，部署在你自己的域名下，用于销售演示。
+
+母版做好后，在你自己的电脑上跑通：
+
+```bash
+pnpm install
+```
+
+```bash
+pnpm lint
+```
+
+```bash
+pnpm build
+```
+
+## 2.2 每个客户：从母版生成客户版
+
+1. 从母版导出代码，**不带 git 历史**，新建客户自己的仓库（客户名下或你名下的私有仓库，按合同）；
+2. 删除本手册 `docs/DELIVERY_MANUAL.md`；
+3. 在你自己的记录里登记：客户名、套餐、交付模式、母版版本号（母版的 commit）。以后升级要靠这个版本号知道该合并哪些更新。
+
+然后按下面 8 个阶段做。
+
+| 阶段 | 做什么 | 产出 |
+| --- | --- | --- |
+| 0 | 收资料 | 资料清单、账号清单 |
+| 1 | 换品牌和产品 | 客户版代码 |
+| 2 | 服务器、数据库、域名 | HTTPS 域名 + 空 MySQL 库 |
+| 3 | 环境变量 | 平台环境变量 / `.env` |
+| 4 | 首次部署、建账号 | 能登录的系统 |
+| 5 | 接外部渠道 | 线索和消息能自动进来 |
+| 6 | 定时任务 | 4 个 Cron |
+| 7 | 验收、培训、交付 | 签字的验收清单 |
+
+## 阶段 0：收资料
+
+发给客户一张表，让他们一次填齐。
+
+**必须的：**
+
+- [ ] 公司名（中 / 英）、品牌名、Logo（报价单抬头）、App 图标
+- [ ] 网站、邮箱、WhatsApp、地址（报价单页眉页脚）
+- [ ] 默认货币、时区
+- [ ] 管理员和销售名单（姓名、邮箱）
+- [ ] 产品表：型号、名称、规格、包装尺寸、CBM、毛重、价格；产品图按型号命名
+- [ ] 要用的域名（如 `crm.客户域名.com`）
+- [ ] 公司介绍和主营产品的英文描述（写进 AI 提示词）
+
+**按套餐要的：**
+
+| 渠道 | 客户要准备 / 授权 |
+| --- | --- |
+| WhatsApp（Gupshup） | Gupshup 账号、App 名、API Key、业务号码、App ID；首联模板（你提供模板文案，客户提交审核） |
+| Meta 广告表单线索 | Meta 企业认证、开发者 App（App ID / Secret）、Facebook 主页管理员权限 |
+| Meta 广告数据 | 广告账户 ID、System User Token（`ads_read`） |
+| AI | DeepSeek API Key |
+
+Meta 企业认证和 WhatsApp 号码注册最慢，签约当天就让客户开始办。
+
+## 阶段 1：换品牌和产品
+
+| 位置 | 内容 |
+| --- | --- |
+| `app/layout.tsx`、`app/manifest.ts`、`app/login/page.tsx` | 网页标题、手机 App 名、登录页 |
+| `components/ui/Sidebar.tsx`、`components/bos/BOSShell.tsx` | 侧边栏品牌 |
+| `public/brand/`、`components/bos/quote/QuoteDocument.tsx` | 报价单 Logo |
+| `public/icons/*`、`app/icon.png`、`app/apple-icon.png` | 手机桌面图标 |
+| `lib/quote-i18n.ts` | 报价单抬头、联系方式、页脚（中 / 英 / 法） |
+| `lib/quote-pdf.ts` | PDF 的 Producer |
+| `services/whatsapp-ai-service.ts`、`services/reply-polish-service.ts`、`services/demand-profile-service.ts` | AI 提示词里的公司名、主营产品 |
+| `services/whatsapp-template-service.ts`、`lib/constants.ts` | WhatsApp 模板名前缀、模板里的产品线，要和客户审核通过的模板名一致 |
+| `components/outreach/ScriptLibrary.tsx`、`components/bos/MaterialLibrary.tsx`、`lib/workbench.ts` | 话术、资料库、工作台文字 |
+| `scripts/production-init.mjs` | 首个管理员邮箱 / 姓名、公司名 |
+| `prisma/seed-product-os.ts` 及 `public/products/` | 客户的产品（或留空，让客户在页面录入） |
+
+按需：新 / 旧客户分界日期（[§12](OUTREACH_AND_WORKBENCH.md#12-新客户--旧客户分开2026-10-29)）、节假日 `lib/holidays.ts`、国家时区 `lib/country-timezone.ts`。
+
+**确认：** `pnpm lint`、`pnpm build` 通过；用 2.1 的查漏命令查不到母版里的占位品牌。
+
+## 阶段 2：服务器、数据库、域名
+
+| 项 | 要求 |
+| --- | --- |
+| 运行环境 | Node.js ≥ 22、pnpm 11。Hostinger Node.js 托管，或 VPS + pm2 / systemd + Nginx |
+| 数据库 | **空的** MySQL 8 或 MariaDB 11.8，utf8mb4；单独账号，只有这个库的权限 |
+| 域名 | 必须 HTTPS（Meta / Gupshup 回调、手机 App、推送、本地同步扩展都要求） |
+| 附件目录 | 部署目录之外、可写、会备份，给 `MEDIA_STORAGE_DIR` |
+| 备份 | 数据库每日备份 + 附件目录备份，上线前配好 |
+
+Hostinger 构建如果报 `os error 11`，是平台线程数限制，`next.config.ts` 已限制为 2 个构建进程，不要调大 `NEXT_BUILD_CPUS`。
+
+**确认：** 能连上空库；域名打开是 HTTPS。
+
+## 阶段 3：环境变量
+
+完整说明见 `.env.example`。Hostinger 填在面板的 Environment variables；VPS 写在项目根目录 `.env`。**每个客户的密钥都单独生成，绝不复用。**
+
+**不填就启动不了：**
+
+| 变量 | 说明 |
+| --- | --- |
+| `DATABASE_URL` | `mysql://用户:密码@主机:3306/库名` |
+| `AUTH_SECRET` | 随机长串；**上线后不能改**，否则已加密保存的数据解不开 |
+| `SEED_ADMIN_PASSWORD` | 首次创建管理员的密码，之后部署不会重置 |
+| `PUBLIC_APP_URL` | `https://客户域名`，结尾不带 `/` |
+| `MEDIA_STORAGE_DIR` | 附件目录 |
+| `DEFAULT_TIMEZONE`、`DEFAULT_CURRENCY` | 首次建库写入公司设置 |
+| `COOKIE_SECURE` | 反向代理没传 `x-forwarded-proto` 时设 `true` |
+
+**密钥（各自随机）：** `WEBHOOK_SECRET`（官网表单接口）、`META_SYNC_SECRET`（所有定时任务）、`GUPSHUP_WEBHOOK_SECRET`、`META_LEAD_WEBHOOK_SECRET`、`WHATSAPP_VERIFY_TOKEN`（只在用 Meta 官方 Cloud API 时）。
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+**按渠道：** `GUPSHUP_*`、`META_*`、`DEEPSEEK_*`、`VAPID_*`、`WHATSAPP_DEFAULT_OWNER_EMAIL`，阶段 5 填。
+
+把这个客户填了哪些变量记到你的客户档案里（**只记变量名，不记值**；值存在密码管理器里）。
+
+## 阶段 4：首次部署
+
+```bash
+pnpm install --frozen-lockfile
+```
+
+```bash
+pnpm build
+```
+
+```bash
+pnpm start
+```
+
+Hostinger 上构建命令 `pnpm build`，启动命令 `pnpm start`。两者都会先跑 `scripts/production-init.mjs`：检查必填变量 → 有失败迁移就停止 → `prisma migrate deploy` 建表 → 首次创建管理员和公司设置 → 产品种子 / 补主图 / 补订单 / 有效口径修正 → 打印 Meta 变量是否配置（不打印值）。
+
+**不要**在客户的生产库跑 `pnpm db:seed`、`pnpm test`、`pnpm test:smoke`。
+
+首次登录后：
+
+1. 用管理员账号登录，改密码；
+2. 「设置 → 公司设置」：公司名、货币、时区；
+3. 「团队」：建销售账号，选新线索分配方式（待分配池 / 轮流分配）；
+4. 「目标」：年度目标；
+5. 「产品库」核对产品；「运费库」录目的国运价；「报价设置」核对模板。
+
+**确认：** 管理员、销售都能登录；销售只看得到自己的客户；能建客户、出一张报价单 PDF。
+
+## 阶段 5：接外部渠道
+
+按顺序接，接一个验一个。
+
+**5.1 WhatsApp（Gupshup）**：填 `GUPSHUP_API_KEY`、`GUPSHUP_SOURCE`（不带 `+`）、`GUPSHUP_APP_NAME`、`GUPSHUP_APP_ID`、`GUPSHUP_WEBHOOK_SECRET`、`WHATSAPP_DEFAULT_OWNER_EMAIL`；Gupshup 回调填 `https://客户域名/api/whatsapp/webhook?token=<GUPSHUP_WEBHOOK_SECRET>`，订阅 message 和 message-event；重新部署。
+确认：手机发消息 → 消息页出现并自动建客户 → CRM 回复手机收到。详见 [WhatsApp V2 部署](whatsapp-v2-deployment.md)、[消息中心](MESSAGE_CENTER.md)。
+
+**5.2 Meta 广告表单线索**：填 `META_APP_ID`、`META_APP_SECRET`、`META_LEAD_WEBHOOK_SECRET`、`META_PAGE_ACCESS_TOKEN`、`META_PAGE_ID`；Meta App 切到 Live，Webhooks → Page 订阅 `leadgen`，回调 `https://客户域名/api/leads/webhook`；本机用客户变量跑 `pnpm meta:doctor`。
+确认：用 Meta Lead Ads 测试工具提交一条 → 客户列表出现并分配。详见 [Meta Lead Ads](META_LEAD_ADS.md)。
+
+**5.3 Meta 广告数据**：填 `META_AD_ACCOUNT_ID`、`META_ADS_ACCESS_TOKEN`，设置页手动同步一次。确认「广告效果」有数据。详见 [Meta 广告同步](META_ADS_SYNC.md)。
+
+**5.4 AI**：填 `DEEPSEEK_API_KEY`。确认外语消息自动出中文、「优化话术」能出 3 条、回复里公司名是客户的。
+
+**5.5 手机 App 与推送**：`VAPID_*` 可不填（自动生成）。每个销售用手机打开域名 → 安装到桌面 → 开启通知。详见 [手机 App](MOBILE_APP.md)。
+
+**5.6 可选**：WhatsApp Web 本地同步扩展（[说明](WHATSAPP_WEB_LOCAL_SYNC.md)）、官网表单接入（README「Webhook 调用」）、广告转化回传（[身份链](IDENTITY_CHAIN.md)，默认关）。
+
+## 阶段 6：定时任务
+
+都用 `META_SYNC_SECRET`。Hostinger：面板 → 高级 → Cron Jobs；VPS 用 crontab。
+
+| 频率 | 命令 | 作用 |
+| --- | --- | --- |
+| 每 5 分钟 | `curl -fsS -X POST -H "x-cron-secret: <META_SYNC_SECRET>" https://客户域名/api/cron/meta-leads` | 补拉 Meta 线索、补发提醒、重试 WhatsApp 回调、话术引擎、复盘提醒 |
+| 每小时 | `curl -fsS -X POST -H "x-cron-secret: <META_SYNC_SECRET>" https://客户域名/api/cron/workflows` | 自动任务兜底、每周一话术结论 |
+| 每 6 小时 | `curl -fsS "https://客户域名/api/cron/meta-sync?secret=<META_SYNC_SECRET>"` | 广告数据和表单目录同步（没接 Meta 可不配） |
+| 每 5–15 分钟 | `curl -fsS -X POST -H "x-cron-secret: <META_SYNC_SECRET>" -H "Content-Type: application/json" -d '{"kind":"leads"}' https://客户域名/api/cron/identity-chain` | 身份链后台处理；`analysis`、`feedback` 可另配，`daily` 每天一次；不要高频跑 `all` |
+
+确认：每条手动执行一次，返回 200。
+
+## 阶段 7：验收、培训、交付
+
+**验收清单（作为合同验收标准，客户签字）：**
+
+- [ ] 管理员、销售能登录；销售只看到自己的客户
+- [ ] 手机发 WhatsApp → 自动建客户 → CRM 回复 → 手机收到 → 回执状态更新
+- [ ] 客户发图片 / 语音 → CRM 能打开
+- [ ] Meta 测试线索 → 进客户列表 → 分配 → 销售手机收到推送（标准版）
+- [ ] 报价单中英文 PDF 是客户的公司和 Logo
+- [ ] AI 翻译、优化话术可用，公司名正确（标准版）
+- [ ] 定时任务返回 200
+- [ ] 数据库备份已运行，并恢复到副本验证过
+- [ ] 系统里找不到其他公司的品牌和联系方式
+
+**培训（建议分两场）：**
+
+- 销售：消息页、待处理、改阶段和标签、报价单、手机安装与通知
+- 管理员：分配线索、目标、经营总览各页怎么看（[指标口径](METRICS.md)）、建销售账号和停用
+
+**交给客户：** 访问地址和管理员账号（客户自己改密码）；各平台账号归属说明；使用说明；一份配置记录（变量名、回调地址、Cron，不含密钥值）。
+
+**你自己存档：** 客户档案（套餐、模式、母版版本号、上线日期、维护到期日）、签字的验收清单、密钥（在密码管理器里）。
+
+---
+
+# 第三部分 售后篇
+
+## 3.1 升级
+
+母版有新功能时，按客户档案里记录的母版版本号，把之后的更新合并到客户版：
+
+1. 备份客户的数据库和附件目录；
+2. 合并母版更新，处理阶段 1 那些文件的冲突；
+3. 用数据库副本跑一遍 `pnpm build`，确认迁移成功；
+4. 正式部署：`pnpm build` → 重启；
+5. 更新客户档案里的母版版本号。
+
+迁移都是只加不删，回滚代码时保留新增的表和列。新功能可以作为升级卖点向维护客户收费，或作为维护合同的权益。
+
+## 3.2 维护合同里通常包含
+
+- 系统故障排查和修复
+- 平台接口变化的适配（如 Meta Graph API 版本升级）
+- 备份检查（模式 B）
+- 每年【填写】次功能升级
+- 不包含：新功能定制、客户自己改坏的代码、第三方平台封号
+
+## 3.3 排障速查
+
+| 现象 | 先查 |
+| --- | --- |
+| 启动停住，提示失败迁移 | 对照备份和实际表结构手工处理，不要直接删迁移记录 |
+| Meta 线索不进来 | `pnpm meta:doctor`；平台日志搜 `[meta-lead]`；[Meta Lead Ads 排查](META_LEAD_ADS.md) |
+| WhatsApp 收不到 | Gupshup 回调地址和 token；`/admin/integration-debug`；[Gupshup 诊断](GUPSHUP_URL_DIAGNOSTIC.md) |
+| 推送收不到 | 是否 HTTPS、手机是否开启过通知 |
+| 构建报 `os error 11` | Hostinger 线程限制，见阶段 2 |
+
+---
+
+# 下一步：把每单的成本降下来
+
+现在每个客户的主要工作量在第 2.1 和阶段 1：品牌、联系方式、AI 公司介绍、模板名前缀、管理员邮箱、产品种子都写死在代码里，而且每个客户都改代码，升级时就要一个个合并。
+
+如果把这些挪进「公司设置」页面和环境变量：
+
+- 母版就是这个仓库本身，不用另外维护一份清理过的副本；
+- 每个客户的代码完全相同，只是配置不同，阶段 1 变成填表，升级只需要重新部署；
+- 模式 B 下可以用同一份代码给多个客户部署，运维成本最低。
+
+这是接第二、三单之前最值得做的一笔投入。
