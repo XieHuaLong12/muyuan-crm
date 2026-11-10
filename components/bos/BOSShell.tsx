@@ -7,6 +7,7 @@ import type { NotificationFeed } from '@/services/notification-service';
 import { activeWorkspace } from '@/lib/role-workspace';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { MobileNav } from '@/components/ui/MobileNav';
+import { QuickCapture } from '@/components/ideas/QuickCapture';
 import { Search } from '@/components/ui/bos';
 import { LiveNotifications, NotificationControls } from '@/components/live-notifications';
 import { InstallAppBanner } from '@/components/pwa';
@@ -110,6 +111,7 @@ export function BOSShell({ boot, children }: { boot: Bootstrap; children: React.
       </div>
       <MobileNav name={boot.user.name} role={boot.user.role} badges={badges} />
       <LiveNotifications userId={boot.user.id} items={feed?.items} />
+      <QuickCapture path={path} role={boot.user.role} />
     </div>
   );
 }

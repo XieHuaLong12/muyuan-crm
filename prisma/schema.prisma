@@ -1850,3 +1850,61 @@ model PlanSuggestion {
  updatedAt DateTime @updatedAt
  @@index([status, createdAt])
 }
+
+// 想法墙：每个人自己的一面墙，只有自己看得到。三种纸条：IDEA 想法（有进度）、QUOTE 喜欢的话（带出处）、
+// USEFUL 有用的（技巧、链接、截图、从聊天里贴来的话）。存档不删除。
+model WallNote {
+ id String @id @default(cuid())
+ userId String
+ // IDEA | QUOTE | USEFUL
+ kind String @db.VarChar(8)
+ text String @db.Text
+ // 喜欢的话的出处（书名、人名、「自己写的」）
+ source String @default("") @db.VarChar(200)
+ linkUrl String @default("") @db.VarChar(1000)
+ // 截图：存在媒体目录 wall/ 下，只有本人能看
+ imageKey String? @db.VarChar(64)
+ imageType String? @db.VarChar(40)
+ // yellow | pink | green | blue | purple（想法）；喜欢的话和有用的用固定底色
+ color String @default("yellow") @db.VarChar(12)
+ // 想法的进度：NEW 刚想到 | WANT 想做 | DOING 在做 | DONE 做完了；其他两种为空
+ status String @default("") @db.VarChar(8)
+ // 标签（不带 #），最多 6 个
+ tags Json?
+ pinned Boolean @default(false)
+ // 在哪个页面记的（「国家作战卡 · 法国」或路径）
+ capturedOn String @default("") @db.VarChar(200)
+ // 转成的任务；任务做完，想法自动算做完了
+ taskId String?
+ remindOn DateTime?
+ // 送到哪里了：QUICK_REPLY 存成常用回复 | MATERIAL 放进产品资料
+ savedTo String @default("") @db.VarChar(16)
+ savedId String?
+ archivedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([userId, archivedAt, createdAt])
+ @@index([taskId])
+}
+
+// 每日一签：每人每天一签。抽到的内容（签诗、解签、运势、宜忌、赠言）当场存下来，当天不会变；晚上对签记下灵不灵。
+model DailySign {
+ id String @id @default(cuid())
+ userId String
+ // 公司时区的日期 yyyy-MM-dd
+ day String @db.VarChar(10)
+ // DEAL 成交 | CLIENT 客户 | ADS 广告 | IDEA 灵感 | MOOD 心情
+ topic String @db.VarChar(8)
+ signNo Int
+ // 大吉 | 中吉 | 吉（只有吉签）
+ grade String @db.VarChar(4)
+ // 抽签时的完整内容：签诗、解签、运势星级、幸运色 / 数字 / 吉时 / 贵人方位、宜、忌、赠言
+ content Json
+ collectedAt DateTime?
+ // 晚上对签：YES 灵 | NO 不太灵；check 是当天的真实数据
+ verdict String @default("") @db.VarChar(4)
+ verdictAt DateTime?
+ createdAt DateTime @default(now())
+ @@unique([userId, day])
+ @@index([day])
+}
