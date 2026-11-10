@@ -203,3 +203,39 @@ export function CustomerTable({rows,tz,hours=DEFAULT_WORK_HOURS,columns=DEFAULT_
   </tr>)}</tbody>
  </table>{!rows.length&&<div className="empty">暂无数据，试试调整筛选或新建客户。</div>}</div>;
 }
+
+/**
+ * The same customers as cards, for phones (app/mobile-lists.css): who it is, the grade, the stage (changed in place as
+ * in the table), who works it, when it came in and when it is due. The chat icon opens the conversation in 消息; a lead
+ * waiting in the pool gets 分配 instead. Tapping the card opens the side preview. 「定制列」 does not apply here.
+ */
+export function CustomerCards({rows,tz,hours=DEFAULT_WORK_HOURS,onFollow,onChanged,onPreview,onAssign,previewId,selection}:{
+ rows:Customer[];tz:string;hours?:WorkHours;onFollow:(c:Customer)=>void;onChanged?:(message:string)=>void;
+ onPreview?:(c:Customer,fromKeyboard?:boolean)=>void;onAssign?:(c:Customer)=>void;previewId?:string;selection?:{header:ReactNode;cell:(c:Customer)=>ReactNode};
+}){
+ const previewFromCard=(c:Customer)=>(e:React.MouseEvent)=>{if(!(e.target as HTMLElement).closest('a,button,input,select,label'))onPreview?.(c);};
+ if(!rows.length)return <div className="empty">暂无数据，试试调整筛选或新建客户。</div>;
+ return <>
+  {selection&&<label className="customer-cards-all">{selection.header}全选本页</label>}
+  <ul className="customer-cards">{rows.map(c=>{
+   const entry=entryOf({inquiryAt:c.inquiryAt?new Date(c.inquiryAt):null,createdAt:new Date(c.createdAt)},tz);
+   const off=entry.exact&&!inWorkHours(entry.at,tz,hours);
+   return <li key={c.id} className={`customer-card-row${previewId===c.id?' is-previewing':''}`} onClick={onPreview?previewFromCard(c):undefined}>
+    {selection&&<label className="customer-card-select">{selection.cell(c)}</label>}
+    <span className="avatar" aria-hidden>{c.name.slice(0,1)}</span>
+    <div className="customer-card-main">
+     <strong><Link className="customer-name" href={`/customers/${c.id}`}>{c.name}</Link><GradeChip grade={c.leadGrade} reason={c.leadGradeReason} source={c.leadGradeSource}/></strong>
+     <small>{[c.companyName||'未填写公司',c.country].filter(Boolean).join(' · ')}</small>
+     <div className="customer-card-facts"><StageCell c={c} onChanged={onChanged}/><span>{c.pendingAssignment?`待分配 · 已等 ${waited(c.createdAt)}`:c.owner?.name}</span></div>
+     <small className="customer-card-times">进线 {entryLabel(entry.at,tz,entry.exact)}{off&&<em className="entry-off">工作时间外</em>} · 下次跟进 <Due date={c.nextFollowUpAt} tz={tz}/></small>
+    </div>
+    <div className="customer-card-actions">
+     {c.pendingAssignment&&onAssign
+      ?<button type="button" className="primary" onClick={()=>onAssign(c)}>分配</button>
+      :<Link className="customer-card-chat" href={`/messages?customer=${encodeURIComponent(c.id)}`} aria-label={`打开与 ${c.name} 的聊天`}><MessageCircle size={18} aria-hidden/></Link>}
+     <button type="button" className="text-button" onClick={()=>onFollow(c)}><MessageSquare size={14} aria-hidden/>跟进</button>
+    </div>
+   </li>;})}
+  </ul>
+ </>;
+}

@@ -5,7 +5,7 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import nextConfig from '../next.config';
-import { workspaceHome,workspaceNavigation,activeWorkspace,activeWorkspaceLink } from '../lib/role-workspace';
+import { workspaceHome,workspaceNavigation,activeWorkspace,activeWorkspaceLink,phoneNavigation } from '../lib/role-workspace';
 import { createSession,parseSession } from '../lib/session';
 
 /** Every page route under app/, as a matcher (route groups removed, dynamic segments as wildcards). */
@@ -40,6 +40,21 @@ test('the sidebar is short: related pages are tabs of one section',()=>{
         assert.equal(active?.section.href,section.href,tab.href);assert.equal(active?.tab?.href,tab.href,tab.href);
       }
     }
+  }
+});
+
+test('the phone bar shows four sections and keeps every other one behind 更多',()=>{
+  assert.deepEqual(phoneNavigation('ADMIN').bar.map(item=>[item.label,item.section.href]),[['今日','/workbench'],['消息','/messages'],['客户','/customers'],['数据','/command-center']]);
+  assert.deepEqual(phoneNavigation('SALES').bar.map(item=>[item.label,item.section.href]),[['今日','/sales'],['消息','/messages'],['客户','/customers'],['报价','/products']]);
+  assert.deepEqual(phoneNavigation('ADMIN').more.map(section=>section.label),['任务','订单','广告与线索','团队','设置']);
+  assert.deepEqual(phoneNavigation('SALES').more.map(section=>section.label),['话术','我的订单','我的业绩']);
+  for(const role of ['SALES','ADMIN']){
+    const {bar,more}=phoneNavigation(role);
+    // Nothing is lost or shown twice: bar and 更多 together are exactly the sidebar.
+    assert.deepEqual([...bar.map(item=>item.section.href),...more.map(section=>section.href)].sort(),workspaceNavigation(role).map(section=>section.href).sort());
+    assert.equal(bar[0].section.href,workspaceHome(role));
+    // The live counts (today's work, the assignment pool, unread messages) stay one tap away.
+    for(const section of more)assert.equal(section.badge,undefined,section.label);
   }
 });
 

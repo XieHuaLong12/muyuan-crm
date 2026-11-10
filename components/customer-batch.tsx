@@ -4,7 +4,8 @@ import { workHoursOf } from '@/lib/entry-time';
 import { Bootstrap, Customer } from '@/lib/types';
 import { api } from '@/lib/client';
 import type { CustomerColumnKey } from '@/lib/customer-columns';
-import { CustomerTable } from './customer-table';
+import { CustomerCards, CustomerTable } from './customer-table';
+import { usePhone } from './ui/use-phone';
 import { Dialog } from './ui/dialog';
 import { AssignDialog } from './forms';
 
@@ -21,12 +22,15 @@ const won = (c: Customer) => c.deals.length > 0 || c.stage === 'WON';
 /**
  * Customer table with cross-page selection for administrators: assign / transfer, move to the recycle bin.
  * `tools` (the 「定制列」 button) sits at the end of the toolbar for everyone; sales get a toolbar with just that.
+ * On a phone the customers are cards (CustomerCards): the toolbar stays out of the way until something is selected,
+ * and a lead waiting in the pool is assigned from its own card.
  */
 export function BatchCustomerTable({ rows, tz, boot, columns, previewId, tools, onFollow, onSort, onChanged, onPreview }: {
   rows: Customer[]; tz: string; boot: Bootstrap; columns: readonly CustomerColumnKey[]; previewId?: string; tools?: ReactNode;
   onFollow: (c: Customer) => void; onSort: (key: string) => void; onChanged: (message: string) => void; onPreview: (c: Customer, fromKeyboard?: boolean) => void;
 }) {
   const admin = boot.user.role === 'ADMIN';
+  const phone = usePhone();
   const [selected, setSelected] = useState<Customer[]>([]);
   const [dialog, setDialog] = useState<'assign' | 'delete' | 'trash' | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,10 +42,15 @@ export function BatchCustomerTable({ rows, tz, boot, columns, previewId, tools, 
     ? [...prev.filter(c => !rows.some(x => x.id === c.id)), ...rows]
     : prev.filter(c => !rows.some(x => x.id === c.id)));
   const done = (message: string) => { setSelected([]); setDialog(null); onChanged(message); };
+  const selection = admin ? {
+    header: <SelectionBox label="全选当前页客户" checked={rows.length > 0 && rows.every(c => selectedIds.has(c.id))}
+      mixed={rows.some(c => selectedIds.has(c.id)) && !rows.every(c => selectedIds.has(c.id))} disabled={!rows.length} onChange={selectPage} />,
+    cell: (c: Customer) => <SelectionBox label={`选择客户 ${c.name}`} checked={selectedIds.has(c.id)} onChange={value => toggle(c, value)} />,
+  } : undefined;
   return (
     <>
       {admin && (
-        <div className="batch-toolbar">
+        <div className={`batch-toolbar${selected.length ? ' has-selection' : ''}`}>
           <span>已选择 <strong>{selected.length}</strong> 位客户（支持跨页）</span>
           <button className="primary" disabled={!selected.length || busy} onClick={() => setDialog('assign')}>分配 / 转交</button>
           <button className="danger" disabled={!selected.length || busy || protectedCount > 0} title={protectedCount ? '已成交客户需先作废成交才能删除' : undefined}
@@ -55,12 +64,11 @@ export function BatchCustomerTable({ rows, tz, boot, columns, previewId, tools, 
         </div>
       )}
       {!admin && tools && <div className="batch-toolbar table-tools">{tools}</div>}
-      <CustomerTable rows={rows} tz={tz} hours={workHoursOf(boot.settings)} columns={columns} previewId={previewId} onPreview={onPreview}
-        onFollow={onFollow} onSort={onSort} onChanged={onChanged} selection={admin ? {
-        header: <SelectionBox label="全选当前页客户" checked={rows.length > 0 && rows.every(c => selectedIds.has(c.id))}
-          mixed={rows.some(c => selectedIds.has(c.id)) && !rows.every(c => selectedIds.has(c.id))} disabled={!rows.length} onChange={selectPage} />,
-        cell: c => <SelectionBox label={`选择客户 ${c.name}`} checked={selectedIds.has(c.id)} onChange={value => toggle(c, value)} />,
-      } : undefined} />
+      {phone
+        ? <CustomerCards rows={rows} tz={tz} hours={workHoursOf(boot.settings)} previewId={previewId} onPreview={onPreview} onFollow={onFollow} onChanged={onChanged}
+          selection={selection} onAssign={admin ? c => { setSelected([c]); setDialog('assign'); } : undefined} />
+        : <CustomerTable rows={rows} tz={tz} hours={workHoursOf(boot.settings)} columns={columns} previewId={previewId} onPreview={onPreview}
+          onFollow={onFollow} onSort={onSort} onChanged={onChanged} selection={selection} />}
       {dialog === 'assign' && <AssignDialog boot={boot} customers={selected} onClose={() => setDialog(null)} onAssigned={done} />}
       {dialog === 'delete' && (
         <Dialog open onClose={() => { if (!busy) setDialog(null); }} title={`确认删除 ${selected.length} 位客户`}>

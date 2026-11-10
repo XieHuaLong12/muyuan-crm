@@ -69,7 +69,10 @@
 .motion-fade {
   animation-duration: var(--motion-base);
   animation-timing-function: var(--motion-ease);
-  animation-fill-mode: both;
+  /* backwards, not both: the first frame holds during the delay, and once the animation ends the block has no
+     transform left. A kept transform would make it the containing block of everything fixed inside it (the customer
+     preview drawer, the phone filter sheet and selection bar), which would then sit inside the block instead of on screen. */
+  animation-fill-mode: backwards;
   animation-delay: var(--motion-delay, 0ms);
 }
 .motion-in   { animation-name: motionSlideUp; }

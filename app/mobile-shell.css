@@ -1,0 +1,118 @@
+/*
+ * The phone layout of the BOS shell (up to 760px). Imported last in app/layout.tsx.
+ * - The sidebar is replaced by a bar fixed to the bottom (components/ui/MobileNav.tsx) with 更多 as a bottom sheet.
+ * - The top bar is one compact row that stays in place: search, the lead notices, the notification controls.
+ * - Section tabs are a single row that scrolls sideways.
+ * - Text fields are 16px (below that iOS Safari zooms the page on focus) and shared controls are 44px tall.
+ * Desktop is untouched: everything here except the hidden-by-default rules sits inside the media query.
+ */
+.bos-mobile-nav{display:none}
+
+/* 更多: a bottom sheet rendered outside .bos (Radix portal), so it carries its own colors. */
+.bos-more-overlay{position:fixed;inset:0;z-index:100;background:rgba(15,30,24,.4)}
+.bos-more-sheet{position:fixed;left:0;right:0;bottom:0;z-index:101;max-height:86dvh;overflow:auto;display:grid;gap:14px;padding:14px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));background:#f7f7f2;color:#1c3226;border-radius:22px 22px 0 0;box-shadow:0 -12px 40px rgba(15,30,24,.18);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang SC','Microsoft YaHei',sans-serif;font-size:15px;line-height:1.5;animation:bos-more-in .2s ease-out}
+.bos-more-sheet:focus{outline:none}
+@keyframes bos-more-in{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
+.bos-more-head{display:flex;align-items:center;justify-content:space-between}
+.bos-more-head h2{margin:0;font-size:17px;font-weight:600}
+.bos-more-sheet button{border:0;background:transparent;color:inherit;border-radius:12px;padding:0;gap:6px;font-size:13px}
+.bos-more-sheet .bos-more-close{width:44px;height:44px;margin-right:-10px;color:#6f7d75}
+.bos-more-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.bos-more-grid a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:84px;padding:12px 6px;border-radius:16px;background:#fff;border:1px solid rgba(27,49,40,.08);color:#1c3226;font-size:13px;text-decoration:none;text-align:center}
+.bos-more-grid a svg{color:#174b3b}
+.bos-more-grid a[aria-current=page]{background:#e3efe7;border-color:transparent;font-weight:600}
+.bos-more-sheet .bos-install-banner{margin:0;padding:12px 14px;display:flex;align-items:center;gap:12px;border:1px solid rgba(27,49,40,.08);border-radius:16px;background:#fff;box-shadow:none}
+.bos-more-sheet .bos-install-banner>svg{flex:none;color:#174b3b}
+.bos-more-sheet .bos-install-banner p{flex:1;min-width:0;margin:0;font-size:14px}
+.bos-more-sheet .bos-install-banner strong{font-weight:600}
+.bos-more-sheet .bos-install-banner small{display:block;margin-top:2px;font-size:13px;color:#6f7d75}
+.bos-more-sheet .bos-install-banner .bos-button{flex:none;min-height:44px;padding:0 16px;border-radius:12px;background:#174b3b;color:#fff;font-weight:500}
+.bos-more-account{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px 12px;padding:14px;border-radius:16px;background:#fff;border:1px solid rgba(27,49,40,.08)}
+.bos-more-avatar{display:grid;place-items:center;width:40px;height:40px;border-radius:13px;background:#deebe2;color:#1b5340;font-weight:600}
+.bos-more-account strong{display:block;font-size:15px;font-weight:600}
+.bos-more-account small{display:block;font-size:12px;color:#6f7d75}
+.bos-more-sheet .bos-more-account button{min-height:44px;background:#f1f4ef;color:#1c3226;font-weight:500}
+.bos-more-sheet .bos-more-account button:first-of-type{grid-column:1 / -1}
+.bos-more-sheet .bos-more-account button:last-of-type{grid-column:1 / -1;color:#a44b36}
+.bos-more-error{margin:0;font-size:13px;color:#a44b36}
+@media(min-width:420px){.bos-more-sheet .bos-more-account button:first-of-type,.bos-more-sheet .bos-more-account button:last-of-type{grid-column:auto}.bos-more-account{grid-template-columns:auto minmax(0,1fr) auto auto}.bos-more-sheet .bos-more-account button{padding:0 14px}}
+@media(prefers-reduced-motion:reduce){.bos-more-sheet{animation:none}}
+@media print{.bos-mobile-nav{display:none!important}}
+
+@media(max-width:760px){
+  /* iOS Safari zooms the page when a focused field's text is under 16px. Dialogs live outside .bos, so this is global. */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),select,textarea{font-size:16px!important}
+  /* With viewport-fit=cover the page reaches under a landscape notch; keep content clear of it. */
+  body{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+
+  .bos.bos-v2{--bos-phone-top:calc(52px + env(safe-area-inset-top,0px));--bos-phone-bar:calc(58px + env(safe-area-inset-bottom,0px))}
+  .bos.bos-v2 .bos-sidebar{display:none}
+
+  /* Top bar: one row in the brand green, fixed while the page scrolls. */
+  .bos.bos-v2 .bos-topbar{position:sticky;top:0;z-index:40;height:var(--bos-phone-top);padding:env(safe-area-inset-top,0px) 12px 0;gap:8px;background:#17382f;border-bottom:0;backdrop-filter:none;color:#eaf2ed}
+  .bos.bos-v2 .bos-topbar form{flex:1;min-width:0;width:auto}
+  .bos.bos-v2 .bos-topbar .bos-search{height:40px;border:0;border-radius:12px;background:rgba(255,255,255,.13);color:#b9cbc1}
+  .bos.bos-v2 .bos-topbar .bos-search .bos-input{min-height:0;padding:0;color:#f4f8f5}
+  .bos.bos-v2 .bos-topbar .bos-search .bos-input::placeholder{color:#b9cbc1}
+  .bos.bos-v2 .bos-topbar .bos-search:focus-within{outline-color:#9fd0b8}
+  .bos.bos-v2 .bos-topbar .bos-lead-notice{flex:none;display:inline-flex;align-items:center;min-height:40px;padding:0 10px;border-radius:12px;background:rgba(255,255,255,.13);color:#eaf2ed;font-size:12px;font-weight:500;white-space:nowrap}
+  .bos.bos-v2 .bos-topbar .bos-lead-notice.is-urgent{background:#f6ddd5;color:#96381f;font-weight:600}
+  /* How long a lead has waited stays on the page it links to; the count is what fits here. */
+  .bos.bos-v2 .bos-topbar .bos-lead-notice-detail{display:none}
+  .bos.bos-v2 .bos-topbar .bos-notify-enable{flex:none;width:40px;height:40px;padding:0;border:0;border-radius:12px;background:#e3efe7;color:#17382f;font-size:0;gap:0;justify-content:center}
+  .bos.bos-v2 .bos-topbar .bos-notify-enable svg{width:18px;height:18px}
+  .bos.bos-v2 .bos-topbar .bos-notify-sound{width:44px;height:44px;margin:0 -6px 0 -4px;color:#cfe0d6}
+  .bos.bos-v2 .bos-topbar .bos-notify-sound:hover{background:rgba(255,255,255,.13);color:#fff}
+  .bos.bos-v2 .bos-sync-error{padding:8px 16px}
+
+  /* Page: less air above the content, room for the bottom bar below it. */
+  .bos.bos-v2 .bos-main-frame .bos-main{padding:14px 16px calc(var(--bos-phone-bar) + 24px)}
+  .bos.bos-v2 .bos-main>.bos-install-banner{display:none}
+  .bos.bos-v2 .bos-page-header{margin:0 0 16px;gap:12px}
+  .bos.bos-v2 .bos-page-header p{margin-top:6px}
+  /* A wide control in the header (a period picker, a row of buttons) scrolls or wraps inside it instead of widening the page. */
+  .bos.bos-v2 .bos-page-header>*{min-width:0;max-width:100%}
+  .bos.bos-v2 .bos-type-display{font-size:24px}
+
+  /* Section tabs: one row of chips that scrolls sideways and bleeds to the screen edges. */
+  .bos.bos-v2 .bos-section-tabs{flex-wrap:nowrap;gap:8px;width:auto;max-width:none;margin:0 -16px 14px;padding:2px 16px;overflow-x:auto;background:transparent;border-radius:0;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .bos.bos-v2 .bos-section-tabs::-webkit-scrollbar{display:none}
+  .bos.bos-v2 .bos-section-tabs a{flex:none;display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:999px;background:#e9eee8;color:#4d5c54;font-size:14px}
+  .bos.bos-v2 .bos-section-tabs a[aria-current=page]{background:#17382f;color:#fff;box-shadow:none}
+
+  /* Shared controls at finger size. */
+  .bos .bos-button,.bos a.bos-button{min-height:44px}
+  .bos .bos-icon-button{width:44px;height:44px}
+  .bos .bos-input,.bos select.bos-input{min-height:44px}
+  /* Period pickers, toggles and tabs inside a page: 40px rows, a little denser than buttons. */
+  .bos .cockpit-filter{max-width:100%;overflow-x:auto;scrollbar-width:none}
+  .bos .cockpit-filter::-webkit-scrollbar{display:none}
+  .bos .cockpit-filter a,.bos .cockpit-custom summary{min-height:40px;padding:0 9px;font-size:13px}
+  .bos .analytics-toggle a,.bos .analytics-toggle button,.bos .entry-toggle button{display:inline-flex;align-items:center;min-height:40px;padding:0 12px;font-size:13px}
+  .bos .bos-wb-segment a,.bos .cc-pills a,.bos .bos-v2-channel-tabs a{min-height:40px}
+  .bos .bos-tabs a,.bos .bos-tabs button{min-height:44px;padding-top:0;padding-bottom:0}
+
+  /* Bottom bar. */
+  .bos-mobile-nav{position:fixed;left:0;right:0;bottom:0;z-index:60;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));height:var(--bos-phone-bar);padding:0 max(4px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(4px,env(safe-area-inset-left,0px));background:rgba(255,255,255,.94);backdrop-filter:blur(16px);border-top:1px solid rgba(27,49,40,.1)}
+  .bos .bos-mobile-nav a,.bos .bos-mobile-nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:0;padding:0;border:0;border-radius:0;background:transparent;color:#6f7d75;font-size:11px;line-height:1.2;letter-spacing:0;white-space:nowrap;-webkit-tap-highlight-color:transparent}
+  .bos .bos-mobile-nav a[aria-current=page],.bos .bos-mobile-nav button.is-current{color:#17382f;font-weight:600}
+  .bos-mobile-nav-icon{position:relative;display:grid;place-items:center;width:52px;height:28px;border-radius:999px;transition:background .16s}
+  .bos-mobile-nav a[aria-current=page] .bos-mobile-nav-icon,.bos-mobile-nav button.is-current .bos-mobile-nav-icon{background:#e0ede5}
+  .bos-mobile-nav-icon b{position:absolute;top:-5px;left:calc(50% + 5px);min-width:17px;height:17px;padding:0 5px;border-radius:999px;background:#17382f;color:#fff;font-size:10px;line-height:17px;font-weight:700;text-align:center;box-shadow:0 0 0 2px #fff}
+  .bos-mobile-nav-icon b.is-urgent{background:#a44b36}
+  .quote-printing .bos-mobile-nav{display:none!important}
+
+  /* Toasts sit above the bar instead of on it. */
+  .bos .bos-live-toasts{bottom:calc(var(--bos-phone-bar) + 12px)}
+  .toast{bottom:calc(74px + env(safe-area-inset-bottom,0px))}
+
+  /* Messages: the chat fills the space between the two bars; inside a conversation the bottom bar gives way to the composer. */
+  .bos.bos-v2 .bos-main-frame .bos-main:has(.bos-messages-page){padding-bottom:calc(var(--bos-phone-bar) + 10px)}
+  .bos .bos-messages-page{margin-bottom:0}
+  .bos .bos-chat,.bos .bos-chat.is-profile-closed{height:calc(100dvh - var(--bos-phone-top) - var(--bos-phone-bar) - 24px);min-height:360px}
+  .bos:has(.bos-chat.is-thread-open) .bos-mobile-nav{display:none}
+  .bos.bos-v2:has(.bos-chat.is-thread-open) .bos-main-frame .bos-main{padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+  .bos:has(.bos-chat.is-thread-open) .bos-chat{height:calc(100dvh - var(--bos-phone-top) - 24px - env(safe-area-inset-bottom,0px))}
+  .bos .bos-chat.is-fullscreen{height:100dvh}
+  .bos .bos-chat-grade-pop,.bos .bos-chat-grade-toast{top:calc(var(--bos-phone-top) + 64px)}
+}
