@@ -1,0 +1,83 @@
+/*
+ * Lists on a phone (up to 760px): customers, tasks and orders read as cards instead of wide tables, and their filters
+ * step aside until asked for. Imported after app/mobile-shell.css. Desktop keeps its tables: apart from the first block
+ * (which keeps the customer filters laid out as before around their new wrapper) everything is inside the media query.
+ */
+
+/* Customer filters: the controls are wrapped for the phone sheet; on wider screens the wrapper is invisible to layout. */
+.filters-more{display:contents}
+.filters-more>select{width:120px;font-size:12px}
+.filters-more>input{width:125px;font-size:12px}
+/* Phone-only parts; `.filters` in front outranks the shared `.v3-shell button` rule (the phone rules below match it and come later). */
+.filters .filters-toggle,.filters .filters-backdrop,.filters .filters-more-head,.filters .filters-sort,.filters .filters-done,.customer-cards-all{display:none}
+
+@media(max-width:760px){
+  /* ───────── Customers ───────── */
+  .bos .customer-card .tabs{padding:4px 14px 0;gap:18px;scrollbar-width:none}
+  .bos .customer-card .tabs::-webkit-scrollbar{display:none}
+  .bos .customer-card .tabs button{flex:none;min-height:44px;padding:0;font-size:14px}
+  .bos .filters{padding:12px 14px;gap:8px;flex-wrap:nowrap}
+  .bos .filters .search{min-width:0;min-height:44px;border-radius:12px}
+  .bos .filters .search input{min-width:0;width:100%;padding:0 8px}
+  .bos .filters-toggle{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;border:1px solid #dfe6e3;border-radius:12px;background:#fff;color:#203b33;font-size:14px}
+  .bos .filters-toggle.is-active{background:#e3efe7;border-color:transparent;color:#174b3b;font-weight:600}
+
+  /* The filter sheet. */
+  .bos .filters-backdrop{display:block;position:fixed;inset:0;z-index:64;background:rgba(15,30,24,.4)}
+  .bos .filters-more{display:none}
+  .bos .filters-more.is-open{position:fixed;left:0;right:0;bottom:0;z-index:65;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:82dvh;overflow:auto;overscroll-behavior:contain;padding:14px 16px calc(16px + env(safe-area-inset-bottom,0px));background:#fff;border-radius:22px 22px 0 0;box-shadow:0 -12px 40px rgba(15,30,24,.18)}
+  .bos .filters-more-head{grid-column:1 / -1;display:flex;align-items:center;justify-content:space-between;font-size:17px}
+  .bos .filters-more-head button{width:44px;height:44px;margin-right:-10px;padding:0;border:0;background:transparent;color:#6f7d75}
+  .bos .filters-more>select,.bos .filters-more>input{width:100%;min-width:0;min-height:44px;border-radius:12px}
+  .bos .filters-more .entry-toggle{grid-column:1 / -1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+  .bos .filters-more .entry-toggle button{justify-content:center;padding:0 4px}
+  .bos .filters-more details{grid-column:1 / -1;font-size:14px}
+  .bos .filters-more summary{min-height:44px;display:flex;align-items:center}
+  .bos .filters-more .date-filters{position:static;width:auto;padding:0 0 4px;grid-template-columns:repeat(2,minmax(0,1fr));border:0;box-shadow:none;font-size:13px}
+  .bos .filters-more .date-filters input{width:100%;min-height:44px}
+  .bos .filters-sort{grid-column:1 / -1;display:grid;gap:6px;font-size:13px;color:#6f7d75}
+  .bos .filters-sort select{width:100%;min-height:44px;border-radius:12px}
+  .bos .filters-more .text-button{min-height:44px;justify-content:center;font-size:14px}
+  .bos .filters-done{display:inline-flex;grid-column:1 / -1;min-height:48px;border-radius:14px;font-size:15px;font-weight:600}
+  .bos .filters-more .text-button+.filters-done{grid-column:auto}
+  .bos .filter-hint{padding:10px 14px;font-size:13px}
+
+  /* Batch toolbar: one quiet line until customers are selected, then a bar above the bottom navigation. */
+  .bos .batch-toolbar{padding:8px 14px;gap:8px;border-top:0}
+  .bos .batch-toolbar:not(.has-selection)>span,.bos .batch-toolbar:not(.has-selection)>.primary,.bos .batch-toolbar:not(.has-selection)>.danger,.bos .batch-toolbar:not(.has-selection)>button:nth-of-type(3),.bos .batch-toolbar .batch-toolbar-note,.bos .batch-toolbar.table-tools{display:none}
+  .bos .batch-toolbar:not(.has-selection){justify-content:flex-end;background:transparent;border-bottom:0;padding:0 14px}
+  .bos .batch-toolbar:not(.has-selection)>button{min-height:40px;padding:0 4px;border:0;background:transparent;color:#6f7d75;font-size:13px}
+  .bos .batch-toolbar.has-selection{position:fixed;left:8px;right:8px;bottom:calc(var(--bos-phone-bar) + 8px);z-index:55;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:10px;border:0;border-radius:16px;background:#17382f;box-shadow:0 12px 32px rgba(15,30,24,.28)}
+  .bos .batch-toolbar.has-selection>span{grid-column:1 / -1;color:#eaf2ed;font-size:13px}
+  .bos .batch-toolbar.has-selection>button{min-height:44px;padding:0 6px;border:0;border-radius:11px;font-size:13px}
+  .bos .batch-toolbar.has-selection>button:last-of-type{display:none}
+  .bos .batch-toolbar.has-selection>.danger{background:#f6ddd5;color:#96381f}
+
+  /* The cards. */
+  .bos .customer-cards-all{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 14px;font-size:13px;color:#6f7d75}
+  .bos .customer-cards-all input,.bos .customer-card-select input{width:20px;height:20px;accent-color:#174b3b}
+  .bos .customer-cards{list-style:none;margin:0;padding:0}
+  .bos .customer-card-row{display:flex;align-items:flex-start;gap:10px;padding:14px;border-top:1px solid #eef1ee}
+  .bos .customer-card-row.is-previewing{background:#f3f8f5}
+  .bos .customer-card-select{flex:none;display:grid;place-items:center;width:28px;min-height:38px;margin-left:-4px}
+  .bos .customer-card-row .avatar{width:38px;height:38px;border-radius:12px;font-size:15px}
+  .bos .customer-card-main{flex:1;min-width:0;display:grid;gap:4px}
+  .bos .customer-card-main>strong{display:flex;align-items:center;min-width:0;font-size:15px;font-weight:600}
+  .bos .customer-card-main .customer-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bos .customer-card-main>small{font-size:13px;color:#6f7d75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bos .customer-card-facts{display:flex;align-items:center;flex-wrap:wrap;gap:4px 10px;min-width:0;font-size:13px;color:#4d5c54}
+  .bos .customer-card-facts>.stage-cell{flex:none}
+  .bos .customer-card-facts>span:last-child{min-width:0;overflow-wrap:anywhere}
+  .bos .customer-card-facts .stage-badge{min-height:30px;border-radius:9px}
+  .bos .customer-card-facts .stage-select{padding:0 2px 0 10px}
+  .bos .customer-card-facts>span>.badge:not(.stage-badge){font-size:13px;padding:5px 10px;border-radius:9px}
+  .bos .customer-card-main>.customer-card-times{white-space:normal;overflow:visible;line-height:1.5}
+  .bos .customer-card-times .entry-off{margin-left:6px;font-style:normal}
+  .bos .customer-card-actions{flex:none;display:grid;justify-items:center;gap:6px}
+  .bos .customer-card-chat{display:grid;place-items:center;width:44px;height:44px;border-radius:14px;background:#e3efe7;color:#174b3b}
+  .bos .customer-card-actions .primary{min-width:56px;min-height:44px;padding:0 12px;border-radius:14px;font-size:14px;font-weight:600}
+  .bos .customer-card-actions .text-button{min-height:36px;padding:0 4px;font-size:13px;gap:4px}
+  .bos .customer-card .pagination{padding:12px 14px calc(12px);flex-wrap:wrap;gap:10px;font-size:13px}
+  .bos .customer-card .pagination button{width:44px;height:44px;padding:0}
+  .bos .customer-card .pagination .page-size select{min-height:40px}
+}

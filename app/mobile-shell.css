@@ -91,9 +91,6 @@
   .bos .analytics-toggle a,.bos .analytics-toggle button,.bos .entry-toggle button{display:inline-flex;align-items:center;min-height:40px;padding:0 12px;font-size:13px}
   .bos .bos-wb-segment a,.bos .cc-pills a,.bos .bos-v2-channel-tabs a{min-height:40px}
   .bos .bos-tabs a,.bos .bos-tabs button{min-height:44px;padding-top:0;padding-bottom:0}
-  /* Customer list filters: two per row at full width, so the 16px text is not cut off. */
-  .bos .filters{padding:16px}
-  .bos .filters>select,.bos .filters>input{flex:1 1 calc(50% - 5px);width:auto;min-width:0;min-height:44px}
 
   /* Bottom bar. */
   .bos-mobile-nav{position:fixed;left:0;right:0;bottom:0;z-index:60;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));height:var(--bos-phone-bar);padding:0 max(4px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(4px,env(safe-area-inset-left,0px));background:rgba(255,255,255,.94);backdrop-filter:blur(16px);border-top:1px solid rgba(27,49,40,.1)}

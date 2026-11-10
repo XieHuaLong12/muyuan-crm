@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Columns3, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Columns3, Search, SlidersHorizontal, X } from 'lucide-react';
 import { api } from '@/lib/client';
 import { sources, stages } from '@/lib/constants';
 import type { Bootstrap, Customer, CustomerPage } from '@/lib/types';
@@ -22,6 +22,8 @@ export function rememberedListUrl() {
 
 /** Automatic form grades with their own tab (D stays in the grade filter). */
 const GRADE_TABS = ['A', 'B', 'C'] as const;
+/** Sort choices offered on a phone, where there are no column headers to tap. */
+const PHONE_SORTS = [['priority:asc', '最该处理的在前（默认）'], ['inquiryAt:desc', '最新进线'], ['nextFollowUpAt:asc', '最早要跟进'], ['lastFollowUpAt:asc', '最久没跟进'], ['estimatedOrderValue:desc', '预估金额最高']] as const;
 const FILTER_KEYS = ['q', 'stage', 'country', 'source', 'owner', 'product', 'grade', 'entry', 'from', 'to', 'wonFrom', 'wonTo', 'qualified', 'behavior', 'period', 'date', 'assign'] as const;
 
 /**
@@ -43,6 +45,8 @@ export function CustomerList({ boot, revision, group = 'current', initialColumns
   const [search, setSearch] = useState(get('q'));
   const [columns, setColumns] = useState<readonly CustomerColumnKey[]>(initialColumns ?? DEFAULT_CUSTOMER_COLUMNS);
   const [picking, setPicking] = useState(false);
+  // On a phone the filters open as a sheet from the bottom (app/mobile-lists.css); on wider screens they are always in the row.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [preview, setPreview] = useState<{ customer: Customer; fromKeyboard: boolean }>();
 
   const update = (patch: Record<string, string>, resetPage = true) => {
@@ -95,6 +99,8 @@ export function CustomerList({ boot, revision, group = 'current', initialColumns
     else update({ stage: key, assign: '', ...leaveGrade });
   };
   const filtersActive = FILTER_KEYS.some(key => params.get(key));
+  const narrowedBy = FILTER_KEYS.filter(key => key !== 'q' && params.get(key)).length;
+  const sortValue = `${sort}:${dir}`;
   const otherQuery = new URLSearchParams(params); otherQuery.delete('page');
   const otherHref = `${group === 'legacy' ? '/customers' : '/customers/legacy'}${otherQuery.toString() ? `?${otherQuery}` : ''}`;
   const select = (label: string, key: string, values: string[] | Record<string, string>) => (
@@ -119,6 +125,12 @@ export function CustomerList({ boot, revision, group = 'current', initialColumns
       </div>
       <div className="filters">
         <div className="search"><Search size={17} /><input id="workspace-search" placeholder="搜索姓名、公司、联系方式…" value={search} onChange={e => setSearch(e.target.value)} aria-label="搜索客户" /></div>
+        <button type="button" className={`filters-toggle${narrowedBy ? ' is-active' : ''}`} aria-expanded={filtersOpen} aria-controls="customer-filters" onClick={() => setFiltersOpen(true)}>
+          <SlidersHorizontal size={16} aria-hidden />筛选{narrowedBy ? ` ${narrowedBy}` : ''}
+        </button>
+        {filtersOpen && <div className="filters-backdrop" onClick={() => setFiltersOpen(false)} />}
+        <div id="customer-filters" className={`filters-more${filtersOpen ? ' is-open' : ''}`}>
+        <div className="filters-more-head"><strong>筛选和排序</strong><button type="button" aria-label="关闭筛选" onClick={() => setFiltersOpen(false)}><X size={20} aria-hidden /></button></div>
         {select('阶段', 'stage', stages)}
         {select('国家', 'country', data?.countries ?? [])}
         {select('来源', 'source', sources)}
@@ -140,7 +152,15 @@ export function CustomerList({ boot, revision, group = 'current', initialColumns
             ))}
           </div>
         </details>
+        <label className="filters-sort">排序
+          <select aria-label="排序" value={sortValue} onChange={e => { const [key, order] = e.target.value.split(':'); update({ sort: key === 'priority' ? '' : key, dir: order === 'asc' ? '' : order }); }}>
+            {!PHONE_SORTS.some(([value]) => value === sortValue) && <option value={sortValue}>按电脑上选的列排序</option>}
+            {PHONE_SORTS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
         {filtersActive && <button className="text-button" onClick={() => { setSearch(''); window.history.replaceState(null, '', pathname); }}>清除筛选</button>}
+        <button type="button" className="primary filters-done" onClick={() => setFiltersOpen(false)}>{loading ? '正在筛选…' : `查看 ${data?.total ?? 0} 位客户`}</button>
+        </div>
       </div>
       {!!data?.otherTotal && <div className="filter-hint">{group === 'legacy' ? '新客户' : '旧客户'}里还有 {data.otherTotal} 位符合当前筛选。<Link href={otherHref}>去{group === 'legacy' ? '新客户' : '旧客户'}查看 →</Link></div>}
       {get('period') && <div className="filter-hint">已按 {get('date')} 所在周期的新增客户筛选</div>}
