@@ -1,0 +1,95 @@
+/*
+ * The prototype's stage: on a desktop the app sits in a phone frame next to a control panel (prototype tooling, not
+ * app UI); on a real phone (< 720px) the app fills the screen and uses the real status bar and safe areas.
+ */
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--c-bg); color: var(--c-ink);
+  font-family: var(--f-sans); font-size: var(--t-body); line-height: 1.5;
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+  text-size-adjust: 100%; -webkit-text-size-adjust: 100%;
+}
+* { box-sizing: border-box; }
+button, input, select, textarea { font: inherit; color: inherit; letter-spacing: inherit; }
+button { cursor: pointer; }
+img { max-width: 100%; display: block; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ── Stage ─────────────────────────────────────────────── */
+#stage { height: 100%; display: flex; }
+#device {
+  position: relative; display: flex; flex-direction: column; overflow: hidden;
+  width: 100%; height: 100%; background: var(--c-bg); color: var(--c-ink);
+  font-size: calc(16px * var(--font-scale, 1));
+}
+#proto-panel { display: none; }
+.sys-statusbar, .sys-gesture { display: none; }
+#app { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 50; background: var(--c-bg); }
+
+/* ── Framed mode (desktop / tablet) ───────────────────── */
+@media (min-width: 720px) {
+  body { background: var(--stage-bg, #e9ece7); }
+  #stage {
+    align-items: center; justify-content: center; gap: 40px;
+    padding-block: 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  #device {
+    width: var(--device-w, 390px); height: min(844px, calc(100dvh - 48px)); flex: none;
+    border-radius: 44px; border: 10px solid #101512;
+    box-shadow: 0 30px 80px rgba(16, 36, 28, .22), 0 0 0 1px rgba(0, 0, 0, .3);
+    transition: width var(--m-base) var(--m-ease);
+  }
+  .sys-statusbar {
+    display: flex; flex: none; align-items: center; justify-content: space-between; height: 32px; padding: 0 22px 0 26px;
+    font: 600 13px/1 var(--f-num); color: var(--c-ink); background: var(--statusbar-bg, var(--c-bg)); position: relative; z-index: 40;
+    transition: background var(--m-base);
+  }
+  .sys-statusbar .sb-icons { display: flex; gap: 6px; align-items: center; }
+  .sys-statusbar svg { width: 15px; height: 15px; }
+  .sys-statusbar .sb-cam { position: absolute; left: 50%; top: 9px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #101512; }
+  .sys-gesture { display: grid; place-items: center; flex: none; height: 22px; background: var(--gesture-bg, var(--c-surface)); position: relative; z-index: 40; }
+  .sys-gesture span { width: 108px; height: 4px; border-radius: 4px; background: var(--c-ink); opacity: .7; }
+  body::before { display: none; }
+
+  #proto-panel {
+    display: flex; flex-direction: column; gap: 18px; width: 300px; max-height: calc(100dvh - 48px); overflow: auto;
+    padding: 22px; border-radius: 22px; background: var(--panel-bg, #fff); color: var(--panel-ink, #15211b);
+    box-shadow: 0 10px 40px rgba(16, 36, 28, .08); font-size: 13px;
+  }
+}
+@media (min-width: 720px) and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --stage-bg: #070b09; --panel-bg: #131a16; --panel-ink: #e7ede9; }
+}
+:root[data-theme="dark"] { --stage-bg: #070b09; --panel-bg: #131a16; --panel-ink: #e7ede9; }
+@media (min-width: 720px) and (max-width: 1000px) { #proto-panel { width: 250px; } }
+
+/* ── Prototype control panel (tooling, clearly not app UI) ── */
+.pp-head { display: grid; gap: 6px; }
+.pp-head strong { font-size: 15px; letter-spacing: .02em; }
+.pp-head p { margin: 0; color: var(--panel-muted, #6b766f); line-height: 1.6; }
+.pp-tag { justify-self: start; font-size: 11px; font-weight: 600; letter-spacing: .06em; padding: 3px 8px; border-radius: 6px; background: #fbf0e1; color: #8a5414; }
+.pp-group { display: grid; gap: 8px; }
+.pp-group > span { font-size: 11px; font-weight: 600; letter-spacing: .08em; color: var(--panel-muted, #6b766f); }
+.pp-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.pp-seg button {
+  flex: 1 1 auto; min-height: 34px; padding: 0 10px; border-radius: 9px; border: 1px solid rgba(22, 52, 40, .14);
+  background: transparent; color: inherit; font-size: 12px; white-space: nowrap;
+}
+.pp-seg button[aria-pressed="true"] { background: #164b3a; border-color: #164b3a; color: #fff; }
+.pp-pages { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pp-pages button { text-align: left; min-height: 34px; padding: 6px 10px; border-radius: 9px; border: 1px solid rgba(22, 52, 40, .12); background: transparent; color: inherit; font-size: 12px; line-height: 1.3; }
+.pp-pages button:hover, .pp-seg button:hover { border-color: #498b73; }
+.pp-pages b { font: 600 11px var(--f-num); color: var(--panel-muted, #6b766f); margin-right: 4px; }
+.pp-actions { display: grid; gap: 6px; }
+.pp-actions button { min-height: 36px; border-radius: 9px; border: 1px dashed rgba(22, 52, 40, .25); background: transparent; color: inherit; font-size: 12px; text-align: left; padding: 0 12px; }
+.pp-note { margin: 0; font-size: 12px; line-height: 1.7; color: var(--panel-muted, #6b766f); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #proto-panel { --panel-muted: #8e9a93; } :root:not([data-theme="light"]) #proto-panel .pp-seg button, :root:not([data-theme="light"]) #proto-panel .pp-pages button { border-color: rgba(220, 240, 228, .14); } }
+:root[data-theme="dark"] #proto-panel { --panel-muted: #8e9a93; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
