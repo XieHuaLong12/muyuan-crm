@@ -16,10 +16,12 @@ const subscribe = (listener: () => void) => { listeners.add(listener); return ()
 
 const standalone = () => window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
-/** Touch devices that are not yet running the installed app and have not closed the banner. */
+/** Touch devices that are not yet running the installed app. */
+const installable = () => !standalone() && window.matchMedia('(pointer: coarse)').matches;
+/** The banner at the top of a page (tablets) also goes away for good once closed; the entry under 更多 on phones stays. */
 function bannerWanted() {
   try { if (window.localStorage.getItem(DISMISS_KEY)) return false; } catch { /* storage can be unavailable */ }
-  return !standalone() && window.matchMedia('(pointer: coarse)').matches;
+  return installable();
 }
 
 /** Registers the service worker and keeps the install prompt. Mounted once in the root layout. */
@@ -27,7 +29,7 @@ export function PwaSetup() {
   useEffect(() => {
     const keep = (event: Event) => {
       // Elsewhere the browser keeps its own install bar.
-      if (!bannerWanted()) return;
+      if (!installable()) return;
       event.preventDefault();
       setInstallPrompt(event as InstallPrompt);
     };
@@ -45,19 +47,20 @@ export function PwaSetup() {
 
 /**
  * Suggests installing the CRM on a phone. Android browsers install with one tap; iPhone and WeChat have no install
- * API, so the banner explains the steps instead.
+ * API, so the banner explains the steps instead. On phones it sits under 更多 in the bottom bar (`inMenu`), where it
+ * takes no room on the pages and cannot be closed; wider touch screens show it once at the top of the page.
  */
-export function InstallAppBanner() {
+export function InstallAppBanner({ inMenu = false }: { inMenu?: boolean }) {
   const prompt = useSyncExternalStore(subscribe, () => installPrompt, () => null);
   const [hint, setHint] = useState<'ios' | 'wechat' | null>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    if (!bannerWanted()) return;
+    if (!(inMenu ? installable() : bannerWanted())) return;
     setVisible(true);
     const ua = navigator.userAgent;
     if (/MicroMessenger/i.test(ua)) setHint('wechat');
     else if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) setHint('ios');
-  }, []);
+  }, [inMenu]);
 
   function close() {
     setVisible(false);
@@ -74,7 +77,7 @@ export function InstallAppBanner() {
 
   if (!visible || (!prompt && !hint)) return null;
   return (
-    <aside className="bos-install-banner" aria-label="安装手机 App">
+    <aside className={`bos-install-banner${inMenu ? ' is-in-menu' : ''}`} aria-label="安装手机 App">
       <Smartphone size={20} strokeWidth={1.6} aria-hidden />
       <p>
         <strong>把 CRM 装到手机桌面</strong>
@@ -85,7 +88,7 @@ export function InstallAppBanner() {
         </small>
       </p>
       {prompt && <Button variant="primary" onClick={() => void install()}>安装</Button>}
-      <Button variant="ghost" className="bos-install-close" onClick={close} aria-label="不再提示安装"><X size={16} aria-hidden /></Button>
+      {!inMenu && <Button variant="ghost" className="bos-install-close" onClick={close} aria-label="不再提示安装"><X size={16} aria-hidden /></Button>}
     </aside>
   );
 }

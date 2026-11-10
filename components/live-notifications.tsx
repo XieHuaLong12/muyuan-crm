@@ -218,16 +218,19 @@ export function LiveNotifications({ userId, items: feedItems }: { userId: string
 export function NotificationControls() {
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [sound, setSound] = useState(true);
+  // Known only in the browser; read after mount so the server and the first client render agree.
+  const [push, setPush] = useState(false);
   useEffect(() => {
     const current = notificationsSupported() ? Notification.permission : 'unsupported';
     setPermission(current);
+    setPush(pushSupported());
     setSound(storage<string>(SOUND_KEY, 'on') !== 'off');
     if (current === 'granted') syncPushSubscriptionOnce();
   }, []);
   return (
     <>
       {permission === 'default' && (
-        <button type="button" className="bos-topbar-link bos-notify-enable" title={pushSupported() ? 'App 关着也能收到新线索提醒' : undefined} onClick={async () => {
+        <button type="button" className="bos-topbar-link bos-notify-enable" title={push ? 'App 关着也能收到新线索提醒' : undefined} onClick={async () => {
           const result = await Notification.requestPermission();
           setPermission(result);
           if (result === 'granted') void syncPushSubscription().catch(() => { /* the page's own alerts still work */ });

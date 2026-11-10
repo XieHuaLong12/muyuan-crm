@@ -1,11 +1,12 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import type { Bootstrap } from '@/lib/types';
 import type { NotificationFeed } from '@/services/notification-service';
 import { activeWorkspace } from '@/lib/role-workspace';
 import { Sidebar } from '@/components/ui/Sidebar';
+import { MobileNav } from '@/components/ui/MobileNav';
 import { Search } from '@/components/ui/bos';
 import { LiveNotifications, NotificationControls } from '@/components/live-notifications';
 import { InstallAppBanner } from '@/components/pwa';
@@ -24,11 +25,18 @@ const PERIOD_PARAMS = ['range', 'startDate', 'endDate'];
 function SectionTabs({ path, role }: { path: string; role: string }) {
   const params = useSearchParams();
   const active = activeWorkspace(path, role);
+  const current = active?.tab?.href;
+  const nav = useRef<HTMLElement>(null);
+  // On a phone the tabs are one row that scrolls sideways: bring the open one into view without moving the page.
+  useEffect(() => {
+    const row = nav.current, tab = row?.querySelector<HTMLElement>('[aria-current=page]');
+    if (row && tab && row.scrollWidth > row.clientWidth) row.scrollLeft = tab.offsetLeft - (row.clientWidth - tab.offsetWidth) / 2;
+  }, [current]);
   if (!active?.section.tabs) return null;
   // Analysis pages share one period, so moving between them keeps the selected range.
   const period = new URLSearchParams(active.section.keepPeriod ? PERIOD_PARAMS.flatMap(key => params.get(key) ? [[key, params.get(key)!]] : []) : []).toString();
   return (
-    <nav className="bos-section-tabs" aria-label={`${active.section.label}页面`}>
+    <nav ref={nav} className="bos-section-tabs" aria-label={`${active.section.label}页面`}>
       {active.section.tabs.map(tab => (
         <Link key={tab.href} href={period ? `${tab.href}?${period}` : tab.href} aria-current={active.tab?.href === tab.href ? 'page' : undefined}>{tab.label}</Link>
       ))}
@@ -82,17 +90,17 @@ export function BOSShell({ boot, children }: { boot: Bootstrap; children: React.
           <form action="/customers"><Search name="q" label={admin ? '搜索团队客户' : '搜索我的客户'} placeholder="搜索客户、公司或联系方式" /></form>
           {admin && !!counts?.pool && (
             <Link href="/customers?assign=pending" className={`bos-lead-notice${poolLate ? ' is-urgent' : ''}`} title={poolLate ? `最早的线索已等待 ${poolWait} 分钟` : undefined}>
-              待分配 {counts.pool}{poolLate ? ` · 已等 ${poolWait} 分钟` : ''}
+              待分配 {counts.pool}{poolLate && <span className="bos-lead-notice-detail"> · 已等 {poolWait} 分钟</span>}
             </Link>
           )}
           {admin && !!counts?.pendingFirstContact && (
             <Link href="/sales?queue=new" className={`bos-lead-notice${counts.overdueFirstContact ? ' is-urgent' : ''}`}>
-              待首联 {counts.pendingFirstContact}{counts.overdueFirstContact ? ` · 超时 ${counts.overdueFirstContact}` : ''}
+              待首联 {counts.pendingFirstContact}{!!counts.overdueFirstContact && <span className="bos-lead-notice-detail"> · 超时 {counts.overdueFirstContact}</span>}
             </Link>
           )}
           {!admin && !!counts?.today && (
             <Link href="/sales" className={`bos-lead-notice${counts.todayOverdue ? ' is-urgent' : ''}`} title="今日工作：待首联、到期跟进和到期待办的客户">
-              今日待办 {counts.today}{counts.todayOverdue ? ` · 超时 ${counts.todayOverdue}` : ''}
+              今日待办 {counts.today}{!!counts.todayOverdue && <span className="bos-lead-notice-detail"> · 超时 {counts.todayOverdue}</span>}
             </Link>
           )}
           <NotificationControls />
@@ -100,6 +108,7 @@ export function BOSShell({ boot, children }: { boot: Bootstrap; children: React.
         {error && <p className="bos-sync-error" role="status">{error}，将在后台重试。</p>}
         <main id="bos-main" className="bos-main"><InstallAppBanner /><SectionTabs path={path} role={boot.user.role} />{children}</main>
       </div>
+      <MobileNav name={boot.user.name} role={boot.user.role} badges={badges} />
       <LiveNotifications userId={boot.user.id} items={feed?.items} />
     </div>
   );

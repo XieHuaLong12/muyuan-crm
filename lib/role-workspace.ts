@@ -95,6 +95,19 @@ export function workspaceNavigation(role: string) {
   return role === 'ADMIN' ? adminSections : salesSections;
 }
 
+/**
+ * On a phone the navigation is a bar at the bottom of the screen: four sections one tap away under short names, and
+ * every other section behind 更多. The sections and their tabs are the sidebar's, so both always lead to the same pages.
+ */
+const adminPhoneBar = [['/workbench', '今日'], ['/messages', '消息'], ['/customers', '客户'], ['/command-center', '数据']] as const;
+const salesPhoneBar = [['/sales', '今日'], ['/messages', '消息'], ['/customers', '客户'], ['/products', '报价']] as const;
+
+export function phoneNavigation(role: string) {
+  const sections = workspaceNavigation(role);
+  const bar = (role === 'ADMIN' ? adminPhoneBar : salesPhoneBar).map(([href, label]) => ({ label, section: sections.find(section => section.href === href)! }));
+  return { bar, more: sections.filter(section => !bar.some(item => item.section === section)) };
+}
+
 const matches = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);
 
 /** The section and tab a path belongs to: the longest matching prefix wins, so /products/margin beats /products. */
