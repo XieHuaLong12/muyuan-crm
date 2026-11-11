@@ -1,0 +1,132 @@
+{
+  "color": [
+    {
+      "name": "bg",
+      "value": "#0D1310"
+    },
+    {
+      "name": "surface",
+      "value": "#151C18"
+    },
+    {
+      "name": "surface2",
+      "value": "#1C2520"
+    },
+    {
+      "name": "surface3",
+      "value": "#25302A"
+    },
+    {
+      "name": "line",
+      "value": "#1ADCF0E4"
+    },
+    {
+      "name": "line_soft",
+      "value": "#0FDCF0E4"
+    },
+    {
+      "name": "ink",
+      "value": "#E7EDE9"
+    },
+    {
+      "name": "ink2",
+      "value": "#A9B5AE"
+    },
+    {
+      "name": "ink3",
+      "value": "#8E9A93"
+    },
+    {
+      "name": "ink_disabled",
+      "value": "#56615A"
+    },
+    {
+      "name": "brand",
+      "value": "#2F7A5F"
+    },
+    {
+      "name": "brand_pressed",
+      "value": "#276A52"
+    },
+    {
+      "name": "brand_ink",
+      "value": "#86CFAE"
+    },
+    {
+      "name": "brand_soft",
+      "value": "#1B3329"
+    },
+    {
+      "name": "brand_tint",
+      "value": "#17241E"
+    },
+    {
+      "name": "on_brand",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "focus",
+      "value": "#6FB898"
+    },
+    {
+      "name": "logo",
+      "value": "#2E534B"
+    },
+    {
+      "name": "success",
+      "value": "#74C99A"
+    },
+    {
+      "name": "success_bg",
+      "value": "#173225"
+    },
+    {
+      "name": "warning",
+      "value": "#E3B06A"
+    },
+    {
+      "name": "warning_bg",
+      "value": "#3A2A14"
+    },
+    {
+      "name": "danger",
+      "value": "#F0907A"
+    },
+    {
+      "name": "danger_bg",
+      "value": "#3B1D17"
+    },
+    {
+      "name": "info",
+      "value": "#8DB8E8"
+    },
+    {
+      "name": "info_bg",
+      "value": "#172A3D"
+    },
+    {
+      "name": "chart1",
+      "value": "#5FBF96"
+    },
+    {
+      "name": "chart_prev",
+      "value": "#4A564F"
+    },
+    {
+      "name": "seq1",
+      "value": "#86CFAE"
+    },
+    {
+      "name": "seq2",
+      "value": "#3F8A6C"
+    },
+    {
+      "name": "seq3",
+      "value": "#25433A"
+    },
+    {
+      "name": "start_window_background",
+      "value": "#0D1310"
+    }
+  ]
+}

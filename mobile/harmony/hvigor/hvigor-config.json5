@@ -1,0 +1,9 @@
+{
+  // DevEco Studio 打开工程时若提示升级 modelVersion，按提示升级即可。
+  "modelVersion": "5.0.0",
+  "dependencies": {},
+  "execution": {},
+  "logging": {},
+  "debugging": {},
+  "nodeOptions": {}
+}

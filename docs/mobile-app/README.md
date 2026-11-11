@@ -13,6 +13,7 @@
 | 5 · 检查 | [QA_CHECKLIST.md](QA_CHECKLIST.md)：自动化交互检查、一致性、需求覆盖、原型边界 |
 | 6 · 开发落地 | [NATIVE_PLAN.md](NATIVE_PLAN.md)：已确认决定、服务端加性改动、认证、离线、两端推送与通知、Android / HarmonyOS 技术选型与企业内部分发、里程碑、待确认决定 |
 | 开工准备 | [PREPARATION.md](PREPARATION.md)：手机、账号证书与资质、品牌素材、服务器与开发环境、团队、离线默认值、开工顺序 |
+| HarmonyOS 版工程 | [`mobile/harmony`](../../mobile/harmony/README.md)：0.1 版（登录、工作台、客户与写跟进、订单、消息、我的），用 DevEco Studio 26 打开 |
 
 ## 预览原型
 
@@ -26,8 +27,8 @@
 
 ## 与现有系统的边界
 
-- 没有修改 `app/`、`components/`、`services/`、`lib/`、`prisma/` 中的任何文件，没有数据库迁移，没有接口变化。
-- 原型放在 `prototypes/`，不参与 Next.js 构建与部署；ESLint 已忽略该目录（`eslint.config.mjs`）。
+- 没有修改 `app/`、`components/`、`services/`、`lib/`、`prisma/` 中的任何文件，没有数据库迁移，没有接口变化。HarmonyOS 版只调用现有接口。
+- 原型放在 `prototypes/`，不参与 Next.js 构建与部署；ESLint 已忽略该目录（`eslint.config.mjs`）。`mobile/`（原生工程与生成工具）同样被 ESLint 和 `tsconfig.json` 排除，不影响网站构建。
 - 服务端需要的新能力（设备令牌、推送适配、通知已读与偏好、只读数据接口等）列在 NATIVE_PLAN §2，**确认后再按 PROJECT_RULES 开发**。
 
 ## 按 PROJECT_RULES §0.5.2 的 7 段摘要

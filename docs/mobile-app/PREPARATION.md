@@ -1,6 +1,6 @@
 # LVANJU BOS App 开发准备清单
 
-> 适用于已确认的方案：Android 与 HarmonyOS 同时开发、企业内部分发、公司配发手机（华为 HarmonyOS 7 + 1 款 Android）、推送统一用华为、App 名称 LVANJUBOS、包名 `online.avenlee.bos`、不做审批、不加收款记录、不做英文界面、允许离线查看最近客户（默认范围）、每位销售接入自己的 WhatsApp 号码（2026-11-11）。
+> 适用于已确认的方案：先做 HarmonyOS 7 版、Android 随后、企业内部分发、公司配发手机（华为 HarmonyOS 7 + 1 款 Android）、推送统一用华为、App 名称 LVANJUBOS、包名 `online.avenlee.bos`、不做审批、不加收款记录、不做英文界面、允许离线查看最近客户（默认范围）、每位销售接入自己的 WhatsApp 号码（2026-11-11）。
 > 技术方案见 [NATIVE_PLAN.md](NATIVE_PLAN.md)。本清单列的是**开工前需要公司准备或决定的东西**，按「谁来办、什么时候要」排列。
 
 ## 0. 最先做的三件事
@@ -13,7 +13,7 @@
 
 | 事项 | 状态 |
 | --- | --- |
-| 两端同时开发 | ✅ |
+| 先做 HarmonyOS 7 版，Android 随后（原为两端同时开发） | ✅ 华为企业账号已注册，工程见 `mobile/harmony` |
 | 不做审批 | ✅ |
 | 企业内部分发 | ✅ |
 | 公司配发手机 | ✅ |
@@ -23,7 +23,7 @@
 | 推送：统一用华为（Android 用 HMS Push Kit，HarmonyOS 用 Push Kit） | ✅ |
 | 手机：1 款华为 HarmonyOS 7 + 1 款 Android | ✅；⏳ Android 那款的具体型号、采购数量 |
 | App 名称：**LVANJUBOS** | ✅ |
-| 包名：`online.avenlee.bos`（两端相同） | ✅ |
+| 包名：HarmonyOS `online.avenlee.bos`，Android `online.avenlee.bos.android`（AppGallery Connect 规定两者不能相同） | ✅ |
 | WhatsApp：每位销售在公司手机上登录自己在 BOS 连接的号码 | ✅；BOS 先要做多号码改造（§9） |
 
 ## 2. 手机（公司配发）
@@ -45,10 +45,10 @@
 | 华为开发者联盟**企业账号**（企业实名认证，准备营业执照等企业资料） | HarmonyOS 开发与签名；Push Kit；企业内部分发；华为 Android 机的推送 | 开工前（M0） |
 | AppGallery Connect 项目：创建 HarmonyOS 应用、开通 Push Kit、申请推送**消息分类权益**（工作提醒类） | 没有分类权益的推送会被当作营销消息：静音、限量 | M0 申请，M2 前到位 |
 | HarmonyOS **企业内部分发资格**与对应的证书、Profile | 公司手机安装 HarmonyOS 版 App | M0 申请；正式资格下来之前先用测试分发给少数人试装 |
-| AppGallery Connect 里同一个项目下再登记 **Android 应用**（包名 `online.avenlee.bos` + Android 签名证书指纹），开通华为推送 | Android 版 App 被关掉后仍能收到新询盘、首联超时提醒 | M0；生成 Android 签名密钥后才能登记 |
+| AppGallery Connect 里同一个项目下再登记 **Android 应用**（包名 `online.avenlee.bos.android` + Android 签名证书指纹），开通华为推送 | Android 版 App 被关掉后仍能收到新询盘、首联超时提醒 | M0；生成 Android 签名密钥后才能登记 |
 | **Android 签名密钥** | 所有 Android 安装包都用它签名，之后的版本必须用同一把才能覆盖安装 | M0 生成；指定 1 名保管人，离线备份 2 份，不放进代码仓库和个人电脑 |
 | **App 名称** | 已定为 **LVANJUBOS**：手机桌面、通知、安装与更新提示、「关于」页都显示这个名字。拿到测试机后在桌面上看一眼是否显示完整（9 个大写字母较宽，个别桌面可能显示省略号） | ✅ |
-| **包名** | 已定为 `online.avenlee.bos`（公司系统域名 `avenlee.online` 倒过来加 `.bos`），两端相同，**发布后不能再改**。它只是标识，以后系统换域名也不影响 | ✅ |
+| **包名** | HarmonyOS `online.avenlee.bos`，Android `online.avenlee.bos.android`（公司系统域名 `avenlee.online` 倒过来加 `.bos`；AppGallery Connect 不允许 HarmonyOS 与 Android 包名相同），**发布后不能再改**。它只是标识，以后系统换域名也不影响 | ✅ |
 | App 备案 | 工信部要求 App 备案，主要在应用市场上架时核验；内部分发是否需要，请与法务或华为企业分发确认 | M0 确认 |
 | 员工告知文件 | 隐私与权限说明（App 收集哪些数据、为什么要通知权限、离线保存哪些客户数据）；公司手机使用规定（锁屏密码、丢失上报、离职交还） | 内部推广前（M5） |
 
@@ -75,7 +75,7 @@
 | 打包与签名 | 打包流程放到 CI，签名密钥存 CI 的机密配置里，由保管人录入 |
 | 崩溃与日志收集 | 选一个国内可用、两端都支持的服务，接入前确认数据存放位置 |
 
-## 6. 团队（两端同时开发）
+## 6. 团队（先 HarmonyOS，后 Android）
 
 | 角色 | 人数 | 职责 |
 | --- | --- | --- |
@@ -119,3 +119,18 @@ M0 完成的标志：华为企业账号可用、两款测试机上华为推送�
 4. 每个号码在服务商那里怎么开通、怎么计费（现有发送走 Gupshup，号码连接用 Meta 共存模式）？
 
 在多号码上线之前，App 仍按现在的单号码工作；会话页已预留「从哪个号码发送」的显示。
+
+## 10. AppGallery Connect「新建 APP ID」填法（HarmonyOS 版）
+
+| 字段 | 填写 |
+| --- | --- |
+| 应用类型 | HarmonyOS 应用 |
+| 应用名称 | LVANJUBOS |
+| 应用包名 | `online.avenlee.bos` |
+| 应用分类 | 应用 |
+| 支持设备 | 手机 |
+| 默认语言 | 简体中文 |
+| 应用所属项目 | 输入 `LVANJUBOS` 新建项目（以后 Android 版也放在这个项目下） |
+
+创建后：在 DevEco Studio 26 中打开 `mobile/harmony`，用这个华为账号自动签名后即可在手机上运行（步骤见 `mobile/harmony/README.md`）。
+

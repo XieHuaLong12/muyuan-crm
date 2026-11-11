@@ -1,0 +1,16 @@
+# DevEco Studio / hvigor outputs
+/node_modules
+/oh_modules
+/.hvigor
+/.idea
+/local.properties
+**/build
+**/.preview
+**/.test
+.cxx
+.clangd
+# Signing material: certificates, profiles and keystores never go into the repository.
+*.p12
+*.cer
+*.p7b
+*.csr

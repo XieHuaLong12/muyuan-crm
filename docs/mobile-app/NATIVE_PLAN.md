@@ -6,7 +6,7 @@
 
 | 决定 | 影响 |
 | --- | --- |
-| **Android 与 HarmonyOS 同时开发** | 两条客户端线并行，共用接口契约、设计令牌和原型；里程碑按两端同步交付安排（§7） |
+| **先做 HarmonyOS 7 版，Android 随后**（2026-11-11 调整，原为两端同时开发） | HarmonyOS 版先行，工程在 `mobile/harmony`；Android 版沿用同一套接口契约、设计令牌和原型，在 HarmonyOS 版跑通后启动（§7） |
 | **不做审批流程** | 原型与本方案删除审批页面、审批通知和 `Approval` 表；报价低于价格表只作为信息展示（`QuotationItem.listPrice` 已有） |
 | **企业内部分发，不上应用市场** | Android 用公司签名的安装包 + App 内更新；HarmonyOS 走华为企业内部应用分发；服务端新增版本接口；推送统一用华为，需实测内部分发安装的 App 能否正常收推送（§4.1、§5.1、§6.1） |
 | **公司配发手机：1 款华为 HarmonyOS 7 + 1 款 Android** | HarmonyOS 版以 HarmonyOS 7 为目标与最低版本（§6）；用设备管理统一安装、强制锁屏、设置自启动与电池白名单、远程擦除 |
@@ -14,7 +14,7 @@
 | **不做英文界面** | 删除 S10；App 内去掉语言设置 |
 | **允许离线查看最近客户** | 采用默认范围（30 天、最多 100 位、每位最近 20 条动态）；新增离线方案（§3.1）与两个服务端改动 S12、S13；替代原来「手机上不缓存客户数据」的 PWA 政策（PWA 本身不变） |
 | **App 名称 LVANJUBOS** | Android 写在 `app_name` 字符串资源，HarmonyOS 写在 `app.json5` 与入口 Ability 的 `label`；桌面、通知、安装与更新提示都显示这个名字 |
-| **包名 `online.avenlee.bos`** | 由公司系统域名 `avenlee.online` 倒过来加 `.bos`；Android `applicationId` 与 HarmonyOS `bundleName` 相同，发布后不能改。包名只是标识，App 连接的服务器地址（`https://avenlee.online`）单独配置，以后换域名不影响包名 |
+| **包名：HarmonyOS `online.avenlee.bos`，Android `online.avenlee.bos.android`** | 由公司系统域名 `avenlee.online` 倒过来加 `.bos`。AppGallery Connect 规定 HarmonyOS 应用包名不能与 Android 应用包名相同，所以 Android 版加 `.android`；两个包名发布后都不能改。包名只是标识，App 连接的服务器地址（`https://avenlee.online`）单独配置 |
 | **推送统一用华为** | Android 版用华为推送（HMS Push Kit），HarmonyOS 版用 Push Kit；一个华为企业账号、一个 AppGallery Connect 项目下建两个应用，不接其他厂商、不用聚合推送（§4.1）。**前提：那款 Android 手机是带华为移动服务（HMS）的华为手机**，待确认机型 |
 | **每位销售接入自己的 WhatsApp 号码（后续）** | 公司手机上登录各自在 BOS 连接的号码；BOS 需要先做「多号码 WhatsApp」改造，是独立项目（§2 S14）；App 的会话页显示从哪个号码发送 |
 
@@ -95,7 +95,7 @@
 | A/B 线索持续响铃 | 使用 `FLAG_INSISTENT`（声音循环直到用户处理）+ 高优先级渠道；全屏意图在 Android 14 起限制为通话 / 闹钟类应用，不使用 |
 | 消息分类 | 华为推送对营销类消息限量、静音；工作提醒要在 AppGallery Connect 申请对应的消息分类权益，否则可能不响铃（Android 与 HarmonyOS 两个应用分别申请） |
 | 后台限制 | 公司手机由设备管理统一设置自启动与电池白名单；没有纳入设备管理的手机，首次启动时用图文说明引导设置 |
-| 企业内部分发的影响 | 只接华为一家：在 AppGallery Connect 同一项目下登记 Android 应用（包名 `online.avenlee.bos` + 签名证书指纹）即可开通推送；M0 阶段用测试机实测内部分发安装的 App 能否拿到 Token、收到推送 |
+| 企业内部分发的影响 | 只接华为一家：在 AppGallery Connect 同一项目下登记 Android 应用（包名 `online.avenlee.bos.android` + 签名证书指纹）即可开通推送；M0 阶段用测试机实测内部分发安装的 App 能否拿到 Token、收到推送 |
 | 点击跳转 | 通知携带 `route`（例如 `customer/c123`），通过 Deep Link 进入对应页面并标记已读 |
 
 ### 4.2 HarmonyOS 7
@@ -146,9 +146,9 @@
 | 项目 | 选型 |
 | --- | --- |
 | 语言 / UI | ArkTS、ArkUI 声明式；颜色 / 尺寸放 `resources/base/element/*.json` 与 `resources/dark/element/color.json`（由 `tokens.json` 生成） |
-| 版本 | 以 **HarmonyOS 7** 为目标与最低版本（公司手机统一，只在这一版本上测试和保证）；使用支持 HarmonyOS 7 SDK 的 DevEco Studio。以后公司换新机型再提高版本 |
+| 版本 | 公司手机为 **HarmonyOS 7（API 26）**，用 DevEco Studio 26 开发；`compatibleSdkVersion` 设为 `5.0.0(12)`，代码只用 API 12 已有的能力，HarmonyOS 7 手机正常安装，只在 HarmonyOS 7 上测试和保证 |
 | 模型 | Stage 模型，单 `UIAbility` |
-| 导航 | `Tabs` 承载 5 个页签，每个页签一个 `Navigation` + `NavPathStack`，系统侧滑返回由 `Navigation` 处理 |
+| 导航 | 根部一个 `Navigation` + `NavPathStack`，五个页签（`Tabs`）在它的根内容里，详情页压在上面并盖住底栏；切回页签时位置保留，系统侧滑返回由 `Navigation` 处理（与「每个页签一个栈」效果相同，但更简单） |
 | 网络 | `@kit.NetworkKit` http（或 Remote Communication Kit），同样解析信封；会话凭据存 Asset Store |
 | 推送 / 通知 | `@kit.PushKit`、`@kit.NotificationKit` |
 | 窗口 | 沉浸式布局 + 避让区，适配挖孔屏与底部手势条；折叠屏展开态先按单列居中，后续再做双栏 |
@@ -173,8 +173,8 @@ HarmonyOS 5 及以后的版本（包括公司手机的 HarmonyOS 7）不能像 A
 | --- | --- | --- |
 | M0 准备 | 剩余决定（§9）；华为企业开发者账号与内部分发资格、Android 签名密钥；用测试机实测华为推送在内部分发下可用（两端）；两端工程骨架与令牌生成 | 账号、证书、核实结论 |
 | M1 服务端基础 | S1–S5、S11–S13（只读接口、设备令牌、推送适配层、已读、偏好、版本与分发、离线客户包、跟进防重复）+ OpenAPI 契约 | 接口 + 迁移 + 测试 |
-| M2 两端核心（并行） | 登录、工作台、客户（列表 / 详情 / 新建 / 跟进 / 回访 / 阶段）、离线客户与跟进补发、消息、WhatsApp 会话、推送与通知渠道、App 内更新 | Android + HarmonyOS 内测包 |
-| M3 两端业务（并行） | 订单、报价查看、任务与日历、数据看板、通知设置、账号与安全 | 两端内测 |
+| M2 HarmonyOS 核心（0.1 已建立，见 §10） | 登录、工作台、客户（列表 / 详情 / 新建 / 跟进 / 回访 / 阶段）、离线客户与跟进补发、消息、WhatsApp 会话、推送与通知渠道、App 内更新 | HarmonyOS 内测包 |
+| M3 HarmonyOS 业务功能；Android 版启动并追平 M2 | 订单、报价查看、任务与日历、数据看板、通知设置、账号与安全 | 两端内测 |
 | M4 扩展 | 新通知种类（新订单、到账、物流超期、系统公告） | 两端候选版 |
 | M5 内部推广 | 隐私与权限说明；先给 3–5 名销售和管理员试用一到两周，修完问题后全员安装 | 正式版 |
 
@@ -191,10 +191,19 @@ HarmonyOS 5 及以后的版本（包括公司手机的 HarmonyOS 7）不能像 A
 
 ## 9. 待确认的决定
 
-已确认：两端同时开发；不做审批；企业内部分发；公司配发手机（华为 HarmonyOS 7 + 1 款 Android）；不加收款记录；不做英文界面；允许离线查看最近客户（默认范围）；App 名称 LVANJUBOS；包名 `online.avenlee.bos`；推送统一用华为；后续每位销售接入自己的 WhatsApp 号码（见 §0）。
+已确认：先做 HarmonyOS 7 版、Android 随后；不做审批；企业内部分发；公司配发手机（华为 HarmonyOS 7 + 1 款 Android）；不加收款记录；不做英文界面；允许离线查看最近客户（默认范围）；App 名称 LVANJUBOS；包名 HarmonyOS `online.avenlee.bos` / Android `online.avenlee.bos.android`；推送统一用华为；后续每位销售接入自己的 WhatsApp 号码（见 §0）。
 
 仍需确认：
 
 1. **Android 那款手机的具体型号**：需要确认是带华为移动服务（HMS）、能安装 Android 应用的华为手机；不是的话推送要改接该品牌。
 2. 手机采购数量。
 3. 多号码 WhatsApp（S14）的业务规则，单独设计时确认（见 §2）。
+
+## 10. 开发进度
+
+| 日期 | 进度 |
+| --- | --- |
+| 2026-11-11 | 华为企业账号已注册。HarmonyOS 工程 0.1 建立（`mobile/harmony`）：登录、工作台、客户队列与详情（拨号、写跟进）、订单列表与详情、消息、我的；只用现有接口，服务端未改动。数据层经 TypeScript 严格检查，界面代码待第一次在 DevEco Studio 26 中编译验证 |
+
+**HarmonyOS 上的 WhatsApp**：据目前了解，WhatsApp 没有 HarmonyOS 5 及以后版本的原生 App，在 HarmonyOS 7 手机上只能借助「卓易通」这类兼容工具运行，需要在公司手机上实测。因此 HarmonyOS 版联系客户以 App 内的 WhatsApp 会话（走 BOS 接入的 WhatsApp API）为主，这也是下一步的重点；手机 WhatsApp 共存模式（S14）需要按实测结果定。
+
