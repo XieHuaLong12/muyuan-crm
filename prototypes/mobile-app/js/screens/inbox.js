@@ -1,6 +1,6 @@
 /*
  * 消息：通知中心（分类 / 优先级 / 已读未读 / 批量已读 / 点击跳转）与 WhatsApp 会话。
- * 通知内容来自 services/notification-service.ts 的 notificationFeed（现有种类）；订单、审批、系统公告为新增种类（标「规划」）。
+ * 通知内容来自 services/notification-service.ts 的 notificationFeed（现有种类）；订单、系统公告为新增种类（标「规划」）。
  * 当前 BOS 的已读状态只保存在浏览器里；App 需要服务端保存已读（新增表，见 docs/mobile-app/NATIVE_PLAN.md）。
  */
 (function () {

@@ -17,7 +17,7 @@
       ['list-todo', '任务', LV.go('tasks')],
       ['chart-line', admin ? '经营数据' : '我的业绩', LV.go('analytics')],
       ['file-text', '报价单', LV.attr('open', { tab: 'orders', to: 'orders', p: { seg: 'quotes' } })],
-      admin ? ['stamp', '审批', LV.attr('open', { tab: 'orders', to: 'orders', p: { seg: 'approvals' } })] : ['message-square-text', '常用话术', LV.attr('quick-replies')],
+      admin ? ['credit-card', '待付款', LV.attr('open', { tab: 'orders', to: 'orders', p: { status: 'PENDING_PAYMENT' } })] : ['message-square-text', '常用话术', LV.attr('quick-replies')],
       admin ? ['user-check', '待分配', LV.attr('open', { tab: 'customers', to: 'customers', p: { queue: 'pool' } })] : ['clipboard-check', '待首联', LV.attr('open', { tab: 'customers', to: 'customers', p: { queue: 'new' } })],
       ['calendar-days', '日历', LV.go('tasks', { view: 'calendar' })],
     ];
@@ -35,14 +35,12 @@
   function adminAlerts() {
     const late = LV.db.orders.filter(o => o.status === 'IN_TRANSIT' && o.eta && o.eta < LV.TODAY);
     const stale = LV.db.quotes.filter(q => q.status === 'SENT' && LV.fmt.dayDiff(q.sentAt) <= -3 && !['ORDER', 'WON'].includes(LV.customer(q.customer).stage));
-    const pending = LV.db.approvals.filter(a => a.status === 'PENDING');
     const rows = [
       late.length && { icon: 'truck', tone: 'danger', title: `物流异常 ${late.length} 单`, sub: `${late[0].no} 已超预计到货 ${-F.dayDiff(late[0].eta)} 天`, attrs: LV.attr('open', { tab: 'orders', to: 'order', p: { id: late[0].id } }) },
       stale.length && { icon: 'file-text', tone: 'warning', title: `${stale.length} 份报价超过 3 天未确认`, sub: stale.map(q => LV.customer(q.customer).name.split(' ')[0]).join('、'), attrs: LV.attr('open', { tab: 'orders', to: 'orders', p: { seg: 'quotes' } }) },
       { icon: 'timer', tone: 'warning', title: 'A/B 级线索首联超时 1 位', sub: 'Ivan Petrov · 负责人 陈航', attrs: LV.attr('open', { tab: 'customers', to: 'customer', p: { id: 'c5' } }) },
-      pending.length && { icon: 'stamp', tone: 'info', title: `${pending.length} 项待审批`, sub: pending.map(a => a.type).join('、'), attrs: LV.attr('open', { tab: 'orders', to: 'orders', p: { seg: 'approvals' } }), planned: true },
     ].filter(Boolean);
-    return `<div class="list">${rows.map(r => U.cell({ lead: `<span class="cell-lead tone-${r.tone}">${I(r.icon)}</span>`, title: r.title + (r.planned ? ` ${U.planned()}` : ''), sub: r.sub, attrs: r.attrs })).join('')}</div>`;
+    return `<div class="list">${rows.map(r => U.cell({ lead: `<span class="cell-lead tone-${r.tone}">${I(r.icon)}</span>`, title: r.title, sub: r.sub, attrs: r.attrs })).join('')}</div>`;
   }
 
   function adminBody(r, ui) {

@@ -34,7 +34,7 @@
 1. **需求理解**：为 Android 与 HarmonyOS 5/6 设计原生 App 的 UI/UX，先交付设计规范与可交互原型，确认后再开发。
 2. **对 BOS 的影响**：新增两个客户端，共用现有 API 与业务规则；不改变各模块边界。
 3. **涉及模块**：本次仅新增 `docs/mobile-app/`、`prototypes/mobile-app/`，以及 ESLint 忽略原型目录。
-4. **数据变化**：本次无。后续建议的加性表见 NATIVE_PLAN §2（DeviceToken、NotificationRead、NotificationPreference、Announcement，审批与收款待业务确认）。
-5. **API 变化**：本次无。后续新增只读接口与设备、已读、偏好接口，现有信封与字段不变。
+4. **数据变化**：本次无。后续建议的加性表见 NATIVE_PLAN §2（DeviceToken、NotificationRead、NotificationPreference、Announcement；收款记录待确认；审批已确认不做）。
+5. **API 变化**：本次无。后续新增只读接口与设备、已读、偏好、版本与分发接口，现有信封与字段不变。
 6. **UI 变化**：PC 与 PWA 页面不变；移动端设计系统沿用 BOS 品牌绿、焦点色、状态色与 Lucide 图标。
-7. **实施计划**：见 NATIVE_PLAN §7 里程碑与 §9 待确认决定。
+7. **实施计划**：见 NATIVE_PLAN §0 已确认决定（两端同时开发、不做审批、企业内部分发）、§7 里程碑与 §9 仍待确认的事项。

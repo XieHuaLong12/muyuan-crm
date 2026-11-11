@@ -46,7 +46,6 @@ LV.CONST = {
     inquiry: { label: '询盘', icon: 'user-round-plus', kinds: ['POOL_LEAD', 'NEW_LEAD', 'ASSIGNED', 'REPEAT_SUBMISSION'] },
     order: { label: '订单', icon: 'package', kinds: ['ORDER_NEW', 'ORDER_PAYMENT'], planned: true },
     followup: { label: '跟进', icon: 'alarm-clock', kinds: ['TASK_DUE', 'TASK_OVERDUE', 'FIRST_CONTACT_OVERDUE'] },
-    approval: { label: '审批', icon: 'stamp', kinds: ['APPROVAL'], planned: true },
     exception: { label: '异常', icon: 'triangle-alert', kinds: ['SHIPPING_LATE', 'LEAD_NEEDS_HUMAN'] },
     system: { label: '公告', icon: 'megaphone', kinds: ['DAILY_BRIEF', 'ANNOUNCEMENT'] },
   },
@@ -156,7 +155,7 @@ LV.QUOTES = [
   { id: 'q1', no: 'Q-20261107-002', customer: 'c1', status: 'SENT', sentAt: '2026-11-07T16:20', createdAt: '2026-11-07T15:40', createdBy: 'u2', currency: 'USD', incoterm: 'FOB Ningbo', validUntil: '2026-11-21', destination: 'Dammam, SA',
     items: [{ model: 'Y-604', qty: 120, price: 168, cbm: 0.42 }, { model: 'Y-601', qty: 80, price: 231, cbm: 0.58 }], freight: 0, other: 0 },
   { id: 'q2', no: 'Q-20261110-001', customer: 'c2', status: 'DRAFT', sentAt: null, createdAt: '2026-11-10T10:02', createdBy: 'u2', currency: 'USD', incoterm: 'CIF Mombasa', validUntil: '2026-11-24', destination: 'Mombasa, KE',
-    items: [{ model: 'M-801', qty: 260, price: 61, cbm: 0.21, listPrice: 65.7 }], freight: 2850, other: 0, approval: 'ap1' },
+    items: [{ model: 'M-801', qty: 260, price: 61, cbm: 0.21, listPrice: 65.7 }], freight: 2850, other: 0 },
   { id: 'q3', no: 'Q-20261109-002', customer: 'c3', status: 'SENT', sentAt: '2026-11-09T11:30', createdAt: '2026-11-09T10:50', createdBy: 'u3', currency: 'USD', incoterm: 'FOB Shenzhen', validUntil: '2026-11-23', destination: 'Manzanillo, MX',
     items: [{ model: 'Y-605', qty: 300, price: 82, cbm: 0.36 }], freight: 0, other: 0 },
   { id: 'q4', no: 'Q-20261104-003', customer: 'c13', status: 'SENT', sentAt: '2026-11-04T17:10', createdAt: '2026-11-04T16:30', createdBy: 'u5', currency: 'USD', incoterm: 'CIF Ho Chi Minh', validUntil: '2026-11-18', destination: 'Cat Lai, VN',
@@ -176,13 +175,6 @@ LV.ORDERS = [
   { id: 'o8', no: 'LV20261020-001', customer: 'c5', owner: 'u4', amountRMB: 133000, currency: 'USD', source: 19850, status: 'CANCELLED', payment: 'UNPAID', production: 'NOT_STARTED', shipping: 'NOT_SHIPPED', orderDate: '2026-10-20', eta: null, product: '压缩沙发', model: 'Y-604', qty: 260, notes: '客户资金未到位，取消。', cancelReason: '客户资金未到位' },
 ];
 
-// ⚠️ 规划能力：BOS 目前没有审批流程。以下审批单仅为交互示意，触发规则需业务确认。
-LV.APPROVALS = [
-  { id: 'ap1', type: '报价审批', title: 'Q-20261110-001 · Grace Wanjiru', reason: 'M-801 单价 US$ 61.00，低于价格表 US$ 65.70（-7.2%）', applicant: 'u2', at: '2026-11-10T10:05', status: 'PENDING', amount: 'US$ 18,710', quote: 'q2' },
-  { id: 'ap2', type: '成交更正', title: 'LV20261105-002 · Nguyen Minh', reason: '成交金额 ¥72,900 → ¥70,400，客户追加 2% 折扣', applicant: 'u5', at: '2026-11-09T17:42', status: 'PENDING', amount: '¥70,400', order: 'o4' },
-  { id: 'ap3', type: '付款条件', title: 'Q-20261109-002 · Carlos Méndez', reason: '定金比例 30% → 20%', applicant: 'u3', at: '2026-11-09T11:10', status: 'APPROVED', amount: 'US$ 24,600', quote: 'q3' },
-];
-
 LV.TASKS = [
   { id: 'k1', title: '首次联系 James Carter', desc: '广告留资 24 小时内，须在 5 分钟内首次联系。', customer: 'c10', due: '2026-11-10T10:28', priority: 'HIGH', status: 'TODO', source: 'WORKFLOW', assignee: 'u2', reason: '新线索首联倒计时' },
   { id: 'k2', title: '回复 Grace：40HQ 装柜量与样品', desc: '客户在等回复：160 / 180 两个尺寸各装多少张，样品 2 张。', customer: 'c2', due: '2026-11-10T11:00', priority: 'HIGH', status: 'DOING', source: 'CRM', assignee: 'u2', reason: '客户已回复 8 分钟' },
@@ -194,7 +186,6 @@ LV.TASKS = [
   { id: 'k8', title: 'Valentina 物流跟进', desc: '联系货代确认 MSC ANNA 到港时间，并告知客户。', customer: 'c11', due: '2026-11-11T10:00', priority: 'MEDIUM', status: 'TODO', source: 'ORDER', assignee: 'u2', order: 'o5' },
   { id: 'k9', title: '回访 Leila（项目延期）', desc: '暂不需要，12 月初回访。', customer: 'c14', due: '2026-12-01T10:00', priority: 'LOW', status: 'TODO', source: 'WORKFLOW', assignee: 'u2' },
   { id: 'k10', title: '分配 2 条待分配线索', desc: '包括 A 级 Fatima Zahra（阿联酋）。', customer: null, due: '2026-11-10T10:30', priority: 'HIGH', status: 'TODO', source: 'CRM', assignee: 'u1' },
-  { id: 'k11', title: '审批报价 Q-20261110-001', desc: '单价低于价格表 7.2%。', customer: 'c2', due: '2026-11-10T12:00', priority: 'MEDIUM', status: 'TODO', source: 'MANUAL', assignee: 'u1' },
   { id: 'k12', title: '复核 11 月团队目标', desc: '', customer: null, due: '2026-11-12T18:00', priority: 'LOW', status: 'TODO', source: 'MANUAL', assignee: 'u1' },
   { id: 'k13', title: '确认 Tomasz 质检照片', desc: '', customer: 'c8', due: '2026-11-10T16:00', priority: 'MEDIUM', status: 'TODO', source: 'ORDER', assignee: 'u3', order: 'o3' },
   { id: 'k14', title: '回访 Adebayo 第二柜', desc: '', customer: 'c7', due: '2026-11-14T10:00', priority: 'MEDIUM', status: 'TODO', source: 'CRM', assignee: 'u5' },
@@ -209,8 +200,6 @@ LV.NOTIFICATIONS = [
   { id: 'n4', kind: 'ORDER_NEW', cat: 'order', priority: 'normal', audience: 'ADMIN', at: '2026-11-10T09:15', title: '新订单 LV20261110-001', body: 'Carlos Méndez · ¥168,000 · 等待 30% 定金', route: ['orders', 'order', { id: 'o1' }], planned: true },
   { id: 'n5', kind: 'SHIPPING_LATE', cat: 'exception', priority: 'high', audience: 'OWNER', owner: 'u2', at: '2026-11-10T08:30', title: '物流异常 · 已超预计到货 4 天', body: 'LV20261102-002 · Valentina Rojas · 运输中', route: ['orders', 'order', { id: 'o5' }] },
   { id: 'n6', kind: 'DAILY_BRIEF', cat: 'system', priority: 'normal', audience: 'ADMIN', at: '2026-11-10T08:00', title: '今日简报', body: '昨日新增线索 23 条（A/B 级 9 条），首联平均 4 分钟；1 条 A 级首联超时。', route: ['home', 'analytics', {}] },
-  { id: 'n7', kind: 'APPROVAL', cat: 'approval', priority: 'high', audience: 'ADMIN', at: '2026-11-10T10:05', title: '报价待审批', body: 'Q-20261110-001 · 单价低于价格表 7.2% · 林晓提交', route: ['orders', 'approval', { id: 'ap1' }], planned: true },
-  { id: 'n8', kind: 'APPROVAL', cat: 'approval', priority: 'normal', audience: 'OWNER', owner: 'u2', at: '2026-11-10T10:05', title: '报价审批已提交', body: 'Q-20261110-001 等待管理员审批', route: ['orders', 'approval', { id: 'ap1' }], planned: true },
   { id: 'n9', kind: 'TASK_OVERDUE', cat: 'followup', priority: 'high', audience: 'OWNER', owner: 'u2', at: '2026-11-09T18:00', title: '任务已到期', body: '给 Ahmed 发 DDP 利雅得运费', route: ['home', 'task', { id: 'k7' }] },
   { id: 'n10', kind: 'REPEAT_SUBMISSION', cat: 'inquiry', priority: 'high', audience: 'ADMIN', at: '2026-11-09T17:40', title: '老客户再次留资', body: 'Hannah Müller · 德国 · 负责人 周敏', route: ['customers', 'customer', { id: 'c16' }], read: true },
   { id: 'n11', kind: 'FIRST_CONTACT_OVERDUE', cat: 'exception', priority: 'high', audience: 'ADMIN', at: '2026-11-09T14:42', title: 'A/B 级线索首联超时', body: 'Ivan Petrov · 哈萨克斯坦 · 负责人 陈航 · 超时 12 分钟', route: ['customers', 'customer', { id: 'c5' }], read: true },

@@ -72,7 +72,7 @@
   LV.screens['notify-settings'] = {
     render() {
       const s = S(), perm = s.systemPermission;
-      const channel = (key) => { const cat = C.notifyCategories[key], ch = s.channels[key]; return `<div class="cell has-lead"><span class="cell-lead">${I(cat.icon)}</span><span class="cell-main"><span class="cell-title" style="display:block">${{ inquiry: '新客户询盘', order: '新订单与付款', followup: '跟进提醒', approval: '待审批', exception: '订单与线索异常', system: '公告与简报' }[key]}${cat.planned ? ` ${U.planned()}` : ''}</span><button type="button" class="mode-link" ${LV.attr('ch-mode', { k: key })} ${ch.on ? '' : 'disabled'}>${MODES[ch.mode][0]}${I('chevron-right')}</button></span>${U.switch(ch.on, LV.attr('ch-toggle', { k: key }), `接收${cat.label}通知`)}</div>`; };
+      const channel = (key) => { const cat = C.notifyCategories[key], ch = s.channels[key]; return `<div class="cell has-lead"><span class="cell-lead">${I(cat.icon)}</span><span class="cell-main"><span class="cell-title" style="display:block">${{ inquiry: '新客户询盘', order: '新订单与付款', followup: '跟进提醒', exception: '订单与线索异常', system: '公告与简报' }[key]}${cat.planned ? ` ${U.planned()}` : ''}</span><button type="button" class="mode-link" ${LV.attr('ch-mode', { k: key })} ${ch.on ? '' : 'disabled'}>${MODES[ch.mode][0]}${I('chevron-right')}</button></span>${U.switch(ch.on, LV.attr('ch-toggle', { k: key }), `接收${cat.label}通知`)}</div>`; };
       return {
         title: '通知设置',
         body: `<div class="stack-lg" style="padding-top:4px">
@@ -149,13 +149,37 @@
   LV.on('theme-set', el => { LV.setTheme(el.dataset.k); LV.refresh(); });
   LV.on('language', () => LV.sheet({ title: '语言', body: `<div class="action-list"><button type="button" class="action-item is-selected"><span class="radio is-on"></span><span><strong>简体中文</strong></span></button><button type="button" class="action-item" ${LV.attr('noop-toast', { t: 'English 界面在规划中，客户资料与报价单已支持英文' })}><span class="radio"></span><span><strong>English ${U.planned()}</strong><small>BOS 目前只有中文界面</small></span></button></div>` }));
 
+  /*
+   * Enterprise in-house distribution (decided 2026-11-11): no app store. Android installs a company-signed APK from the
+   * BOS download page and updates in the app; HarmonyOS installs through Huawei's enterprise distribution channel.
+   * The server tells the app the latest and minimum supported version (planned: GET /api/app/version).
+   */
+  const UPDATE = { version: '1.0.1', size: '18.6 MB', notes: ['客户列表支持按标签筛选', '修复部分华为手机通知不响铃的问题'], forced: false };
+  const updateBody = () => {
+    const h = isHarmony(), dl = LV.state.updateProgress;
+    return `<div class="update-card"><div class="update-head"><strong>版本 ${UPDATE.version}</strong><span>${h ? '企业内部分发' : `${UPDATE.size} · 公司签名`}</span></div>
+      <ul>${UPDATE.notes.map(n => `<li>${n}</li>`).join('')}</ul></div>
+      ${dl != null && !h ? `<div class="update-progress"><div class="meter"><i style="width:${dl}%"></i></div><span class="num">${dl < 100 ? `正在下载 ${dl}%` : '下载完成，已校验安装包签名'}</span></div>` : ''}
+      <p class="sheet-note">${h ? '点「前往安装」后由系统的企业应用安装页完成更新，数据和登录状态保留。' : '下载完成后由系统安装程序完成更新。首次需要允许「LVANJU BOS 安装未知应用」，之后不再询问。低于最低支持版本时，打开 App 会直接提示更新。'}</p>`;
+  };
+  LV.on('check-update', () => {
+    LV.state.updateSeen = true; LV.state.updateProgress = null;
+    LV.sheet({ name: 'update', title: '发现新版本', sub: `当前 1.0.0 → ${UPDATE.version}`, body: updateBody(), foot: `${U.btn('稍后', { kind: 'secondary', attrs: LV.attr('close-overlay') })}${U.btn(isHarmony() ? '前往安装' : '下载并安装', { kind: 'primary', icon: 'cloud-download', attrs: LV.attr('do-update') })}` });
+    LV.refresh();
+  });
+  LV.on('do-update', () => {
+    if (isHarmony()) { LV.closeSheet(); LV.toast('将打开企业应用安装页（原型中不跳转）', { icon: 'external-link' }); return; }
+    let n = 0; LV.state.updateProgress = 0; LV.updateSheet(updateBody(), 'update');
+    const t = setInterval(() => { n = Math.min(100, n + 20); LV.state.updateProgress = n; LV.updateSheet(updateBody(), 'update'); if (n >= 100) { clearInterval(t); setTimeout(() => { LV.closeSheet(); LV.toast('将打开系统安装程序（原型中不安装）', { icon: 'cloud-download' }); }, 700); } }, 260);
+  });
+
   LV.screens.about = {
     render() {
       return {
         title: '关于',
         body: `<div class="pad stack-lg" style="padding-top:12px">
-          <div class="about-brand"><img src="assets/brand/lvanju-logo.jpg" alt="LVANJU 绿安居" width="208" height="84"><strong>LVANJU BOS</strong><span class="num">版本 1.0.0（原型）</span></div>
-          <div class="list">${U.cell({ icon: 'cloud-download', title: '检查更新', trail: '已是最新', attrs: LV.attr('noop-toast', { t: 'Android 从应用市场 / 内部分发更新；HarmonyOS 从 AppGallery 更新' }) })}${U.cell({ icon: 'file-text', title: '隐私政策', attrs: LV.attr('noop-toast', { t: '上架前需要提供隐私政策与权限说明' }) })}${U.cell({ icon: 'file-check', title: '开源许可', sub: 'Lucide Icons（ISC）等', chevron: false })}</div>
+          <div class="about-brand"><img src="assets/brand/lvanju-logo.jpg" alt="LVANJU 绿安居" width="208" height="84"><strong>LVANJU BOS</strong><span class="num">版本 1.0.0 · 企业内部版（原型）</span></div>
+          <div class="list">${U.cell({ icon: 'cloud-download', title: '检查更新', trail: LV.state.updateSeen ? '有新版本' : '', attrs: LV.attr('check-update') })}${U.cell({ icon: 'shield-check', title: '安装来源', sub: isHarmony() ? 'LVANJU 企业内部分发（华为企业应用）' : 'LVANJU 企业内部分发 · 公司签名', chevron: false })}${U.cell({ icon: 'file-text', title: '隐私政策与权限说明', attrs: LV.attr('noop-toast', { t: '内部分发同样需要告知员工收集哪些数据、为什么申请通知等权限' }) })}${U.cell({ icon: 'file-check', title: '开源许可', sub: 'Lucide Icons（ISC）等', chevron: false })}</div>
           ${U.mockNote('© LVANJU 绿安居 · 原型仅用于设计评审')}
         </div>`,
       };

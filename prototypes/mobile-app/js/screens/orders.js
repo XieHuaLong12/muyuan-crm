@@ -1,5 +1,5 @@
 /*
- * 订单与报价：订单列表 / 订单详情 / 报价单列表 / 报价单详情 / 审批（规划能力）。
+ * 订单与报价：订单列表 / 订单详情 / 报价单列表 / 报价单详情。（2026-11-11 确认：不做审批流程。）
  * 订单字段与七段流程来自 services/order-service.ts 与 lib/order-status.ts；金额统一按人民币展示并保留原币种。
  * 订单行：BOS 的 Order 关联一笔 Deal（单一产品 / 型号 / 数量），逐行明细在报价单（QuotationItem）。
  */
@@ -22,13 +22,13 @@
     const c = LV.customer(q.customer);
     return `<button type="button" class="qrow card pressable" ${LV.attr('open', { tab: 'orders', to: 'quote', p: { id: q.id } })}>
       <span class="qrow-icon">${I('file-text')}</span>
-      <span class="qrow-main"><span class="qrow-top"><strong class="num">${q.no}</strong>${q.status === 'SENT' ? U.badge('已发送', 'brand') : U.badge('草稿', 'outline')}${q.approval ? U.badge('待审批', 'warning') : ''}</span>
+      <span class="qrow-main"><span class="qrow-top"><strong class="num">${q.no}</strong>${q.status === 'SENT' ? U.badge('已发送', 'brand') : U.badge('草稿', 'outline')}</span>
       <span class="qrow-sub">${LV.esc(c.name)} · ${q.incoterm} · ${q.items.length} 个型号</span></span>
       <span class="qrow-amount num">${F.money(quoteTotal(q), q.currency)}<small>${q.sentAt ? `发送 ${F.ago(q.sentAt)}` : `创建 ${F.ago(q.createdAt)}`}</small></span>
     </button>`;
   };
 
-  /* ── Orders root (订单 | 报价单 | 审批) ───────────────── */
+  /* ── Orders root (订单 | 报价单) ───────────────────────── */
   function ordersRegion(ui) {
     const all = LV.scope.orders();
     const tab = ui.status || 'ALL', q = (ui.q || '').toLowerCase();
@@ -44,22 +44,13 @@
       ${list.length && LV.state.demo !== 'empty' ? `<div class="stack">${list.map(LV.quoteRow).join('')}</div>` : U.empty({ icon: 'file-text', title: '没有报价单' })}
       ${U.note('手机端查看、转发报价单；逐行编辑报价（选产品、算运费、出 PDF）仍在电脑端报价工具完成。手机快速报价可在第二阶段评估。')}`;
   }
-  function approvalsRegion() {
-    const list = LV.scope.approvals();
-    return `${U.note('<b>规划能力：</b>BOS 目前没有审批流程。以下为交互示意，哪些情况需要审批（低于价格表、改付款条件、更正成交金额等）需要业务确认后再开发。')}
-      <div class="stack" style="margin-top:12px">${list.map(a => `<button type="button" class="card card-body pressable approval-row" ${LV.go('approval', { id: a.id })}>
-        <span class="ap-top"><span class="badge t-outline">${a.type}</span>${a.status === 'PENDING' ? U.badge('待审批', 'warning') : a.status === 'APPROVED' ? U.badge('已通过', 'success') : U.badge('已驳回', 'danger')}</span>
-        <strong class="num">${a.title}</strong><span class="ap-reason">${a.reason}</span>
-        <span class="ap-foot">${LV.USERS[a.applicant].name} 提交 · ${F.ago(a.at)}<b class="num">${a.amount}</b></span></button>`).join('')}</div>`;
-  }
-
   LV.screens.orders = {
     root: true, large: true, ptr: true, title: '订单',
     render(p, ui, r) {
       if (p.seg && !ui.segSet) { ui.seg = p.seg; ui.segSet = true; }
+      if (p.status && !ui.statusSet) { ui.status = p.status; ui.statusSet = true; }
       const seg = ui.seg || 'orders';
       const all = LV.scope.orders();
-      const pendingAp = LV.scope.approvals().filter(a => a.status === 'PENDING').length;
       const rem = { pay: all.filter(o => o.payment === 'UNPAID' && o.status !== 'CANCELLED').length, ship: all.filter(o => o.status === 'PRODUCING').length, late: all.filter(isLate).length, collect: all.filter(o => o.payment === 'DEPOSIT_PAID' && o.status !== 'CANCELLED').length };
       const statusChips = [['ALL', '全部', all.length], ...Object.entries(C.orderStatus).map(([k, l]) => [k, l, all.filter(o => o.status === k).length])]
         .map(([k, l, n]) => U.chip(l, { pressed: (ui.status || 'ALL') === k, count: n, attrs: LV.attr('set', { k: 'status', v: JSON.stringify(k) }) })).join('');
@@ -70,12 +61,11 @@
           <div class="toolbar"><label class="search">${I('search')}<span class="sr-only">搜索订单</span><input type="search" placeholder="订单号、客户、国家" value="${LV.esc(ui.q || '')}" data-input="order-search"></label></div>
           <div class="chip-row" aria-label="订单状态">${statusChips}</div>
           <div class="pad" data-region="list">${LV.gate(r, ui, () => ordersRegion(ui))}</div>`
-        : seg === 'quotes' ? `<div class="pad">${LV.gate(r, ui, () => quotesRegion(ui))}</div>`
-          : `<div class="pad">${approvalsRegion()}</div>`;
+        : `<div class="pad">${LV.gate(r, ui, () => quotesRegion(ui))}</div>`;
       return {
         title: '订单',
         body: `${U.largeTitle('订单', LV.isAdmin() ? `全公司 · 金额按人民币展示` : '我负责客户的订单')}
-          <div class="pad" style="margin-bottom:12px">${U.seg([{ key: 'orders', label: '订单' }, { key: 'quotes', label: '报价单' }, { key: 'approvals', label: '审批', count: LV.isAdmin() ? pendingAp : 0 }], seg, 'seg')}</div>
+          <div class="pad" style="margin-bottom:12px">${U.seg([{ key: 'orders', label: '订单' }, { key: 'quotes', label: '报价单' }], seg, 'seg')}</div>
           <div class="stack">${content}</div>`,
       };
     },
@@ -157,7 +147,6 @@
           <div class="oh-sub">${q.incoterm} · 目的港 ${q.destination} · 有效期至 ${q.validUntil}</div>
           <div class="quote-stats"><span><b class="num">${qty}</b>件</span><span><b class="num">${cbm.toFixed(1)}</b>CBM</span><span><b class="num">${q.items.length}</b>个型号</span></div>
         </div></div>
-        ${q.approval ? `<div class="pad"><button type="button" class="issue-card is-warning" ${LV.go('approval', { id: q.approval })}>${I('stamp')}<div><strong>等待管理员审批 ${U.planned()}</strong><p>单价低于价格表，审批通过后才能发送。</p></div>${I('chevron-right')}</button></div>` : ''}
         ${U.section('报价明细', `<div class="pad"><div class="list">${q.items.map(it => { const P = LV.PRODUCTS[it.model]; return `<div class="qitem">${P ? `<img src="${P.img}" alt="" width="72" height="54" loading="lazy">` : ''}<div class="qitem-main"><strong>${P ? P.name : it.model}</strong><small>${P ? P.spec : ''}</small><div class="qitem-nums"><span class="num">${F.money(it.price, q.currency)} × ${it.qty}</span><b class="num">${F.money(it.qty * it.price, q.currency)}</b></div>${it.listPrice ? `<small class="below">价格表 ${F.money(it.listPrice, q.currency)} · 低 ${((1 - it.price / it.listPrice) * 100).toFixed(1)}%</small>` : ''}</div></div>`; }).join('')}
           <dl class="kv totals"><div><dt>货值小计</dt><dd class="num">${F.money(sub, q.currency)}</dd></div><div><dt>运费</dt><dd class="num">${q.freight ? F.money(q.freight, q.currency) : '—'}</dd></div><div class="total"><dt>合计</dt><dd class="num">${F.money(quoteTotal(q), q.currency)}</dd></div></dl></div></div>`, { sub: '示例价格' })}
         ${U.section('客户', `<div class="pad"><div class="list">${U.cell({ lead: U.avatar(c.name, { grade: c.grade, size: 'sm' }), title: c.name, sub: `${c.company} · ${LV.CONST.stages[c.stage]}`, attrs: LV.attr('open', { tab: 'customers', to: 'customer', p: { id: c.id } }) })}</div></div>`)}
@@ -165,7 +154,7 @@
       return {
         title: '报价单', sub: q.no, body: `<div class="stack-lg" style="padding-top:4px">${body}</div>`,
         footer: q.status === 'SENT' ? `${U.btn('转发 PDF', { kind: 'secondary', icon: 'send', attrs: LV.attr('noop-toast', { t: '调用系统分享面板发送 PDF（原型略）' }) })}${U.btn('跟进客户', { kind: 'primary', icon: 'pencil', attrs: LV.attr('follow', { id: c.id }) })}`
-          : `${U.btn('在电脑端编辑', { kind: 'secondary', icon: 'laptop', attrs: LV.attr('noop-toast', { t: '逐行编辑在电脑端报价工具完成' }) })}${U.btn(q.approval ? '等待审批' : '登记为已发送', { kind: 'primary', icon: 'send', attrs: q.approval ? 'disabled' : LV.attr('quote-sent', { id: q.id }) })}`,
+          : `${U.btn('在电脑端编辑', { kind: 'secondary', icon: 'laptop', attrs: LV.attr('noop-toast', { t: '逐行编辑在电脑端报价工具完成' }) })}${U.btn('登记为已发送', { kind: 'primary', icon: 'send', attrs: LV.attr('quote-sent', { id: q.id }) })}`,
       };
     },
   };
@@ -175,35 +164,4 @@
     if (!ok) return; q.status = 'SENT'; q.sentAt = LV.NOW; LV.customer(q.customer).stage = 'QUOTED'; LV.refresh(); LV.toast('已登记发送');
   });
 
-  /* ── Approval detail (planned) ────────────────────────── */
-  LV.screens.approval = {
-    render(p) {
-      const a = LV.db.approvals.find(x => x.id === p.id);
-      const canDecide = LV.isAdmin() && a.status === 'PENDING';
-      return {
-        title: '审批详情', sub: a.type,
-        body: `<div class="stack-lg" style="padding-top:4px">
-          <div class="pad">${U.note('规划能力，BOS 目前没有审批流程。审批规则、审批人与金额阈值需要业务确认。')}</div>
-          <div class="pad"><div class="card card-body approval-detail">
-            <div class="ap-top"><span class="badge t-outline">${a.type}</span>${a.status === 'PENDING' ? U.badge('待审批', 'warning') : a.status === 'APPROVED' ? U.badge('已通过', 'success') : U.badge('已驳回', 'danger')}</div>
-            <h2 class="num">${a.title}</h2><p>${a.reason}</p>
-            <dl class="kv"><div><dt>金额</dt><dd class="num">${a.amount}</dd></div><div><dt>申请人</dt><dd>${LV.USERS[a.applicant].name}</dd></div><div><dt>提交时间</dt><dd>${F.ago(a.at)}</dd></div></dl>
-            ${a.quote ? `<button type="button" class="link-row" ${LV.go('quote', { id: a.quote })}>${I('file-text')}<span>查看报价单</span>${I('chevron-right')}</button>` : ''}
-            ${a.order ? `<button type="button" class="link-row" ${LV.go('order', { id: a.order })}>${I('package')}<span>查看订单</span>${I('chevron-right')}</button>` : ''}
-          </div></div>
-          ${a.decision ? `<div class="pad"><div class="card card-body"><strong>${a.status === 'APPROVED' ? '已通过' : '已驳回'}</strong><p class="muted">${LV.esc(a.decision)}</p></div></div>` : ''}
-        </div>`,
-        footer: canDecide ? `${U.btn('驳回', { kind: 'danger-ghost', attrs: LV.attr('ap-decide', { id: a.id, v: 'REJECTED' }) })}${U.btn('通过', { kind: 'primary', icon: 'check', attrs: LV.attr('ap-decide', { id: a.id, v: 'APPROVED' }) })}` : '',
-      };
-    },
-  };
-  LV.on('ap-decide', async el => {
-    const a = LV.db.approvals.find(x => x.id === el.dataset.id), v = el.dataset.v;
-    const res = await LV.confirm({ title: v === 'APPROVED' ? '通过这项审批？' : '驳回这项审批？', message: `${a.title}`, ok: v === 'APPROVED' ? '通过' : '驳回', danger: v === 'REJECTED', field: { label: v === 'APPROVED' ? '审批意见（选填）' : '驳回原因', required: v === 'REJECTED', min: 2, error: '请填写驳回原因' } });
-    if (!res) return;
-    a.status = v; a.decision = res === true ? '同意' : res;
-    if (a.quote) { const q = LV.quote(a.quote); if (q) q.approval = null; }
-    LV.refresh(); LV.renderTabbar();
-    LV.toast(v === 'APPROVED' ? `已通过 · 已通知 ${LV.USERS[a.applicant].name}` : '已驳回', { icon: v === 'APPROVED' ? 'circle-check' : 'circle-x' });
-  });
 })();

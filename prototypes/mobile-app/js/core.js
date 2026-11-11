@@ -68,14 +68,14 @@
     stacks: {},
     exitArmed: false,
     settings: {
-      channels: { inquiry: { on: true, mode: 'loop' }, order: { on: true, mode: 'ring' }, followup: { on: true, mode: 'ring' }, approval: { on: true, mode: 'ring' }, exception: { on: true, mode: 'ring' }, system: { on: true, mode: 'silent' } },
+      channels: { inquiry: { on: true, mode: 'loop' }, order: { on: true, mode: 'ring' }, followup: { on: true, mode: 'ring' }, exception: { on: true, mode: 'ring' }, system: { on: true, mode: 'silent' } },
       sound: 'default', vibrate: true, dnd: true, dndFrom: '22:00', dndTo: '08:00', dndExceptA: true, lockscreen: 'hide', systemPermission: true,
       language: 'zh-CN', biometric: false,
     },
   };
   LV.savePrefs = () => { try { localStorage.setItem('lv-proto-prefs', JSON.stringify({ platform: LV.state.platform, theme: LV.state.theme, fontScale: LV.state.fontScale, width: LV.state.width })); } catch { /* storage may be blocked */ } };
   LV.resetData = () => {
-    LV.db = structuredClone({ customers: LV.CUSTOMERS, tasks: LV.TASKS, notifications: LV.NOTIFICATIONS, orders: LV.ORDERS, quotes: LV.QUOTES, approvals: LV.APPROVALS, timeline: LV.TIMELINE, chats: LV.CHATS });
+    LV.db = structuredClone({ customers: LV.CUSTOMERS, tasks: LV.TASKS, notifications: LV.NOTIFICATIONS, orders: LV.ORDERS, quotes: LV.QUOTES, timeline: LV.TIMELINE, chats: LV.CHATS });
   };
   LV.resetData();
 
@@ -91,7 +91,6 @@
     quotes: () => LV.db.quotes.filter(q => LV.isAdmin() || LV.customer(q.customer)?.owner === LV.me().id),
     tasks: (team = false) => LV.db.tasks.filter(t => (LV.isAdmin() && team) || t.assignee === LV.me().id),
     notifications: () => LV.db.notifications.filter(n => n.audience === 'ALL' || (n.audience === 'ADMIN' && LV.isAdmin()) || (n.audience === 'OWNER' && n.owner === LV.me().id)),
-    approvals: () => LV.db.approvals.filter(a => LV.isAdmin() || a.applicant === LV.me().id),
   };
   LV.counts = () => {
     const notes = LV.scope.notifications().filter(n => !n.read).length;

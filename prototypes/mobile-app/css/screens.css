@@ -177,11 +177,6 @@
 .qrow-sub { font-size: var(--t-caption); color: var(--c-ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .qrow-amount { flex: none; display: grid; justify-items: end; font-weight: 600; font-size: var(--t-body-s); }
 .qrow-amount small { font-weight: 400; font-size: var(--t-micro); color: var(--c-ink-3); }
-.approval-row { width: 100%; display: grid; gap: 6px; text-align: left; color: inherit; }
-.ap-top { display: flex; justify-content: space-between; }
-.ap-reason { font-size: var(--t-body-s); color: var(--c-ink-2); }
-.ap-foot { display: flex; justify-content: space-between; font-size: var(--t-micro); color: var(--c-ink-3); }
-.ap-foot b { color: var(--c-ink); font-size: var(--t-body-s); }
 .issue-card { width: 100%; display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: var(--r-lg); border: 0; background: var(--c-danger-bg); color: var(--c-ink); text-align: left; }
 .issue-card > svg { width: 20px; height: 20px; flex: none; color: var(--c-danger); }
 .issue-card strong { color: var(--c-danger); font-size: var(--t-body-s); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
@@ -224,9 +219,6 @@
 .kv.totals { padding: 6px 14px 10px; }
 .kv.totals .total dt { color: var(--c-ink); font-weight: 600; }
 .kv.totals .total dd { font-size: var(--t-title-s); font-weight: 650; }
-.approval-detail { display: grid; gap: 10px; }
-.approval-detail h2 { margin: 4px 0 0; font-size: var(--t-title-m); }
-.approval-detail p { margin: 0; color: var(--c-ink-2); font-size: var(--t-body-s); line-height: 1.6; }
 .muted { color: var(--c-ink-3); font-size: var(--t-body-s); margin: 4px 0 0; }
 
 /* ── Inbox ─────────────────────────────────────────────── */
@@ -397,3 +389,10 @@
 .about-brand img { width: 180px; height: auto; }
 .about-brand strong { color: #fff; font-size: var(--t-title-s); letter-spacing: .04em; }
 .about-brand span { font-size: var(--t-caption); }
+
+/* ── App update (enterprise distribution) ──────────────── */
+.update-card { padding: 14px; border-radius: var(--r-md); background: var(--c-surface-2); }
+.update-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.update-head span { font-size: var(--t-caption); color: var(--c-ink-3); }
+.update-card ul { margin: 8px 0 0; padding-left: 18px; font-size: var(--t-body-s); color: var(--c-ink-2); line-height: 1.7; }
+.update-progress { display: grid; gap: 6px; margin-top: 14px; font-size: var(--t-caption); color: var(--c-ink-2); }
