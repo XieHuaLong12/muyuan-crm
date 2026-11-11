@@ -913,6 +913,8 @@ export struct ChatPage {
     .padding({ left: 12, right: 12, top: 8, bottom: 10 })
     .backgroundColor($r('app.color.surface'))
     .border({ width: { top: 0.5 }, color: $r('app.color.line') })
+    // The input area's white runs under the gesture bar; its content stays above it (top-aligned column).
+    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
     .bindSheet($$this.showSheet, this.sheetContent(), {
       detents: [SheetSize.LARGE],
       dragBar: true,
