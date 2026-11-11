@@ -11,6 +11,7 @@
 | 2 · 设计规范 | [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md)：颜色、字体与数字、间距、图标、组件（含 Compose / ArkUI 对应）、图表、动效、平台差异 |
 | 3–4 · 高保真可交互原型 | [`prototypes/mobile-app/`](../../prototypes/mobile-app/)：19 个页面 + 20 余个底部弹层，管理员 / 销售两种身份 |
 | 5 · 检查 | [QA_CHECKLIST.md](QA_CHECKLIST.md)：自动化交互检查、一致性、需求覆盖、原型边界 |
+| 6 · 对照 | [PROTOTYPE_PARITY.md](PROTOTYPE_PARITY.md)：HarmonyOS App 与原型逐页差距清单，A 批（不改服务端）/ B 批（需确认） |
 | 6 · 开发落地 | [NATIVE_PLAN.md](NATIVE_PLAN.md)：已确认决定、服务端加性改动、认证、离线、两端推送与通知、Android / HarmonyOS 技术选型与企业内部分发、里程碑、待确认决定 |
 | 开工准备 | [PREPARATION.md](PREPARATION.md)：手机、账号证书与资质、品牌素材、服务器与开发环境、团队、离线默认值、开工顺序 |
 | HarmonyOS 版工程 | [`mobile/harmony`](../../mobile/harmony/README.md)：0.1 版（登录、工作台、客户与写跟进、订单、消息、我的），用 DevEco Studio 26 打开 |
