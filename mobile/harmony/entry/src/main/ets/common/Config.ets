@@ -21,6 +21,8 @@ export class Routes {
   static readonly CHAT: string = 'chat';
   /** All my tasks (param unused). */
   static readonly TASKS: string = 'tasks';
+  /** 数据分析 (param unused). */
+  static readonly ANALYTICS: string = 'analytics';
 }
 
 /** Parameter object for a pushed destination. */

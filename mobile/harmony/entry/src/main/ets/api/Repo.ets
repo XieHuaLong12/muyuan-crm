@@ -1,7 +1,10 @@
 import { util } from '@kit.ArkTS';
+import { http } from '@kit.NetworkKit';
 import { Api } from './Http';
 import { Session } from './Session';
 import {
+  AiReply, AiReplyBody, AttachBody, AttachItem, AttachResult, MaterialPicker, MediaAsset, PolishBody, PolishResult,
+  QuickReplyList, TranslateBatch, TranslateBatchBody, TranslateBody, TranslateOut, TranslateOutBody, Translation,
   Bootstrap, ConversationPage, CustomerDetail, CustomerListPage, EmptyBody, FollowUpBody, LoginBody, LoginUser,
   NotificationFeed, OrderDetail, OrderListPage, Performance, ReadBody, SalesQueue, SendBody, SentMessage, StageBody,
   StageResult, TaskListPage, TemplateBody, TemplateList, TemplateSent, Thread
@@ -71,12 +74,15 @@ export class Repo {
   }
 
   /** This month: revenue, deals, target completion (sales: own row; administrators: every salesperson + company). */
-  static performance(): Promise<Performance> {
-    return Api.get<Performance>('/api/sales-team/performance');
+  /** month: 'YYYY-MM', or '' for the current month. */
+  static performance(month: string = ''): Promise<Performance> {
+    const query: Record<string, string> = { 'month': month };
+    return Api.get<Performance>('/api/sales-team/performance', query);
   }
 
-  static peekPerformance(): Performance | null {
-    return Api.peek<Performance>('/api/sales-team/performance');
+  static peekPerformance(month: string = ''): Performance | null {
+    const query: Record<string, string> = { 'month': month };
+    return Api.peek<Performance>('/api/sales-team/performance', query);
   }
 
   // ── WhatsApp (the PC 消息中心: services/inbox-service.ts, services/whatsapp-message-service.ts) ──
@@ -98,10 +104,85 @@ export class Repo {
     return Api.peek<Thread>('/api/inbox/thread', threadQuery(customerId, ''));
   }
 
-  /** Free text inside the 24-hour window. requestId makes a retried send idempotent on the server. */
-  static sendWhatsApp(customerId: string, content: string, requestId: string): Promise<SentMessage> {
+  /**
+   * Free text inside the 24-hour window. requestId makes a retried send idempotent on the server; original is the
+   * Chinese the text was translated or drafted from, kept with the message as on the PC.
+   */
+  static sendWhatsApp(customerId: string, content: string, requestId: string, original: string = ''): Promise<SentMessage> {
     const body: SendBody = { customerId: customerId, content: content, requestId: requestId };
+    if (original.length > 0) {
+      body.original = original;
+    }
     return Api.post<SentMessage>('/api/whatsapp/send', body);
+  }
+
+  /** A picture or file already uploaded for this customer, through the normal send (window, opt-out, records). */
+  static sendMedia(customerId: string, assetId: string, requestId: string): Promise<SentMessage> {
+    const body: SendBody = { customerId: customerId, content: '', requestId: requestId, mediaAssetId: assetId };
+    return Api.post<SentMessage>('/api/whatsapp/send', body, 60000);
+  }
+
+  /** Stores a picture or file for this customer (≤ 20 MB, the server's allowed types); send it with sendMedia. */
+  static uploadMedia(customerId: string, fileName: string, mimeType: string, data: ArrayBuffer): Promise<MediaAsset> {
+    const file: http.MultiFormData = { name: 'file', contentType: mimeType, remoteFileName: fileName, data: data };
+    const owner: http.MultiFormData = { name: 'customerId', contentType: 'text/plain', data: customerId };
+    return Api.upload<MediaAsset>('/api/whatsapp/media', [file, owner]);
+  }
+
+  // ── Chat assistants (the PC chat's AI 回复 / 优化话术 / 翻译; nothing is sent by these) ──
+  /** A reply drafted from the conversation; `previous` asks for a different one. */
+  static aiReply(customerId: string, previous: string): Promise<AiReply> {
+    const body: AiReplyBody = { customerId: customerId };
+    if (previous.length > 0) {
+      body.previous = previous;
+    }
+    return Api.post<AiReply>('/api/whatsapp/ai-reply', body, 100000);
+  }
+
+  /** Three better ways to say what is in the input box; `avoid` = the versions already shown (换一批). */
+  static polish(customerId: string, text: string, avoid: string[]): Promise<PolishResult> {
+    const body: PolishBody = { customerId: customerId, text: text, avoid: avoid };
+    return Api.post<PolishResult>('/api/inbox/polish', body, 100000);
+  }
+
+  /** The salesperson's Chinese in the customer's language, for the input box. */
+  static translateOut(customerId: string, text: string): Promise<TranslateOut> {
+    const body: TranslateOutBody = { customerId: customerId, text: text };
+    return Api.post<TranslateOut>('/api/inbox/translate-out', body, 60000);
+  }
+
+  /** Chinese of one customer message (stored, so everyone sees it next time). */
+  static translate(messageId: string): Promise<Translation> {
+    const body: TranslateBody = { messageId: messageId };
+    return Api.post<Translation>('/api/inbox/translate', body, 60000);
+  }
+
+  /** Chinese of up to 10 messages at once (the chat's automatic translation). */
+  static translateBatch(customerId: string, messageIds: string[]): Promise<TranslateBatch> {
+    const body: TranslateBatchBody = { customerId: customerId, messageIds: messageIds };
+    return Api.post<TranslateBatch>('/api/inbox/translate-batch', body, 90000);
+  }
+
+  static quickReplies(customerId: string): Promise<QuickReplyList> {
+    const query: Record<string, string> = { 'customerId': customerId };
+    return Api.get<QuickReplyList>('/api/quick-replies', query);
+  }
+
+  static peekQuickReplies(customerId: string): QuickReplyList | null {
+    const query: Record<string, string> = { 'customerId': customerId };
+    return Api.peek<QuickReplyList>('/api/quick-replies', query);
+  }
+
+  /** 产品资料: library files (customer's language first), product photos, files I sent recently. */
+  static materials(customerId: string, q: string): Promise<MaterialPicker> {
+    const query: Record<string, string> = { 'customerId': customerId, 'q': q };
+    return Api.get<MaterialPicker>('/api/inbox/materials', query);
+  }
+
+  /** Copies chosen library items into the customer's attachments (≤ 10); each is then sent with sendMedia. */
+  static attachMaterials(customerId: string, items: AttachItem[]): Promise<AttachResult> {
+    const body: AttachBody = { customerId: customerId, items: items };
+    return Api.post<AttachResult>('/api/inbox/materials', body, 60000);
   }
 
   static newRequestId(): string {

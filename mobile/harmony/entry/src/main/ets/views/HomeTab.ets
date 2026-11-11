@@ -378,9 +378,13 @@ export struct HomeTab {
         Text(Session.isAdmin() ? `${this.monthTitle(p)}全公司业绩` : `${this.monthTitle(p)}我的业绩`)
           .fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink'))
         Blank()
-        Text('与电脑端「销售业绩」一致').fontSize(12).fontColor($r('app.color.ink3'))
+        Text('数据分析').fontSize(13).fontColor($r('app.color.brand_ink'))
+        LvIcon({ name: 'chevron-right', iconColor: $r('app.color.brand_ink'), iconSize: 16 })
       }
       .width('100%')
+      .onClick(() => {
+        this.pathStack.pushPathByName(Routes.ANALYTICS, new RouteParam(''));
+      })
 
       Text(Fmt.money(Session.isAdmin() ? (p.company !== null ? p.company.revenue : '0') : (this.mine(p) !== null ? (this.mine(p) as PerformanceRow).revenue : '0'), p.currency))
         .fontSize(28).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))

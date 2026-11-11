@@ -1,4 +1,4 @@
-import { AppConfig } from '../common/Config';
+import { AppConfig, RouteParam, Routes } from '../common/Config';
 import { Fmt } from '../common/Format';
 import { Api } from '../api/Http';
 import { Repo } from '../api/Repo';
@@ -8,6 +8,7 @@ import { LvIcon } from '../components/LvIcon';
 /** 我的: account, server, version, sign out. Notification settings and updates come in later versions. */
 @Component
 export struct MeTab {
+  @Consume('pathStack') pathStack: NavPathStack;
   @StorageProp('userName') userName: string = '';
   @StorageProp('userRole') userRole: string = '';
   @StorageProp('userEmail') userEmail: string = '';
@@ -81,6 +82,26 @@ export struct MeTab {
         }
         .width('100%')
         .padding(16)
+        .borderRadius(16)
+        .backgroundColor($r('app.color.surface'))
+
+        Column() {
+          Row({ space: 12 }) {
+            Row() {
+              LvIcon({ name: 'trending-up', iconColor: $r('app.color.brand_ink'), iconSize: 19 })
+            }
+            .width(34).height(34).borderRadius(10).justifyContent(FlexAlign.Center).backgroundColor($r('app.color.brand_tint'))
+            Text('数据分析').fontSize(15).fontColor($r('app.color.ink')).layoutWeight(1)
+            Text('业绩 · 转化 · 首联').fontSize(13).fontColor($r('app.color.ink3'))
+            LvIcon({ name: 'chevron-right', iconColor: $r('app.color.ink3'), iconSize: 18 })
+          }
+          .width('100%')
+          .height(56)
+          .padding({ left: 16, right: 16 })
+          .onClick(() => {
+            this.pathStack.pushPathByName(Routes.ANALYTICS, new RouteParam(''));
+          })
+        }
         .borderRadius(16)
         .backgroundColor($r('app.color.surface'))
 

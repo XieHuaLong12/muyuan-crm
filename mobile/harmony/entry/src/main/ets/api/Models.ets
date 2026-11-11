@@ -373,6 +373,9 @@ export interface ChatMessage {
   status: string;
   sentAt: string;
   fileName: string | null;
+  mimeType?: string | null;
+  /** Where the picture or file can be fetched (signed-in), or null. */
+  mediaHref?: string | null;
   translation: Translation | null;
 }
 
@@ -408,6 +411,10 @@ export interface SendBody {
   customerId: string;
   content: string;
   requestId: string;
+  /** A file already uploaded for this customer (POST /api/whatsapp/media or /api/inbox/materials). */
+  mediaAssetId?: string;
+  /** The Chinese the salesperson wrote before 译成客户语言 / AI, kept with the message. */
+  original?: string;
 }
 
 export interface SentMessage {
@@ -442,6 +449,9 @@ export interface PerformanceRow {
   name: string;
   isActive: boolean;
   newCustomers: number;
+  assigned: number;
+  /** Customers this person marked 无效 / 暂不需要 / 流失 this month (for the administrator's review). */
+  closedByOwner: number;
   contacted: number;
   qualified: number;
   quoted: number;
@@ -471,6 +481,8 @@ export interface TargetSummary {
 export interface Performance {
   month: string;
   currency: string;
+  firstContactHours: number;
+  pendingTotal: number;
   rows: PerformanceRow[];
   company: CompanyTotals | null;
   targetSummary: TargetSummary | null;
@@ -518,4 +530,148 @@ export interface TemplateSent {
   message: ChatMessage;
   /** Set when Gupshup refused the message or the result is unknown (the message is kept as FAILED / UNKNOWN). */
   error?: string;
+}
+
+// ── Chat assistants (DeepSeek on the server; nothing is sent from these) ───────────────────────────────────────
+/** POST /api/whatsapp/ai-reply (services/whatsapp-ai-service.ts). */
+export interface AiReplyBody {
+  customerId: string;
+  previous?: string;
+}
+
+export interface AiReply {
+  reply: string;
+  replyZh: string;
+  nextStep: string;
+  warnings: string[];
+}
+
+/** POST /api/inbox/polish (services/reply-polish-service.ts): three ways to say the line in the input box. */
+export interface PolishBody {
+  customerId: string;
+  text: string;
+  avoid: string[];
+}
+
+export interface PolishSuggestion {
+  angle: string;
+  text: string;
+  zh: string;
+  why: string;
+  warnings: string[];
+}
+
+export interface PolishResult {
+  suggestions: PolishSuggestion[];
+  priceAsked: boolean;
+}
+
+/** POST /api/inbox/translate-out: the salesperson's Chinese in the customer's language. */
+export interface TranslateOutBody {
+  customerId: string;
+  text: string;
+}
+
+export interface TranslateOut {
+  text: string;
+  language: string;
+}
+
+/** POST /api/inbox/translate {messageId} → Chinese of one customer message (stored for everyone). */
+export interface TranslateBody {
+  messageId: string;
+}
+
+/** POST /api/inbox/translate-batch {customerId, messageIds ≤ 10}. */
+export interface TranslateBatchBody {
+  customerId: string;
+  messageIds: string[];
+}
+
+export interface TranslateBatch {
+  translations: Record<string, Translation>;
+  unavailable: boolean;
+}
+
+// ── Quick replies ───────────────────────────────────────── GET /api/quick-replies?customerId= (quick-reply-service.ts)
+export interface QuickReply {
+  id: string;
+  scope: string;
+  title: string;
+  category: string;
+  zh: string;
+  /** fr / en / ar → text; {客户名} and {我的名字} are filled in the app. */
+  bodies: Record<string, string>;
+  top: boolean;
+}
+
+export interface QuickReplyCustomer {
+  language: string;
+  firstName: string;
+}
+
+export interface QuickReplyList {
+  replies: QuickReply[];
+  customer: QuickReplyCustomer | null;
+  me: string;
+}
+
+// ── Product materials ───────────────────────────────────── GET/POST /api/inbox/materials (sales-material-service.ts)
+export interface MaterialFile {
+  id: string;
+  title: string;
+  category: string;
+  language: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface ProductImage {
+  id: string;
+  hero: boolean;
+  /** Signed-in path, e.g. /media/products/… */
+  src: string;
+}
+
+export interface ProductMaterial {
+  id: string;
+  model: string;
+  name: string;
+  images: ProductImage[];
+}
+
+export interface RecentFile {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  to: string;
+}
+
+export interface MaterialPicker {
+  language: string;
+  files: MaterialFile[];
+  products: ProductMaterial[];
+  recent: RecentFile[];
+}
+
+/** kind: MATERIAL | PRODUCT_IMAGE | RECENT. */
+export interface AttachItem {
+  kind: string;
+  id: string;
+}
+
+export interface AttachBody {
+  customerId: string;
+  items: AttachItem[];
+}
+
+export interface MediaAsset {
+  id: string;
+  fileName: string;
+  mimeType: string;
+}
+
+export interface AttachResult {
+  assets: MediaAsset[];
 }

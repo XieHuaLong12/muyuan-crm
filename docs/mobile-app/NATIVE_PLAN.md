@@ -210,5 +210,7 @@ HarmonyOS 5 及以后的版本（包括公司手机的 HarmonyOS 7）不能像 A
 
 | 2026-11-11 | 1.1：WhatsApp 主动联系——24 小时窗口外（或从未聊过）时，聊天页改为「选择模板消息」：读取 Gupshup 里 Meta 审核通过的文字模板（GET /api/whatsapp/templates），按客户来源推荐开场白，变量按客户资料自动填好、可修改，预览后发送（POST /api/whatsapp/templates）；频率限制、退订拦截与电脑端相同。客户回复后自动切回自由聊天 |
 
+| 2026-11-11 | 1.2：沟通工具与数据分析。聊天页输入区重新布局：一排工具（AI 回复 / 优化话术 / 译成外文 / 快捷回复 / 图片 / 文件 / 产品资料 / 模板），AI 建议以卡片出现在输入框上方，「用这条」只放进输入框不自动发送；译成外文后保留中文原意并随消息存为 original；客户消息自动译成中文（最新 10 条）或逐条「翻译成中文」；聊天图片可直接看、点开全屏；手机相册图片（HEIC / 超过 4.5 MB 自动转 JPEG）和文件（PDF、Word、Excel 等 ≤ 20 MB）可直接发送；产品资料库多选（≤ 10 个）发送。新增「数据分析」页（工作台业绩卡片、我的 进入）：按月切换，销售额与目标、客户转化漏斗、首联速度，管理员看销售对比。全部复用电脑端接口：ai-reply、inbox/polish、translate-out、translate、translate-batch、quick-replies、inbox/materials、whatsapp/media、sales-team/performance |
+
 **HarmonyOS 上的 WhatsApp**：据目前了解，WhatsApp 没有 HarmonyOS 5 及以后版本的原生 App，在 HarmonyOS 7 手机上只能借助「卓易通」这类兼容工具运行，需要在公司手机上实测。因此 HarmonyOS 版联系客户以 App 内的 WhatsApp 会话（走 BOS 接入的 WhatsApp API）为主，这也是下一步的重点；手机 WhatsApp 共存模式（S14）需要按实测结果定。
 

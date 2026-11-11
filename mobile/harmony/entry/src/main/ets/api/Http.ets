@@ -90,7 +90,8 @@ function targetOf(path: string, query?: Record<string, string>): string {
 }
 
 export class Api {
-  static async request<T>(method: http.RequestMethod, path: string, body?: Object, query?: Record<string, string>): Promise<T> {
+  static async request<T>(method: http.RequestMethod, path: string, body?: Object, query?: Record<string, string>,
+    readTimeout: number = 30000): Promise<T> {
     const target = targetOf(path, query);
     const url = Session.baseUrl() + target;
     const header: Record<string, string> = {
@@ -112,7 +113,7 @@ export class Api {
         expectDataType: http.HttpDataType.STRING,
         usingCache: false,
         connectTimeout: 15000,
-        readTimeout: 30000
+        readTimeout: readTimeout
       });
     } catch (err) {
       const e = err as BusinessError;
@@ -201,8 +202,92 @@ export class Api {
     return Api.request<T>(http.RequestMethod.GET, path, undefined, query);
   }
 
-  static post<T>(path: string, body: Object): Promise<T> {
-    return Api.request<T>(http.RequestMethod.POST, path, body);
+  /** readTimeout: AI writing (DeepSeek, one retry) can take well over the usual 30 seconds. */
+  static post<T>(path: string, body: Object, readTimeout: number = 30000): Promise<T> {
+    return Api.request<T>(http.RequestMethod.POST, path, body, undefined, readTimeout);
+  }
+
+  private static authHeader(): Record<string, string> {
+    const header: Record<string, string> = { 'Accept': 'application/json', 'X-Client': AppConfig.CLIENT };
+    const token = Session.cookieValue();
+    if (token.length > 0) {
+      header['Cookie'] = `${SESSION_COOKIE}=${token}`;
+    }
+    return header;
+  }
+
+  /** multipart/form-data upload (pictures and files for WhatsApp, POST /api/whatsapp/media). */
+  static async upload<T>(path: string, parts: http.MultiFormData[]): Promise<T> {
+    const header = Api.authHeader();
+    header['Content-Type'] = 'multipart/form-data';
+    const client = http.createHttp();
+    let res: http.HttpResponse;
+    try {
+      res = await client.request(Session.baseUrl() + path, {
+        method: http.RequestMethod.POST,
+        header: header,
+        multiFormDataList: parts,
+        expectDataType: http.HttpDataType.STRING,
+        usingCache: false,
+        connectTimeout: 15000,
+        readTimeout: 120000
+      });
+    } catch (err) {
+      const e = err as BusinessError;
+      hilog.warn(0x0000, 'LVANJUBOS', 'upload failed %{public}s %{public}d %{public}s', path, e.code, e.message);
+      throw new ApiError(0, `${networkMessage(e.code)}（错误码 ${e.code}）`, path);
+    } finally {
+      client.destroy();
+    }
+    const text = typeof res.result === 'string' ? (res.result as string) : '';
+    const data = await Api.unwrap(res.responseCode, text, path);
+    return data as T;
+  }
+
+  /**
+   * A signed-in file (chat pictures, product photos) as bytes. Chat media answers with a redirect to the stored
+   * file; it is followed here with the same cookie.
+   */
+  static async download(href: string): Promise<ArrayBuffer> {
+    let url = href.startsWith('http') ? href : Session.baseUrl() + href;
+    for (let hop = 0; hop < 3; hop++) {
+      const client = http.createHttp();
+      let res: http.HttpResponse;
+      try {
+        res = await client.request(url, {
+          method: http.RequestMethod.GET,
+          header: Api.authHeader(),
+          expectDataType: http.HttpDataType.ARRAY_BUFFER,
+          usingCache: false,
+          connectTimeout: 15000,
+          readTimeout: 60000
+        });
+      } catch (err) {
+        const e = err as BusinessError;
+        throw new ApiError(0, `${networkMessage(e.code)}（错误码 ${e.code}）`, href);
+      } finally {
+        client.destroy();
+      }
+      if (res.responseCode >= 300 && res.responseCode < 400) {
+        const headers = res.header as Record<string, Object>;
+        const location: Object | undefined = headers['location'] !== undefined ? headers['location'] : headers['Location'];
+        if (typeof location !== 'string' || (location as string).length === 0) {
+          break;
+        }
+        const next = location as string;
+        url = next.startsWith('http') ? next : Session.baseUrl() + next;
+        continue;
+      }
+      if (res.responseCode === 401) {
+        await Session.clear();
+        throw new ApiError(401, '登录已过期，请重新登录', href);
+      }
+      if (res.responseCode !== 200 || !(res.result instanceof ArrayBuffer)) {
+        throw new ApiError(res.responseCode, `文件读取失败（HTTP ${res.responseCode}）`, href);
+      }
+      return res.result as ArrayBuffer;
+    }
+    throw new ApiError(0, '文件读取失败', href);
   }
 
   static message(e: Object): string {

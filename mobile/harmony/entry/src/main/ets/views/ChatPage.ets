@@ -1,12 +1,21 @@
 import { KeyboardAvoidMode } from '@kit.ArkUI';
+import { common } from '@kit.AbilityKit';
 import { AppConfig, RouteParam, Routes, StoreKeys } from '../common/Config';
 import { Fmt } from '../common/Format';
 import { STAGES, label, stageTone } from '../common/Labels';
 import { Api } from '../api/Http';
 import { Inbox } from '../api/Inbox';
 import { Repo } from '../api/Repo';
-import { ChatMessage, SentMessage, TemplateList, TemplateSent, Thread, VariableFill, WaTemplate } from '../api/Models';
+import { Media, PickedFile } from '../api/Media';
+import {
+  AiReply, AttachItem, ChatMessage, MediaAsset, SentMessage, TemplateList, TemplateSent, Thread, Translation, VariableFill,
+  WaTemplate
+} from '../api/Models';
+import { AuthImage } from '../components/AuthImage';
 import { LvIcon } from '../components/LvIcon';
+import { MaterialSheet } from './chat/MaterialSheet';
+import { PolishSheet } from './chat/PolishSheet';
+import { QuickReplySheet } from './chat/QuickReplySheet';
 import { ListSource } from '../components/ListSource';
 import { Pill, StateView } from '../components/Ui';
 
@@ -42,6 +51,12 @@ function bodyOf(m: ChatMessage): string {
     return `[${MEDIA[m.messageType]}]${name ? ` ${name}` : ''}`;
   }
   return m.content;
+}
+
+/** A picture's own text, if the customer wrote one with it. */
+function captionOf(m: ChatMessage): string {
+  const text = m.content.trim();
+  return text.length === 0 || /^\[[^\]]*\]$/.test(text) ? '' : m.content;
 }
 
 function translationOf(m: ChatMessage): string {
@@ -86,6 +101,47 @@ function rowsOf(messages: ChatMessage[]): ChatRow[] {
   return rows;
 }
 
+function isPicture(m: ChatMessage): boolean {
+  return (m.messageType === 'IMAGE' || m.messageType === 'STICKER') && typeof m.mediaHref === 'string' && (m.mediaHref as string).length > 0;
+}
+
+const CJK = /[\u4e00-\u9fff]/;
+
+/** A customer message worth translating: their own words, not Chinese, not just a picture or a number. */
+function needsTranslation(m: ChatMessage): boolean {
+  if (m.direction !== 'INBOUND' || translationOf(m).length > 0) return false;
+  const text = m.content.trim();
+  if (text.length < 2 || /^\[[^\]]*\]$/.test(text) || /^[\d\s+\-.,:/()]+$/.test(text)) return false;
+  return !CJK.test(text);
+}
+
+/** The same message with a translation (messages are plain JSON objects; a new one makes the row redraw). */
+function withTranslation(m: ChatMessage, t: Translation): ChatMessage {
+  const copy: ChatMessage = {
+    id: m.id, direction: m.direction, messageType: m.messageType, content: m.content, status: m.status, sentAt: m.sentAt,
+    fileName: m.fileName, mimeType: m.mimeType, mediaHref: m.mediaHref, translation: t
+  };
+  return copy;
+}
+
+function localMessage(id: string, type: string, content: string, fileName: string | null): ChatMessage {
+  const m: ChatMessage = {
+    id: id, direction: 'OUTBOUND', messageType: type, content: content, status: 'PENDING', sentAt: new Date().toISOString(),
+    fileName: fileName, mimeType: null, mediaHref: null, translation: null
+  };
+  return m;
+}
+
+const LANGUAGES: Record<string, string> = {
+  'en': '英语', 'fr': '法语', 'ar': '阿拉伯语', 'es': '西班牙语', 'pt': '葡萄牙语', 'ru': '俄语', 'de': '德语', 'it': '意大利语',
+  'tr': '土耳其语', 'zh': '中文'
+};
+
+function languageName(code: string): string {
+  const name = LANGUAGES[code.toLowerCase().slice(0, 2)];
+  return name === undefined ? code : name;
+}
+
 /** The text the customer will receive: {{n}} replaced by the filled values (lib: renderTemplate on the server). */
 function renderTemplate(body: string, params: string[]): string {
   return body.replace(/\{\{\s*(\d{1,2})\s*\}\}/g, (whole: string, n: string): string => {
@@ -116,6 +172,11 @@ function signatureOf(messages: ChatMessage[]): string {
  * Free text inside the 24-hour window. Outside it (or to contact a customer first) WhatsApp only delivers templates
  * Meta approved: the salesperson picks one (GET /api/whatsapp/templates, variables pre-filled from the customer) and
  * sends it (POST /api/whatsapp/templates) with the PC rules. New messages are checked every 15 seconds.
+ *
+ * Around the input box, the same help as the PC chat, one tap away: AI 回复 (a draft from the conversation),
+ * 优化话术 (three better versions of what was typed), 译成外文 (Chinese → the customer's language, the Chinese kept
+ * as the message's original), 快捷回复, 图片 / 文件 from the phone, 产品资料 from the library, 模板.
+ * Customer messages are translated into Chinese automatically (newest ten) or one by one.
  */
 @Component
 export struct ChatPage {
@@ -130,7 +191,22 @@ export struct ChatPage {
   @State olderCursor: string | null = null;
   @State loadingOlder: boolean = false;
   // 模板消息
-  @State showTemplates: boolean = false;
+  // One bottom sheet, four uses: template | polish | quick | material.
+  @State showSheet: boolean = false;
+  @State sheetKind: string = '';
+  // AI 回复 card above the input: idle | loading | ready | error.
+  @State aiState: string = 'idle';
+  @State aiReply: AiReply | null = null;
+  @State aiError: string = '';
+  /** The Chinese behind the text in the input box (after 译成外文 / AI / quick reply), sent along as `original`. */
+  @State draftOriginal: string = '';
+  @State translating: boolean = false;
+  /** Upload / send progress for pictures and files, shown above the input. */
+  @State busyNote: string = '';
+  @State showPreview: boolean = false;
+  @State previewHref: string = '';
+  private tried: string[] = [];
+  private autoOff: boolean = false;
   @State tplState: string = 'loading';
   @State tplStatus: string = '';
   @State tplError: string = '';
@@ -225,6 +301,7 @@ export struct ChatPage {
       this.state = 'ready';
       if (first || grew) {
         Repo.markRead(this.customerId).catch(() => {});
+        this.autoTranslate();
       }
     } catch (e) {
       if (this.state !== 'ready') {
@@ -269,11 +346,13 @@ export struct ChatPage {
       id: `local-${requestId}`, direction: 'OUTBOUND', messageType: 'TEXT', content: text, status: 'PENDING',
       sentAt: new Date().toISOString(), fileName: null, translation: null
     };
+    const original = this.draftOriginal;
     this.sending = true;
     this.draft = '';
+    this.draftOriginal = '';
     this.show(this.messages.concat([local]), true);
     try {
-      const result: SentMessage = await Repo.sendWhatsApp(this.customerId, text, requestId);
+      const result: SentMessage = await Repo.sendWhatsApp(this.customerId, text, requestId, original);
       const sent = result.message;
       this.show(this.messages.map((m: ChatMessage): ChatMessage => m.id === local.id ? sent : m), false);
       if (sent.status === 'FAILED') {
@@ -282,10 +361,265 @@ export struct ChatPage {
     } catch (e) {
       this.show(this.messages.filter((m: ChatMessage): boolean => m.id !== local.id), false);
       this.draft = text;
+      this.draftOriginal = original;
       this.toast(Api.message(e));
     } finally {
       this.sending = false;
     }
+  }
+
+  // ── 翻译客户消息 ──────────────────────────────────────────────────────────────────────────────
+  /** Chinese for the newest customer messages without one (≤ 10 per request), as the PC chat does on opening. */
+  private async autoTranslate(): Promise<void> {
+    if (this.autoOff) {
+      return;
+    }
+    const ids: string[] = [];
+    for (let i = this.messages.length - 1; i >= 0 && ids.length < 10; i--) {
+      const m = this.messages[i];
+      if (needsTranslation(m) && this.tried.indexOf(m.id) < 0) {
+        ids.push(m.id);
+      }
+    }
+    if (ids.length === 0) {
+      return;
+    }
+    this.tried = this.tried.concat(ids);
+    try {
+      const result = await Repo.translateBatch(this.customerId, ids);
+      if (result.unavailable) {
+        this.autoOff = true;
+      }
+      this.applyTranslations(result.translations);
+    } catch (e) {
+      // Turned off for this customer, or no translation service: the 翻译 link under each message still works.
+      this.autoOff = true;
+    }
+  }
+
+  private applyTranslations(found: Record<string, Translation>): void {
+    let changed = false;
+    const next: ChatMessage[] = [];
+    for (let i = 0; i < this.messages.length; i++) {
+      const m = this.messages[i];
+      const t = found[m.id];
+      if (t !== undefined) {
+        changed = true;
+        next.push(withTranslation(m, t));
+      } else {
+        next.push(m);
+      }
+    }
+    if (changed) {
+      this.show(next, false);
+    }
+  }
+
+  private async translateOne(m: ChatMessage): Promise<void> {
+    try {
+      const t = await Repo.translate(m.id);
+      const found: Record<string, Translation> = {};
+      found[m.id] = t;
+      this.applyTranslations(found);
+    } catch (e) {
+      this.toast(Api.message(e));
+    }
+  }
+
+  // ── 输入框助手：AI 回复 / 优化话术 / 译成外文 / 快捷回复 ───────────────────────────────────────
+  private async askAi(): Promise<void> {
+    if (this.aiState === 'loading') {
+      return;
+    }
+    const previous = this.aiReply !== null ? (this.aiReply as AiReply).reply : '';
+    this.aiState = 'loading';
+    this.aiError = '';
+    try {
+      this.aiReply = await Repo.aiReply(this.customerId, previous);
+      this.aiState = 'ready';
+    } catch (e) {
+      this.aiError = Api.message(e);
+      this.aiState = 'error';
+    }
+  }
+
+  private closeAi(): void {
+    this.aiState = 'idle';
+    this.aiReply = null;
+  }
+
+  /** Puts a suggestion in the input box (never sends); zh is kept as the message's Chinese original. */
+  private useDraft(text: string, zh: string): void {
+    this.draft = text;
+    this.draftOriginal = zh !== text ? zh : '';
+    this.showSheet = false;
+    this.closeAi();
+  }
+
+  private openSheet(kind: string): void {
+    if (kind === 'polish' && this.draft.trim().length === 0) {
+      this.toast('先在输入框写一句（中文也可以），再点优化话术');
+      return;
+    }
+    this.sheetKind = kind;
+    this.showSheet = true;
+  }
+
+  private async translateDraft(): Promise<void> {
+    const text = this.draft.trim();
+    if (text.length === 0) {
+      this.toast('先在输入框写中文，再点译成外文');
+      return;
+    }
+    if (this.translating) {
+      return;
+    }
+    this.translating = true;
+    try {
+      const result = await Repo.translateOut(this.customerId, text);
+      if (this.draftOriginal.length === 0) {
+        this.draftOriginal = text;
+      }
+      this.draft = result.text;
+      this.toast(`已译成${languageName(result.language)}，发送前可以再改`);
+    } catch (e) {
+      this.toast(Api.message(e));
+    } finally {
+      this.translating = false;
+    }
+  }
+
+  private undoTranslate(): void {
+    this.draft = this.draftOriginal;
+    this.draftOriginal = '';
+  }
+
+  // ── 图片和文件 ────────────────────────────────────────────────────────────────────────────────
+  private hostContext(): common.Context | null {
+    const context = this.getUIContext().getHostContext();
+    return context !== undefined ? context as common.Context : null;
+  }
+
+  /** Uploads one file for this customer and sends it, with a placeholder bubble while it goes. */
+  private async uploadAndSend(file: PickedFile, index: number, total: number): Promise<boolean> {
+    const picture = file.mimeType.startsWith('image/');
+    const requestId = Repo.newRequestId();
+    const local = localMessage(`local-${requestId}`, picture ? 'IMAGE' : 'DOCUMENT', picture ? '[图片]' : '[文件]', file.name);
+    this.busyNote = total > 1 ? `正在发送第 ${index + 1} / ${total} 个：${file.name}` : `正在发送：${file.name}`;
+    this.show(this.messages.concat([local]), true);
+    try {
+      const asset = await Repo.uploadMedia(this.customerId, file.name, file.mimeType, file.data);
+      const result = await Repo.sendMedia(this.customerId, asset.id, requestId);
+      this.show(this.messages.map((m: ChatMessage): ChatMessage => m.id === local.id ? result.message : m), false);
+      return true;
+    } catch (e) {
+      this.show(this.messages.filter((m: ChatMessage): boolean => m.id !== local.id), false);
+      this.toast(`${file.name} 没有发出去：${Api.message(e)}`);
+      return false;
+    }
+  }
+
+  private async sendPhotos(): Promise<void> {
+    if (this.sending) return;
+    let uris: string[] = [];
+    try {
+      uris = await Media.pickPhotos(9);
+    } catch (e) {
+      return;
+    }
+    if (uris.length === 0) return;
+    this.sending = true;
+    try {
+      for (let i = 0; i < uris.length; i++) {
+        this.busyNote = `正在处理第 ${i + 1} 张图片`;
+        let file: PickedFile;
+        try {
+          file = await Media.photo(uris[i]);
+        } catch (e) {
+          this.toast('这张图片读取失败，已跳过');
+          continue;
+        }
+        await this.uploadAndSend(file, i, uris.length);
+      }
+    } finally {
+      this.sending = false;
+      this.busyNote = '';
+      this.load(false);
+    }
+  }
+
+  private async sendFiles(): Promise<void> {
+    const context = this.hostContext();
+    if (this.sending || context === null) return;
+    let uris: string[] = [];
+    try {
+      uris = await Media.pickFiles(context, 5);
+    } catch (e) {
+      return;
+    }
+    if (uris.length === 0) return;
+    this.sending = true;
+    try {
+      for (let i = 0; i < uris.length; i++) {
+        let file: PickedFile;
+        try {
+          file = Media.file(uris[i]);
+        } catch (e) {
+          this.toast('文件读取失败，已跳过');
+          continue;
+        }
+        if (file.mimeType.length === 0) {
+          this.toast(`「${file.name}」这种格式 WhatsApp 发不了，支持图片、PDF、Word、Excel、ZIP、音视频`);
+          continue;
+        }
+        if (file.data.byteLength > 20 * 1024 * 1024) {
+          this.toast(`「${file.name}」超过 20 MB，发不了`);
+          continue;
+        }
+        await this.uploadAndSend(file, i, uris.length);
+      }
+    } finally {
+      this.sending = false;
+      this.busyNote = '';
+      this.load(false);
+    }
+  }
+
+  /** 产品资料: copied to the customer on the server, then sent one by one. */
+  private async sendMaterials(items: AttachItem[]): Promise<void> {
+    this.showSheet = false;
+    if (this.sending || items.length === 0) return;
+    this.sending = true;
+    this.busyNote = `正在准备 ${items.length} 个资料`;
+    try {
+      const attached = await Repo.attachMaterials(this.customerId, items);
+      for (let i = 0; i < attached.assets.length; i++) {
+        const asset: MediaAsset = attached.assets[i];
+        const picture = asset.mimeType.startsWith('image/');
+        const requestId = Repo.newRequestId();
+        const local = localMessage(`local-${requestId}`, picture ? 'IMAGE' : 'DOCUMENT', picture ? '[图片]' : '[文件]', asset.fileName);
+        this.busyNote = `正在发送第 ${i + 1} / ${attached.assets.length} 个：${asset.fileName}`;
+        this.show(this.messages.concat([local]), true);
+        try {
+          const result = await Repo.sendMedia(this.customerId, asset.id, requestId);
+          this.show(this.messages.map((m: ChatMessage): ChatMessage => m.id === local.id ? result.message : m), false);
+        } catch (e) {
+          this.show(this.messages.filter((m: ChatMessage): boolean => m.id !== local.id), false);
+          this.toast(`${asset.fileName} 没有发出去：${Api.message(e)}`);
+        }
+      }
+    } catch (e) {
+      this.toast(Api.message(e));
+    } finally {
+      this.sending = false;
+      this.busyNote = '';
+      this.load(false);
+    }
+  }
+
+  private openPreview(href: string): void {
+    this.previewHref = href;
+    this.showPreview = true;
   }
 
   /** text: free reply; template: only an approved template (window closed or never opened); blocked: nothing. */
@@ -310,7 +644,8 @@ export struct ChatPage {
   }
 
   private openTemplates(): void {
-    this.showTemplates = true;
+    this.sheetKind = 'template';
+    this.showSheet = true;
     if (this.tplList === null || this.tplState === 'error') {
       this.loadTemplates();
     }
@@ -377,7 +712,7 @@ export struct ChatPage {
     try {
       const result: TemplateSent = await Repo.sendTemplate(this.customerId, t.id, params, Repo.newRequestId());
       this.show(this.messages.concat([result.message]), true);
-      this.showTemplates = false;
+      this.showSheet = false;
       const refused = result.error;
       this.toast(refused ? refused : '模板消息已发送，客户回复后就可以直接聊天');
       this.load(false);
@@ -435,18 +770,41 @@ export struct ChatPage {
   @Builder
   bubble(m: ChatMessage) {
     Column({ space: 4 }) {
-      if (isMedia(m)) {
-        Row({ space: 6 }) {
-          LvIcon({ name: mediaIcon(m.messageType), iconColor: $r('app.color.ink2'), iconSize: 16 })
-          Text('附件请在电脑端查看').fontSize(12).fontColor($r('app.color.ink3'))
+      if (isPicture(m)) {
+        Stack() {
+          AuthImage({ src: m.mediaHref as string, maxSide: 640, boxWidth: 200, boxHeight: 200 })
         }
+        .onClick(() => this.openPreview(m.mediaHref as string))
+        if (captionOf(m).length > 0) {
+          Text(captionOf(m)).fontSize(15).fontColor($r('app.color.ink')).lineHeight(22).copyOption(CopyOptions.LocalDevice)
+        }
+      } else if (isMedia(m)) {
+        Row({ space: 8 }) {
+          Row() {
+            LvIcon({ name: mediaIcon(m.messageType), iconColor: $r('app.color.brand_ink'), iconSize: 18 })
+          }
+          .width(34).height(34).borderRadius(9).justifyContent(FlexAlign.Center).backgroundColor($r('app.color.surface'))
+          Column({ space: 2 }) {
+            Text(bodyOf(m)).fontSize(14).fontColor($r('app.color.ink')).maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text(m.id.startsWith('local-') ? '发送中…' : '文件请在电脑端打开').fontSize(12).fontColor($r('app.color.ink3'))
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+        }
+        .width(220)
+      } else {
+        Text(bodyOf(m))
+          .fontSize(15).fontColor($r('app.color.ink')).lineHeight(22)
+          .copyOption(CopyOptions.LocalDevice)
       }
-      Text(bodyOf(m))
-        .fontSize(15).fontColor($r('app.color.ink')).lineHeight(22)
-        .copyOption(CopyOptions.LocalDevice)
       if (translationOf(m).length > 0) {
         Text(`译：${translationOf(m)}`).fontSize(13).fontColor($r('app.color.ink2')).lineHeight(20)
           .copyOption(CopyOptions.LocalDevice)
+      } else if (needsTranslation(m)) {
+        Text('翻译成中文').fontSize(12).fontColor($r('app.color.brand_ink'))
+          .onClick(() => {
+            this.translateOne(m);
+          })
       }
       Row({ space: 4 }) {
         Text(Fmt.parse(m.sentAt) !== null ? Fmt.time(Fmt.parse(m.sentAt) as Date) : '')
@@ -505,11 +863,29 @@ export struct ChatPage {
           .backgroundColor($r('app.color.brand'))
           .onClick(() => this.openTemplates())
       } else {
-        if (this.windowHint().length > 0) {
-          Text(this.windowHint()).fontSize(12).fontColor($r('app.color.ink3')).width('100%')
+        if (this.busyNote.length > 0) {
+          Row({ space: 8 }) {
+            LoadingProgress().width(18).height(18).color($r('app.color.brand_ink'))
+            Text(this.busyNote).fontSize(12).fontColor($r('app.color.ink2')).layoutWeight(1)
+              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .width('100%')
         }
+        if (this.aiState !== 'idle') {
+          this.aiCard()
+        }
+        if (this.draftOriginal.length > 0) {
+          Row({ space: 8 }) {
+            Text(`中文原意：${this.draftOriginal}`).fontSize(12).fontColor($r('app.color.ink3')).layoutWeight(1)
+              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text('恢复中文').fontSize(12).fontColor($r('app.color.brand_ink'))
+              .onClick(() => this.undoTranslate())
+          }
+          .width('100%')
+        }
+        this.toolBar()
         Row({ space: 8 }) {
-          TextArea({ placeholder: '输入要发给客户的消息', text: this.draft })
+          TextArea({ placeholder: this.windowHint().length > 0 ? this.windowHint() : '输入要发给客户的消息（可以先写中文）', text: this.draft })
             .layoutWeight(1)
             .constraintSize({ minHeight: 44, maxHeight: 120 })
             .fontSize(16)
@@ -537,10 +913,210 @@ export struct ChatPage {
     .padding({ left: 12, right: 12, top: 8, bottom: 10 })
     .backgroundColor($r('app.color.surface'))
     .border({ width: { top: 0.5 }, color: $r('app.color.line') })
-    .bindSheet($$this.showTemplates, this.templateSheet(), {
+    .bindSheet($$this.showSheet, this.sheetContent(), {
       detents: [SheetSize.LARGE],
       dragBar: true,
-      title: { title: '发送模板消息', subtitle: '只能使用 Meta 审核通过的模板' }
+      showClose: false
+    })
+  }
+
+  @Builder
+  tool(icon: string, title: string, action: () => void) {
+    Row({ space: 4 }) {
+      LvIcon({ name: icon, iconColor: $r('app.color.brand_ink'), iconSize: 15 })
+      Text(title).fontSize(13).fontColor($r('app.color.ink'))
+    }
+    .height(32)
+    .padding({ left: 10, right: 12 })
+    .borderRadius(16)
+    .backgroundColor($r('app.color.surface2'))
+    .onClick(() => action())
+  }
+
+  /** Everything the PC chat offers around the input box, one tap away. */
+  @Builder
+  toolBar() {
+    Scroll() {
+      Row({ space: 8 }) {
+        this.tool('sparkles', this.aiState === 'loading' ? 'AI 写作中' : 'AI 回复', () => {
+          this.askAi();
+        })
+        this.tool('pencil', '优化话术', () => this.openSheet('polish'))
+        this.tool('languages', this.translating ? '翻译中' : '译成外文', () => {
+          this.translateDraft();
+        })
+        this.tool('inbox', '快捷回复', () => this.openSheet('quick'))
+        this.tool('image', '图片', () => {
+          this.sendPhotos();
+        })
+        this.tool('file-text', '文件', () => {
+          this.sendFiles();
+        })
+        this.tool('package', '产品资料', () => this.openSheet('material'))
+        this.tool('megaphone', '模板', () => this.openTemplates())
+      }
+    }
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
+    .width('100%')
+  }
+
+  @Builder
+  aiCard() {
+    Column({ space: 8 }) {
+      Row({ space: 6 }) {
+        LvIcon({ name: 'sparkles', iconColor: $r('app.color.brand_ink'), iconSize: 16 })
+        Text('AI 建议回复').fontSize(13).fontWeight(FontWeight.Medium).fontColor($r('app.color.brand_ink'))
+        Blank()
+        Row() {
+          LvIcon({ name: 'x', iconColor: $r('app.color.ink3'), iconSize: 18 })
+        }
+        .width(32).height(28).justifyContent(FlexAlign.Center)
+        .onClick(() => this.closeAi())
+      }
+      .width('100%')
+      if (this.aiState === 'loading') {
+        Row({ space: 8 }) {
+          LoadingProgress().width(20).height(20).color($r('app.color.brand_ink'))
+          Text('AI 正在读聊天记录写回复，约 10–30 秒').fontSize(13).fontColor($r('app.color.ink2'))
+        }
+        .width('100%')
+      } else if (this.aiState === 'error') {
+        Text(this.aiError).fontSize(13).fontColor($r('app.color.danger')).lineHeight(19)
+        Text('重试').fontSize(13).fontColor($r('app.color.brand_ink')).onClick(() => {
+          this.askAi();
+        })
+      } else if (this.aiReply !== null) {
+        Scroll() {
+          Column({ space: 6 }) {
+            Text((this.aiReply as AiReply).reply).fontSize(15).fontColor($r('app.color.ink')).lineHeight(22)
+              .copyOption(CopyOptions.LocalDevice)
+            if ((this.aiReply as AiReply).replyZh.length > 0) {
+              Text(`中文：${(this.aiReply as AiReply).replyZh}`).fontSize(13).fontColor($r('app.color.ink2')).lineHeight(20)
+            }
+            if ((this.aiReply as AiReply).nextStep.length > 0) {
+              Text(`下一步：${(this.aiReply as AiReply).nextStep}`).fontSize(12).fontColor($r('app.color.ink3'))
+            }
+            ForEach((this.aiReply as AiReply).warnings, (w: string) => {
+              Text(`注意：${w}`).fontSize(12).fontColor($r('app.color.danger'))
+            }, (w: string): string => w)
+          }
+          .alignItems(HorizontalAlign.Start)
+          .width('100%')
+        }
+        .constraintSize({ maxHeight: 200 })
+        .scrollBar(BarState.Off)
+        .align(Alignment.Top)
+        Row({ space: 8 }) {
+          Button('换一条')
+            .type(ButtonType.Normal).height(36).borderRadius(10).layoutWeight(1).fontSize(14)
+            .fontColor($r('app.color.brand_ink')).backgroundColor($r('app.color.surface'))
+            .onClick(() => {
+              this.askAi();
+            })
+          Button('用这条，放进输入框')
+            .type(ButtonType.Normal).height(36).borderRadius(10).layoutWeight(2).fontSize(14)
+            .fontColor($r('app.color.on_brand')).backgroundColor($r('app.color.brand'))
+            .onClick(() => {
+              const reply = this.aiReply;
+              if (reply !== null) {
+                this.useDraft(reply.reply, reply.replyZh);
+              }
+            })
+        }
+        .width('100%')
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .padding(12)
+    .borderRadius(14)
+    .backgroundColor($r('app.color.brand_tint'))
+  }
+
+  @Builder
+  sheetContent() {
+    Column() {
+      if (this.sheetKind === 'polish') {
+        PolishSheet({
+          customerId: this.customerId,
+          text: this.draft,
+          onUse: (text: string, zh: string) => {
+            this.useDraft(text, zh);
+          },
+          onClose: () => {
+            this.showSheet = false;
+          }
+        })
+      } else if (this.sheetKind === 'quick') {
+        QuickReplySheet({
+          customerId: this.customerId,
+          onUse: (text: string, zh: string) => {
+            this.useDraft(text, zh);
+          },
+          onClose: () => {
+            this.showSheet = false;
+          }
+        })
+      } else if (this.sheetKind === 'material') {
+        MaterialSheet({
+          customerId: this.customerId,
+          onSend: (items: AttachItem[]) => {
+            this.sendMaterials(items);
+          },
+          onClose: () => {
+            this.showSheet = false;
+          }
+        })
+      } else {
+        Row() {
+          Column({ space: 2 }) {
+            Text('发送模板消息').fontSize(18).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+            Text('只能使用 Meta 审核通过的模板').fontSize(12).fontColor($r('app.color.ink3'))
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Row() {
+            LvIcon({ name: 'x', iconColor: $r('app.color.ink2'), iconSize: 22 })
+          }
+          .width(40).height(40).justifyContent(FlexAlign.Center)
+          .onClick(() => {
+            this.showSheet = false;
+          })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 4, bottom: 4 })
+        this.templateSheet()
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  previewView() {
+    Stack({ alignContent: Alignment.TopEnd }) {
+      if (this.previewHref.length > 0) {
+        AuthImage({ src: this.previewHref, maxSide: 2048, fullScreen: true })
+      }
+      Row() {
+        LvIcon({ name: 'x', iconColor: Color.White, iconSize: 26 })
+      }
+      .width(48)
+      .height(48)
+      .borderRadius(24)
+      .justifyContent(FlexAlign.Center)
+      .backgroundColor('#66000000')
+      .margin({ top: 48, right: 16 })
+      .onClick(() => {
+        this.showPreview = false;
+      })
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor(Color.Black)
+    .onClick(() => {
+      this.showPreview = false;
     })
   }
 
@@ -661,6 +1237,7 @@ export struct ChatPage {
     }
     .scrollBar(BarState.Off)
     .align(Alignment.Top)
+    .layoutWeight(1)
   }
 
   build() {
@@ -710,6 +1287,7 @@ export struct ChatPage {
       .width('100%')
       .height('100%')
       .backgroundColor($r('app.color.bg'))
+      .bindContentCover($$this.showPreview, this.previewView())
     }
     .title(this.thread !== null ? (this.thread as Thread).customer.name : 'WhatsApp')
     .backgroundColor($r('app.color.bg'))
