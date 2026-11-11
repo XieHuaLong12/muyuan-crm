@@ -4,7 +4,7 @@ import { Session } from './Session';
 import {
   Bootstrap, ConversationPage, CustomerDetail, CustomerListPage, EmptyBody, FollowUpBody, LoginBody, LoginUser,
   NotificationFeed, OrderDetail, OrderListPage, Performance, ReadBody, SalesQueue, SendBody, SentMessage, StageBody,
-  StageResult, TaskListPage, Thread
+  StageResult, TaskListPage, TemplateBody, TemplateList, TemplateSent, Thread
 } from './Models';
 
 /** Query objects in one place, so a request and its cached copy (Api.peek) always use the same key. */
@@ -106,6 +106,21 @@ export class Repo {
 
   static newRequestId(): string {
     return util.generateRandomUUID(false);
+  }
+
+  /** Approved templates for this customer, with variables filled from the customer record and a suggested greeting. */
+  static templates(customerId: string): Promise<TemplateList> {
+    const query: Record<string, string> = { 'customerId': customerId };
+    return Api.get<TemplateList>('/api/whatsapp/templates', query);
+  }
+
+  /**
+   * Starts (or restarts) a conversation outside the 24-hour window. The server applies the PC rules: approved
+   * templates only, every variable filled, a gap between unanswered touches, never after the customer said stop.
+   */
+  static sendTemplate(customerId: string, templateId: string, params: string[], requestId: string): Promise<TemplateSent> {
+    const body: TemplateBody = { customerId: customerId, templateId: templateId, params: params, requestId: requestId };
+    return Api.post<TemplateSent>('/api/whatsapp/templates', body);
   }
 
   static markRead(customerId: string): Promise<EmptyBody> {

@@ -388,7 +388,10 @@ export interface ThreadCustomer {
 }
 
 export interface ThreadSending {
+  /** Free text can be sent (inside the 24-hour window). */
   configured: boolean;
+  /** Approved templates can be sent (Gupshup template API configured). */
+  templates: boolean;
   optedOut: boolean;
 }
 
@@ -471,4 +474,48 @@ export interface Performance {
   rows: PerformanceRow[];
   company: CompanyTotals | null;
   targetSummary: TargetSummary | null;
+}
+
+// ── Templates ───────────────────────────────────────────── GET/POST /api/whatsapp/templates (whatsapp-template-service.ts)
+/** A Meta-approved text template, read live from Gupshup; {{1}}…{{n}} are its variables. */
+export interface WaTemplate {
+  id: string;
+  name: string;
+  language: string;
+  category: string;
+  body: string;
+  variables: number;
+}
+
+/** One variable filled from the customer record (value '' when the server could not tell; note says why). */
+export interface VariableFill {
+  label: string;
+  context: string;
+  value: string;
+  note: string;
+}
+
+export interface TemplateSuggestion {
+  templateId: string;
+}
+
+export interface TemplateList {
+  /** CONNECTED or NOT_CONNECTED. */
+  status: string;
+  templates: WaTemplate[];
+  suggestion: TemplateSuggestion | null;
+  fills: Record<string, VariableFill[]>;
+}
+
+export interface TemplateBody {
+  customerId: string;
+  templateId: string;
+  params: string[];
+  requestId: string;
+}
+
+export interface TemplateSent {
+  message: ChatMessage;
+  /** Set when Gupshup refused the message or the result is unknown (the message is kept as FAILED / UNKNOWN). */
+  error?: string;
 }
