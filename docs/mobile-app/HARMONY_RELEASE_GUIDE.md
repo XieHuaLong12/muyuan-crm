@@ -28,6 +28,10 @@
 2. DevEco Studio →「Open」→ 选择 `mobile/harmony` 文件夹（注意是这个子文件夹，不是整个仓库）。
 3. 右下角会自动同步。如果弹出「升级 modelVersion」「设置 targetSdkVersion」之类的提示，点同意，目标版本选 HarmonyOS 7。
 
+> **最常见的错误**：打开了整个仓库（窗口标题是 `muyuan-crm-…`，左边能看到 `app`、`components`、`docs` 等文件夹），顶部会提示「工程同步失败」。解决办法：菜单「文件 → 关闭项目」，再重新「打开」，一直点进 `mobile` → `harmony` 再打开。打开对了以后，左边项目栏的根目录是 `harmony`，下面有 `AppScope`、`entry`、`hvigor`。
+>
+> 文件夹放在**路径里没有中文、没有空格**的地方。重复下载会生成末尾带「 2」的文件夹，名字里就有空格，请改名或删掉多余的那份。
+
 ### 3. 自动签名
 
 1. 菜单「File → Project Structure」→ 左侧「Project」→ 上方「Signing Configs」。
