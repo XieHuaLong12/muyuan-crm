@@ -40,18 +40,19 @@ export class Inbox {
     }
   }
 
+  /** 消息 badge: unread WhatsApp conversations + unread reminders (message reminders are counted once, as chats). */
   static applyBadges(feed: NotificationFeed): void {
-    const unread = feed.items.filter((item: NotificationItem): boolean => Inbox.isUnread(item.at)).length;
-    AppStorage.setOrCreate<number>(StoreKeys.BADGE_INBOX, unread);
+    const unread = feed.items.filter((item: NotificationItem): boolean => item.kind !== 'NEW_MESSAGE' && Inbox.isUnread(item.at)).length;
+    AppStorage.setOrCreate<number>(StoreKeys.BADGE_INBOX, unread + feed.counts.unreadConversations);
     // Administrators: leads waiting for assignment. Sales: assigned customers not contacted yet.
     AppStorage.setOrCreate<number>(StoreKeys.BADGE_CUSTOMERS, Session.isAdmin() ? feed.counts.pool : feed.counts.pendingFirstContact);
   }
 
-  /** Opening 「消息」 marks everything up to the feed time as read. */
+  /** Opening 「提醒」 marks the reminders up to the feed time as read; unread chats stay until they are opened. */
   static async markAllSeen(): Promise<void> {
     const feed = Inbox.lastFeed;
     Inbox.seenAt = feed !== null ? new Date(feed.at).getTime() : Date.now();
-    AppStorage.setOrCreate<number>(StoreKeys.BADGE_INBOX, 0);
+    AppStorage.setOrCreate<number>(StoreKeys.BADGE_INBOX, feed !== null ? feed.counts.unreadConversations : 0);
     if (Inbox.prefs) {
       await Inbox.prefs.put('seenAt', Inbox.seenAt);
       await Inbox.prefs.flush();

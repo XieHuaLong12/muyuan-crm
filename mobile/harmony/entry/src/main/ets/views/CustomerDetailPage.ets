@@ -1,5 +1,5 @@
 import { call } from '@kit.TelephonyKit';
-import { pasteboard } from '@kit.BasicServicesKit';
+import { RouteParam, Routes, StoreKeys } from '../common/Config';
 import { Fmt } from '../common/Format';
 import { FOLLOW_TYPES, FOLLOW_TYPE_KEYS, PURCHASES, SOURCES, STAGES, label, stageTone } from '../common/Labels';
 import { Api } from '../api/Http';
@@ -31,6 +31,14 @@ const NEXT_OPTIONS: NextOption[] = [
   new NextOption('明天 10:00', 1), new NextOption('3 天后', 3), new NextOption('1 周后', 7), new NextOption('不设置', -1)
 ];
 
+/** Stages a person may move a customer to (lib/bos-kanban.ts order without WON: deals set 已成交). */
+const STAGE_ORDER: string[] = [
+  'NEW', 'CONTACTED', 'REPLIED', 'CATALOG_SENT', 'NEEDS_CONFIRMED', 'PRODUCT_CONFIRMED', 'QUOTED', 'FOLLOW_UP', 'ORDER',
+  'PAUSED', 'LOST', 'INVALID'
+];
+/** lib/bos-kanban.ts KANBAN_REASON_STAGES: these need a reason for the administrator to review. */
+const REASON_STAGES: string[] = ['PAUSED', 'LOST', 'INVALID'];
+
 class InfoRow {
   name: string;
   value: string;
@@ -56,8 +64,18 @@ export struct CustomerDetailPage {
   @State nextIndex: number = 0;
   @State saving: boolean = false;
   @State followError: string = '';
+  @State showStage: boolean = false;
+  @State stageTo: string = '';
+  @State stageReason: string = '';
+  @State stageSaving: boolean = false;
+  @State stageError: string = '';
 
   aboutToAppear(): void {
+    const cached = Repo.peekCustomer(this.customerId);
+    if (cached !== null) {
+      this.detail = cached;
+      this.state = 'ready';
+    }
     this.load();
   }
 
@@ -67,7 +85,58 @@ export struct CustomerDetailPage {
       this.state = 'ready';
     } catch (e) {
       this.error = Api.message(e);
-      this.state = 'error';
+      if (this.state !== 'ready') {
+        this.state = 'error';
+      }
+    }
+  }
+
+  /** Lists and the home tab reload after a change made here. */
+  private changed(): void {
+    AppStorage.setOrCreate<number>(StoreKeys.DATA_CHANGED, Date.now());
+  }
+
+  private openChat(): void {
+    this.pathStack.pushPathByName(Routes.CHAT, new RouteParam(this.customerId));
+  }
+
+  private openStage(): void {
+    const c = this.detail;
+    if (c === null) return;
+    if (c.stage === 'WON' || c.deals.length > 0) {
+      this.toast('已成交客户的阶段由成交记录决定，如需调整请在电脑端处理');
+      return;
+    }
+    this.stageTo = c.stage;
+    this.stageReason = '';
+    this.stageError = '';
+    this.showStage = true;
+  }
+
+  private async saveStage(): Promise<void> {
+    const c = this.detail;
+    if (c === null) return;
+    if (this.stageTo === c.stage) {
+      this.showStage = false;
+      return;
+    }
+    const reason = this.stageReason.trim();
+    if (REASON_STAGES.indexOf(this.stageTo) >= 0 && reason.length < 2) {
+      this.stageError = '改为暂不需要、已流失或无效客户时，请写明原因（至少 2 个字）';
+      return;
+    }
+    this.stageSaving = true;
+    this.stageError = '';
+    try {
+      await Repo.moveStage(c.id, c.stage, this.stageTo, reason);
+      this.showStage = false;
+      this.toast(`阶段已改为「${label(STAGES, this.stageTo)}」`);
+      this.changed();
+      await this.load();
+    } catch (e) {
+      this.stageError = Api.message(e);
+    } finally {
+      this.stageSaving = false;
     }
   }
 
@@ -82,15 +151,6 @@ export struct CustomerDetailPage {
       return;
     }
     call.makeCall(digits).catch(() => this.toast('无法打开拨号界面'));
-  }
-
-  private copy(text: string, done: string): void {
-    if (text.length === 0) {
-      this.toast('没有可复制的内容');
-      return;
-    }
-    const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
-    pasteboard.getSystemPasteboard().setData(data).then(() => this.toast(done)).catch(() => this.toast('复制失败'));
   }
 
   private timeline(c: CustomerDetail): TimelineEntry[] {
@@ -153,7 +213,8 @@ export struct CustomerDetailPage {
     const body: FollowUpBody = {
       type: this.followType,
       content: content,
-      followUpAt: new Date().toISOString(),
+      // A minute back: the server refuses a follow-up time later than its own clock, and phone clocks drift.
+      followUpAt: new Date(Date.now() - 60000).toISOString(),
       nextFollowUpAt: option.days < 0 ? null : Fmt.atDay(option.days, 10)
     };
     this.saving = true;
@@ -163,6 +224,7 @@ export struct CustomerDetailPage {
       this.showFollow = false;
       this.followText = '';
       this.toast(option.days < 0 ? '跟进已保存' : `跟进已保存 · 下次 ${option.title}`);
+      this.changed();
       await this.load();
     } catch (e) {
       this.followError = Api.message(e);
@@ -207,7 +269,11 @@ export struct CustomerDetailPage {
       .width('100%')
 
       Row({ space: 6 }) {
-        Pill({ text: label(STAGES, c.stage), tone: stageTone(c.stage) })
+        Row({ space: 2 }) {
+          Pill({ text: label(STAGES, c.stage), tone: stageTone(c.stage) })
+          LvIcon({ name: 'chevron-down', iconColor: $r('app.color.ink3'), iconSize: 16 })
+        }
+        .onClick(() => this.openStage())
         if (c.leadGrade.length > 0) {
           Pill({ text: `${c.leadGrade} 级`, tone: c.leadGrade === 'A' ? 'brand' : 'neutral' })
         }
@@ -221,8 +287,8 @@ export struct CustomerDetailPage {
 
       Row() {
         this.contactButton('phone', '电话', c.phone.length > 0 || c.whatsapp.length > 0, () => this.dial(c.phone.length > 0 ? c.phone : c.whatsapp))
-        this.contactButton('message-circle', 'WhatsApp', c.whatsapp.length > 0, () => this.copy(c.whatsapp, '已复制 WhatsApp 号码。App 内的 WhatsApp 会话将在下一版加入'))
-        this.contactButton('mail', '邮件', c.email.length > 0, () => this.copy(c.email, '已复制邮箱'))
+        this.contactButton('message-circle', 'WhatsApp', true, () => this.openChat())
+        this.contactButton('flag', '改阶段', true, () => this.openStage())
         this.contactButton('pencil', '写跟进', true, () => {
           this.showFollow = true;
         })
@@ -444,6 +510,60 @@ export struct CustomerDetailPage {
     .alignItems(HorizontalAlign.Start)
   }
 
+  @Builder
+  stageSheet() {
+    Column({ space: 16 }) {
+      Flex({ wrap: FlexWrap.Wrap }) {
+        ForEach(STAGE_ORDER, (key: string) => {
+          Text(label(STAGES, key))
+            .fontSize(14)
+            .fontColor(this.stageTo === key ? $r('app.color.on_brand') : $r('app.color.ink2'))
+            .backgroundColor(this.stageTo === key ? $r('app.color.brand') : $r('app.color.surface2'))
+            .borderRadius(18)
+            .height(36)
+            .padding({ left: 14, right: 14 })
+            .margin({ right: 8, bottom: 8 })
+            .onClick(() => {
+              this.stageTo = key;
+              this.stageError = '';
+            })
+        }, (key: string): string => key)
+      }
+      if (REASON_STAGES.indexOf(this.stageTo) >= 0) {
+        Column({ space: 8 }) {
+          Text('原因（管理员会复核）').fontSize(14).fontColor($r('app.color.ink2'))
+          TextArea({ placeholder: '例如：客户说明年再采购 / 价格不合适 / 号码无效', text: this.stageReason })
+            .height(96)
+            .fontSize(16)
+            .borderRadius(12)
+            .backgroundColor($r('app.color.surface2'))
+            .onChange((value: string) => {
+              this.stageReason = value;
+              this.stageError = '';
+            })
+        }
+        .alignItems(HorizontalAlign.Start)
+      }
+      if (this.stageError.length > 0) {
+        Text(this.stageError).fontSize(13).fontColor($r('app.color.danger'))
+      }
+      Text('成交请在电脑端客户档案里「新增成交」登记，阶段会自动变为已成交。').fontSize(12).fontColor($r('app.color.ink3'))
+      Button(this.stageSaving ? '正在保存' : '保存阶段')
+        .type(ButtonType.Normal)
+        .width('100%')
+        .height(48)
+        .borderRadius(12)
+        .fontColor($r('app.color.on_brand'))
+        .backgroundColor($r('app.color.brand'))
+        .enabled(!this.stageSaving)
+        .onClick(() => {
+          this.saveStage();
+        })
+    }
+    .padding({ left: 16, right: 16, top: 8, bottom: 24 })
+    .alignItems(HorizontalAlign.Start)
+  }
+
   build() {
     NavDestination() {
       Column() {
@@ -476,6 +596,11 @@ export struct CustomerDetailPage {
           .scrollBar(BarState.Off)
           .align(Alignment.Top)
           .layoutWeight(1)
+          .bindSheet($$this.showStage, this.stageSheet(), {
+            detents: [SheetSize.MEDIUM, SheetSize.LARGE],
+            dragBar: true,
+            title: { title: '改阶段', subtitle: this.detail !== null ? `当前：${label(STAGES, this.detail.stage)}` : '' }
+          })
 
           Row({ space: 10 }) {
             Button('打电话')
@@ -488,6 +613,10 @@ export struct CustomerDetailPage {
                   this.dial(c.phone.length > 0 ? c.phone : c.whatsapp);
                 }
               })
+            Button('WhatsApp')
+              .type(ButtonType.Normal).height(48).borderRadius(12).layoutWeight(1)
+              .fontColor($r('app.color.brand_ink')).backgroundColor($r('app.color.brand_soft'))
+              .onClick(() => this.openChat())
             Button('写跟进')
               .type(ButtonType.Normal).height(48).borderRadius(12).layoutWeight(1)
               .fontColor($r('app.color.on_brand')).backgroundColor($r('app.color.brand'))

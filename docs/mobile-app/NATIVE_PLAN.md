@@ -205,6 +205,8 @@ HarmonyOS 5 及以后的版本（包括公司手机的 HarmonyOS 7）不能像 A
 | --- | --- |
 | 2026-11-11 | 华为企业账号已注册。HarmonyOS 工程 0.1 建立（`mobile/harmony`）：登录、工作台、客户队列与详情（拨号、写跟进）、订单列表与详情、消息、我的；只用现有接口，服务端未改动。数据层经 TypeScript 严格检查，界面代码待第一次在 DevEco Studio 26 中编译验证 |
 | 2026-11-11 | AGC 已创建 APP ID（LVANJUBOS / `online.avenlee.bos`）。发布路线：①开发调试 → ②邀请测试（3–5 人试用）→ ③企业内部应用发布（全员）；操作指南 HARMONY_RELEASE_GUIDE.md，后台资料与隐私政策草稿在 `mobile/harmony/store/` |
+| 2026-11-11 | 0.1 在 HarmonyOS 7 真机上运行。修复：`data/` 目录被根 `.gitignore` 排除（改名 `api/`）、LvIcon 属性名冲突；工作台改为分块加载并写明失败原因 |
+| 2026-11-11 | 1.1：①流畅度——所有 GET 结果缓存在本机（内存 + 缓存目录），每个页面先显示上次数据再后台刷新；长列表改为 LazyForEach 按需渲染；图标路径缓存。②补数据——「消息」加入 WhatsApp 对话（会话列表、聊天、24 小时窗口内直接回复，窗口外提示到电脑端发模板，每 15 秒拉新消息）；工作台加入本月业绩（销售：个人业绩 / 目标完成；管理员：全公司 + 销售排行）；客户详情可改阶段（同电脑端看板规则）、WhatsApp 直达聊天；新增「我的待办」全部任务页。全部复用现有接口，服务端与数据库未改动 |
 
 **HarmonyOS 上的 WhatsApp**：据目前了解，WhatsApp 没有 HarmonyOS 5 及以后版本的原生 App，在 HarmonyOS 7 手机上只能借助「卓易通」这类兼容工具运行，需要在公司手机上实测。因此 HarmonyOS 版联系客户以 App 内的 WhatsApp 会话（走 BOS 接入的 WhatsApp API）为主，这也是下一步的重点；手机 WhatsApp 共存模式（S14）需要按实测结果定。
 

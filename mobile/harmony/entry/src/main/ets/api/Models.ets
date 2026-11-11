@@ -317,3 +317,158 @@ export interface TaskListPage {
 export interface EmptyBody {
   ok?: boolean;
 }
+
+// ── WhatsApp conversations ──────────────────────────────── GET /api/inbox/conversations (services/inbox-service.ts)
+export interface PersonRef {
+  id: string;
+  name: string;
+}
+
+export interface LastMessage {
+  preview: string;
+  direction: string;
+  status: string;
+}
+
+export interface ChatWindow {
+  /** OPEN: free text allowed until expiresAt. CLOSED / UNKNOWN: only approved templates (sent from the PC). */
+  status: string;
+  expiresAt: string | null;
+}
+
+export interface Conversation {
+  id: string;
+  name: string;
+  companyName: string;
+  country: string;
+  stage: string;
+  owner: PersonRef | null;
+  lastMessageAt: string;
+  unread: number;
+  awaiting: boolean;
+  firstContactOverdue: boolean;
+  lastMessage: LastMessage | null;
+  window: ChatWindow;
+  grade: string;
+}
+
+export interface ConversationPage {
+  conversations: Conversation[];
+  hasMore: boolean;
+  pendingTotal: number;
+  todoTotal: number;
+}
+
+// ── One conversation ────────────────────────────────────── GET /api/inbox/thread?customerId=
+export interface Translation {
+  kind: string;
+  text: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  direction: string;
+  messageType: string;
+  content: string;
+  status: string;
+  sentAt: string;
+  fileName: string | null;
+  translation: Translation | null;
+}
+
+export interface ThreadCustomer {
+  id: string;
+  name: string;
+  companyName: string;
+  country: string;
+  stage: string;
+  leadGrade: string;
+  whatsapp: string;
+  owner: PersonRef | null;
+}
+
+export interface ThreadSending {
+  configured: boolean;
+  optedOut: boolean;
+}
+
+export interface Thread {
+  customer: ThreadCustomer;
+  messages: ChatMessage[];
+  nextCursor: string | null;
+  window: ChatWindow;
+  sending: ThreadSending;
+}
+
+/** POST /api/whatsapp/send (services/whatsapp-message-service.ts sendMessageSchema). */
+export interface SendBody {
+  customerId: string;
+  content: string;
+  requestId: string;
+}
+
+export interface SentMessage {
+  message: ChatMessage;
+}
+
+/** POST /api/whatsapp/read. */
+export interface ReadBody {
+  customerId: string;
+  readAt: string;
+}
+
+// ── Stage change ────────────────────────────────────────── PATCH /api/bos/crm-stage (services/bos-crm-service.ts)
+export interface StageBody {
+  customerId: string;
+  fromStage: string;
+  toStage: string;
+  reason: string;
+}
+
+export interface StageResult {
+  stage: string;
+}
+
+// ── Performance ─────────────────────────────────────────── GET /api/sales-team/performance (sales-team-service.ts)
+export interface TargetRef {
+  amount: string;
+}
+
+export interface PerformanceRow {
+  id: string;
+  name: string;
+  isActive: boolean;
+  newCustomers: number;
+  contacted: number;
+  qualified: number;
+  quoted: number;
+  deals: number;
+  revenue: string;
+  conversion: number | null;
+  averageFirstContactMinutes: number | null;
+  pendingFirstContact: number;
+  overdueFirstContact: number;
+  firstContactOnTime: number | null;
+  target: TargetRef | null;
+  completion: number | null;
+}
+
+export interface CompanyTotals {
+  newCustomers: number;
+  qualified: number;
+  deals: number;
+  revenue: string;
+}
+
+export interface TargetSummary {
+  personal: string;
+  company: string | null;
+}
+
+export interface Performance {
+  month: string;
+  currency: string;
+  rows: PerformanceRow[];
+  company: CompanyTotals | null;
+  targetSummary: TargetSummary | null;
+}

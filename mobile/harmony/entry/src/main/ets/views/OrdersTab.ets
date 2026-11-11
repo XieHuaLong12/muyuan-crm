@@ -4,8 +4,9 @@ import { orderTone, paymentTone } from '../common/Labels';
 import { Api } from '../api/Http';
 import { Repo } from '../api/Repo';
 import { Session } from '../api/Session';
-import { OrderReminders, OrderRow, OrderTab } from '../api/Models';
+import { OrderListPage, OrderReminders, OrderRow, OrderTab } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
+import { ListSource } from '../components/ListSource';
 import { Pill, StateView } from '../components/Ui';
 
 class ReminderDef {
@@ -35,7 +36,8 @@ export struct OrdersTab {
   @State tabs: OrderTab[] = [];
   @State allCount: number = 0;
   @State reminders: OrderReminders | null = null;
-  @State orders: OrderRow[] = [];
+  @State count: number = 0;
+  private source: ListSource<OrderRow> = new ListSource<OrderRow>();
   @State total: number = 0;
   @State page: number = 1;
   @State keyword: string = '';
@@ -45,24 +47,53 @@ export struct OrdersTab {
   private searchTimer: number = -1;
 
   aboutToAppear(): void {
+    this.showCached();
     this.load(true);
+  }
+
+  private toast(message: string): void {
+    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2200 });
+  }
+
+  private showCached(): void {
+    if (this.keyword.length > 0) {
+      return;
+    }
+    const cached = Repo.peekOrders(this.tab);
+    if (cached !== null) {
+      this.apply(cached, true);
+      this.state = 'ready';
+    }
+  }
+
+  private apply(result: OrderListPage, reset: boolean): void {
+    if (reset) {
+      this.source.reset(result.orders);
+    } else {
+      this.source.append(result.orders);
+    }
+    this.count = this.source.totalCount();
+    this.tabs = result.tabs;
+    this.allCount = result.allCount;
+    this.reminders = result.reminders;
+    this.total = result.total;
   }
 
   private async load(reset: boolean): Promise<void> {
     const page = reset ? 1 : this.page + 1;
+    const tab = this.tab;
     try {
-      const result = await Repo.orders(this.tab, this.keyword, page);
-      this.orders = reset ? result.orders : this.orders.concat(result.orders);
-      this.tabs = result.tabs;
-      this.allCount = result.allCount;
-      this.reminders = result.reminders;
-      this.total = result.total;
+      const result = await Repo.orders(tab, this.keyword, page);
+      if (tab !== this.tab) return;
+      this.apply(result, reset);
       this.page = page;
       this.state = 'ready';
     } catch (e) {
       this.error = Api.message(e);
-      if (reset) {
+      if (this.state !== 'ready') {
         this.state = 'error';
+      } else if (reset) {
+        this.toast(`没有连上服务器，显示的是上次的数据。${this.error}`);
       }
     } finally {
       this.refreshing = false;
@@ -81,6 +112,7 @@ export struct OrdersTab {
   private select(tab: string): void {
     this.tab = tab;
     this.state = 'loading';
+    this.showCached();
     this.load(true);
   }
 
@@ -226,17 +258,17 @@ export struct OrdersTab {
       } else {
         Refresh({ refreshing: $$this.refreshing }) {
           List({ space: 10 }) {
-            if (this.orders.length === 0) {
+            if (this.count === 0) {
               ListItem() {
                 StateView({ kind: 'empty', icon: 'package', title: '这个状态下没有订单', message: '成交后会自动生成订单（每笔成交一张订单）。' })
               }
             }
-            ForEach(this.orders, (o: OrderRow) => {
+            LazyForEach(this.source, (o: OrderRow) => {
               ListItem() {
                 this.card(o)
               }
-            }, (o: OrderRow): string => o.id)
-            if (this.orders.length < this.total) {
+            }, (o: OrderRow): string => `${this.source.generation}-${o.id}`)
+            if (this.count < this.total) {
               ListItem() {
                 Button('加载更多')
                   .type(ButtonType.Normal).borderRadius(12).height(44).width('100%')
@@ -247,6 +279,7 @@ export struct OrdersTab {
               }
             }
           }
+          .cachedCount(5)
           .padding({ left: 16, right: 16, bottom: 24 })
           .scrollBar(BarState.Off)
           .height('100%')

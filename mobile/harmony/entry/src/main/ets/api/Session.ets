@@ -4,6 +4,7 @@ import { util } from '@kit.ArkTS';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppConfig, StoreKeys } from '../common/Config';
+import { Cache } from './Cache';
 
 /**
  * The login session and the server address.
@@ -95,6 +96,7 @@ export class Session {
   /** Logout or an expired session: forget everything tied to the account and go back to the login page. */
   static async clear(): Promise<void> {
     Session.token = '';
+    Cache.clear();
     await Session.removeToken();
     await Session.rememberUser('', '', '');
     AppStorage.setOrCreate<number>(StoreKeys.BADGE_CUSTOMERS, 0);

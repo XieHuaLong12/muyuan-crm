@@ -5,7 +5,7 @@ import { Repo } from '../api/Repo';
 import { Session } from '../api/Session';
 import { LvIcon } from '../components/LvIcon';
 
-/** 我的: account, server, version, sign out. Notification settings, offline data and updates come in later versions. */
+/** 我的: account, server, version, sign out. Notification settings and updates come in later versions. */
 @Component
 export struct MeTab {
   @StorageProp('userName') userName: string = '';
@@ -104,7 +104,7 @@ export struct MeTab {
         .enabled(!this.busy)
         .onClick(() => this.confirmLogout())
 
-        Text('通知设置、离线数据、检查更新将在后续版本加入。').fontSize(12).fontColor($r('app.color.ink3'))
+        Text('最近打开过的客户、订单和对话会保存在这台手机上，没有网络时也能查看；退出登录会清除。').fontSize(12).fontColor($r('app.color.ink3')).lineHeight(18)
           .width('100%').textAlign(TextAlign.Center)
       }
       .padding({ left: 16, right: 16, bottom: 24 })

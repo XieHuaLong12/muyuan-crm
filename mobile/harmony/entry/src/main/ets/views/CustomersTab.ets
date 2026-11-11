@@ -4,8 +4,9 @@ import { STAGES, label, stageTone } from '../common/Labels';
 import { Api } from '../api/Http';
 import { Repo } from '../api/Repo';
 import { Session } from '../api/Session';
-import { ListCustomerRow, QueueCount, QueueCustomer } from '../api/Models';
+import { CustomerListPage, ListCustomerRow, QueueCount, QueueCustomer, SalesQueue } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
+import { ListSource } from '../components/ListSource';
 import { Avatar, Pill, StateView } from '../components/Ui';
 
 class QueueDef {
@@ -80,7 +81,8 @@ export struct CustomersTab {
   @Consume('pathStack') pathStack: NavPathStack;
   @StorageLink('customersQueue') @Watch('onQueueRequested') requested: string = '';
   @State queue: string = Session.isAdmin() ? 'recent' : 'today';
-  @State items: CustomerItem[] = [];
+  @State count: number = 0;
+  private source: ListSource<CustomerItem> = new ListSource<CustomerItem>();
   @State counts: QueueCount[] = [];
   @State total: number = 0;
   @State page: number = 1;
@@ -90,13 +92,20 @@ export struct CustomersTab {
   @State refreshing: boolean = false;
   @State loadingMore: boolean = false;
   @State poolCount: number = 0;
+  @StorageProp('dataChanged') @Watch('onDataChanged') dataChanged: number = 0;
   private searchTimer: number = -1;
+
+  /** A follow-up, stage or task changed somewhere: the queues may have moved. */
+  onDataChanged(): void {
+    this.load(true);
+  }
 
   aboutToAppear(): void {
     if (this.requested.length > 0) {
       this.queue = this.requested;
       this.requested = '';
     }
+    this.showCached();
     this.load(true);
   }
 
@@ -106,31 +115,75 @@ export struct CustomersTab {
       this.queue = this.requested;
       this.requested = '';
       this.state = 'loading';
+      this.showCached();
       this.load(true);
     }
   }
 
+  private toast(message: string): void {
+    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2200 });
+  }
+
+  /** The last list of this queue, shown at once while the fresh one loads. */
+  private showCached(): void {
+    if (this.keyword.length > 0) {
+      return;
+    }
+    if (this.queue === 'pool') {
+      const pool = Repo.peekPool();
+      if (pool !== null) {
+        this.applyPool(pool);
+        this.state = 'ready';
+      }
+    } else {
+      const cached = Repo.peekQueue(this.queue);
+      if (cached !== null) {
+        this.applyQueue(cached, true);
+        this.state = 'ready';
+      }
+    }
+  }
+
+  private applyPool(result: CustomerListPage): void {
+    this.source.reset(result.rows.map(fromList));
+    this.count = this.source.totalCount();
+    this.total = result.total;
+    this.poolCount = result.pool;
+  }
+
+  private applyQueue(result: SalesQueue, reset: boolean): void {
+    const rows = result.customers.map(fromQueue);
+    if (reset) {
+      this.source.reset(rows);
+    } else {
+      this.source.append(rows);
+    }
+    this.count = this.source.totalCount();
+    this.total = result.total;
+    this.counts = result.counts;
+  }
+
   private async load(reset: boolean): Promise<void> {
     const page = reset ? 1 : this.page + 1;
+    const queue = this.queue;
     try {
-      if (this.queue === 'pool') {
+      if (queue === 'pool') {
         const result = await Repo.pool(this.keyword);
-        this.items = result.rows.map(fromList);
-        this.total = result.total;
-        this.poolCount = result.pool;
+        if (queue !== this.queue) return;
+        this.applyPool(result);
       } else {
-        const result = await Repo.queue(this.queue, this.keyword, page);
-        const rows = result.customers.map(fromQueue);
-        this.items = reset ? rows : this.items.concat(rows);
-        this.total = result.total;
-        this.counts = result.counts;
+        const result = await Repo.queue(queue, this.keyword, page);
+        if (queue !== this.queue) return;
+        this.applyQueue(result, reset);
       }
       this.page = page;
       this.state = 'ready';
     } catch (e) {
       this.error = Api.message(e);
-      if (reset) {
+      if (this.state !== 'ready') {
         this.state = 'error';
+      } else if (reset) {
+        this.toast(`没有连上服务器，显示的是上次的数据。${this.error}`);
       }
     } finally {
       this.refreshing = false;
@@ -148,6 +201,7 @@ export struct CustomersTab {
     if (key === this.queue) return;
     this.queue = key;
     this.state = 'loading';
+    this.showCached();
     this.load(true);
   }
 
@@ -285,7 +339,7 @@ export struct CustomersTab {
               Text(`共 ${this.total} 位`).fontSize(12).fontColor($r('app.color.ink3')).padding({ left: 4 })
             }
 
-            if (this.items.length === 0) {
+            if (this.count === 0) {
               ListItem() {
                 StateView({
                   kind: 'empty', icon: 'users',
@@ -295,13 +349,13 @@ export struct CustomersTab {
               }
             }
 
-            ForEach(this.items, (item: CustomerItem) => {
+            LazyForEach(this.source, (item: CustomerItem) => {
               ListItem() {
                 this.card(item)
               }
-            }, (item: CustomerItem): string => item.id)
+            }, (item: CustomerItem): string => `${this.source.generation}-${item.id}`)
 
-            if (this.queue !== 'pool' && this.items.length < this.total) {
+            if (this.queue !== 'pool' && this.count < this.total) {
               ListItem() {
                 Button(this.loadingMore ? '加载中' : '加载更多')
                   .type(ButtonType.Normal).borderRadius(12).height(44).width('100%')
@@ -314,6 +368,7 @@ export struct CustomersTab {
               }
             }
           }
+          .cachedCount(5)
           .padding({ left: 16, right: 16, bottom: 24 })
           .scrollBar(BarState.Off)
           .height('100%')
