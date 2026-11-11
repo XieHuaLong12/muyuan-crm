@@ -143,12 +143,19 @@ export struct OrdersTab {
     .onClick(() => this.select(def.tab))
   }
 
+  /** Read here, not passed in, so the counts follow every refresh. */
+  private tabCount(key: string): number {
+    if (key === 'ALL') return this.allCount;
+    const found = this.tabs.find((t: OrderTab): boolean => t.key === key);
+    return found === undefined ? 0 : found.count;
+  }
+
   @Builder
-  chip(key: string, title: string, count: number) {
+  chip(key: string, title: string) {
     Row({ space: 6 }) {
       Text(title).fontSize(14).fontWeight(FontWeight.Medium)
         .fontColor(this.tab === key ? $r('app.color.on_brand') : $r('app.color.ink2'))
-      Text(`${count}`).fontSize(12).fontColor(this.tab === key ? $r('app.color.on_brand') : $r('app.color.ink3'))
+      Text(`${this.tabCount(key)}`).fontSize(12).fontColor(this.tab === key ? $r('app.color.on_brand') : $r('app.color.ink3'))
     }
     .height(36)
     .padding({ left: 14, right: 14 })
@@ -235,9 +242,9 @@ export struct OrdersTab {
 
         Scroll() {
           Row({ space: 8 }) {
-            this.chip('ALL', '全部', this.allCount)
+            this.chip('ALL', '全部')
             ForEach(this.tabs, (t: OrderTab) => {
-              this.chip(t.key, t.label, t.count)
+              this.chip(t.key, t.label)
             }, (t: OrderTab): string => t.key)
           }
           .padding({ left: 16, right: 16 })

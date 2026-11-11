@@ -3,10 +3,12 @@ import { RouteParam, Routes, StoreKeys } from '../common/Config';
 import { Fmt } from '../common/Format';
 import { FOLLOW_TYPES, FOLLOW_TYPE_KEYS, PURCHASES, SOURCES, STAGES, label, stageTone } from '../common/Labels';
 import { Api } from '../api/Http';
+import { Session } from '../api/Session';
 import { Repo } from '../api/Repo';
-import { CustomerDetail, DealRow, FollowUpBody, FollowUpRow, StageChange } from '../api/Models';
+import { CustomerDetail, DealRow, FollowUpBody, FollowUpRow, OwnerName, Quotation, SalesAccount, StageChange } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { Avatar, Pill, StateView } from '../components/Ui';
+import { TaskEditor } from './task/TaskEditor';
 
 class TimelineEntry {
   key: string = '';
@@ -30,6 +32,13 @@ class NextOption {
 const NEXT_OPTIONS: NextOption[] = [
   new NextOption('明天 10:00', 1), new NextOption('3 天后', 3), new NextOption('1 周后', 7), new NextOption('不设置', -1)
 ];
+
+/** 写跟进 quick phrases (the prototype's fd-phrase): tap to add to the content. */
+const PHRASES: string[] = ['已发产品目录', '已发报价', '客户在比价', '客户要样品', '约了下次通话', '客户暂时没需求', '等客户确认款式'];
+
+const QUOTE_STATUS: Record<string, string> = {
+  'DRAFT': '草稿', 'SENT': '已发送', 'ACCEPTED': '已确认', 'REJECTED': '已拒绝', 'EXPIRED': '已过期'
+};
 
 /** Stages a person may move a customer to (lib/bos-kanban.ts order without WON: deals set 已成交). */
 const STAGE_ORDER: string[] = [
@@ -69,12 +78,29 @@ export struct CustomerDetailPage {
   @State stageReason: string = '';
   @State stageSaving: boolean = false;
   @State stageError: string = '';
+  /** Bumped on every new detail snapshot: the page body is rebuilt with it (builder parameters do not refresh). */
+  @State rev: number = 0;
+  @State quotes: Quotation[] | null = null;
+  @State quotesError: string = '';
+  // 写跟进: change the stage in the same step ('' = keep), and a picked date for the next follow-up.
+  @State followStage: string = '';
+  @State customNext: number = 0;
+  // 更多: task | assign
+  @State showMore: boolean = false;
+  @State moreKind: string = '';
+  @State accounts: SalesAccount[] = [];
+  @State assignError: string = '';
 
   aboutToAppear(): void {
     const cached = Repo.peekCustomer(this.customerId);
     if (cached !== null) {
       this.detail = cached;
+      this.rev++;
       this.state = 'ready';
+    }
+    const quotes = Repo.peekQuotations(this.customerId);
+    if (quotes !== null) {
+      this.quotes = quotes;
     }
     this.load();
   }
@@ -82,6 +108,7 @@ export struct CustomerDetailPage {
   private async load(): Promise<void> {
     try {
       this.detail = await Repo.customer(this.customerId);
+      this.rev++;
       this.state = 'ready';
     } catch (e) {
       this.error = Api.message(e);
@@ -144,13 +171,138 @@ export struct CustomerDetailPage {
     this.getUIContext().getPromptAction().showToast({ message: message, duration: 2200 });
   }
 
+  /** Dial, and have 写跟进 open as a phone call record when the user comes back from the call. */
   private dial(number: string): void {
     const digits = number.replace(/[^\d+]/g, '');
     if (digits.length === 0) {
       this.toast('这位客户没有电话号码');
       return;
     }
-    call.makeCall(digits).catch(() => this.toast('无法打开拨号界面'));
+    call.makeCall(digits).then(() => {
+      this.followType = 'PHONE';
+      this.followText = '';
+      setTimeout(() => {
+        this.showFollow = true;
+      }, 800);
+    }).catch(() => this.toast('无法打开拨号界面'));
+  }
+
+  private openMoreMenu(): void {
+    const c = this.detail;
+    if (c === null) return;
+    const sheets: SheetInfo[] = [
+      { title: '改阶段', action: () => this.openStage() },
+      { title: '新建任务', action: () => this.openMore('task') }
+    ];
+    if (Session.isAdmin()) {
+      sheets.push({ title: c.owner !== null ? `改负责人（现在：${c.owner.name}）` : '分配给销售', action: () => this.openMore('assign') });
+      sheets.push({ title: '移入回收站', action: () => this.confirmTrash() });
+    }
+    this.getUIContext().showActionSheet({ title: '更多操作', message: c.name, autoCancel: true, sheets: sheets });
+  }
+
+  private openMore(kind: string): void {
+    this.moreKind = kind;
+    this.assignError = '';
+    this.showMore = true;
+    if (kind === 'assign' && this.accounts.length === 0) {
+      this.loadAccounts();
+    }
+  }
+
+  private async loadAccounts(): Promise<void> {
+    try {
+      const rows = await Repo.salesAccounts();
+      this.accounts = rows.filter((a: SalesAccount): boolean => a.isActive);
+    } catch (e) {
+      this.assignError = Api.message(e);
+    }
+  }
+
+  private async assignTo(a: SalesAccount): Promise<void> {
+    const c = this.detail;
+    if (c === null) return;
+    try {
+      await Repo.assign([c.id], a.id, '手机端分配');
+      this.showMore = false;
+      this.toast(`已分配给 ${a.name}`);
+      this.changed();
+      await this.load();
+    } catch (e) {
+      this.assignError = Api.message(e);
+    }
+  }
+
+  private confirmTrash(): void {
+    const c = this.detail;
+    if (c === null) return;
+    this.getUIContext().showAlertDialog({
+      title: '移入回收站？',
+      message: `${c.name} 的跟进记录、报价会一起移入回收站，管理员可以在电脑端恢复。已成交客户不能删除。`,
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      primaryButton: { value: '取消', action: () => {} },
+      secondaryButton: {
+        value: '移入回收站',
+        fontColor: $r('app.color.danger'),
+        action: () => {
+          this.trash();
+        }
+      }
+    });
+  }
+
+  private async trash(): Promise<void> {
+    try {
+      await Repo.deleteCustomer(this.customerId);
+      this.toast('已移入回收站');
+      this.changed();
+      this.pathStack.pop();
+    } catch (e) {
+      this.toast(Api.message(e));
+    }
+  }
+
+  private async loadQuotes(): Promise<void> {
+    try {
+      this.quotes = await Repo.quotations(this.customerId);
+      this.quotesError = '';
+    } catch (e) {
+      this.quotesError = Api.message(e);
+    }
+  }
+
+  private selectTab(index: number): void {
+    this.tab = index;
+    if (index === 2) {
+      this.loadQuotes();
+    }
+  }
+
+  private pickNextDate(): void {
+    const start = new Date();
+    start.setDate(start.getDate() + 1);
+    this.getUIContext().showDatePickerDialog({
+      start: new Date(),
+      end: new Date(new Date().getFullYear() + 2, 11, 31),
+      selected: this.customNext > 0 ? new Date(this.customNext) : start,
+      onDateAccept: (value: Date) => {
+        this.customNext = new Date(value.getFullYear(), value.getMonth(), value.getDate(), 10, 0, 0, 0).getTime();
+        this.nextIndex = NEXT_OPTIONS.length;
+      }
+    });
+  }
+
+  private customNextText(): string {
+    if (this.customNext <= 0) return '选日期';
+    const d = new Date(this.customNext);
+    return `${d.getMonth() + 1} 月 ${d.getDate()} 日 10:00`;
+  }
+
+  private addPhrase(phrase: string): void {
+    const text = this.followText.trim();
+    this.followText = text.length > 0 ? `${text}；${phrase}` : phrase;
+    this.followError = '';
   }
 
   private timeline(c: CustomerDetail): TimelineEntry[] {
@@ -209,21 +361,39 @@ export struct CustomerDetailPage {
       this.followError = '请填写跟进内容';
       return;
     }
-    const option = NEXT_OPTIONS[this.nextIndex];
+    const custom = this.nextIndex >= NEXT_OPTIONS.length && this.customNext > 0;
+    const option = NEXT_OPTIONS[Math.min(this.nextIndex, NEXT_OPTIONS.length - 1)];
+    const nextAt: string | null = custom ? new Date(this.customNext).toISOString() : option.days < 0 ? null : Fmt.atDay(option.days, 10);
+    const c = this.detail;
+    const stage = this.followStage;
+    if (c !== null && stage.length > 0 && stage !== c.stage && REASON_STAGES.indexOf(stage) >= 0 && content.length < 2) {
+      this.followError = '改为暂不需要、已流失或无效客户时，跟进内容就是原因，请多写几个字';
+      return;
+    }
     const body: FollowUpBody = {
       type: this.followType,
       content: content,
       // A minute back: the server refuses a follow-up time later than its own clock, and phone clocks drift.
       followUpAt: new Date(Date.now() - 60000).toISOString(),
-      nextFollowUpAt: option.days < 0 ? null : Fmt.atDay(option.days, 10)
+      nextFollowUpAt: nextAt
     };
     this.saving = true;
     this.followError = '';
     try {
       await Repo.addFollowUp(this.customerId, body);
+      let note = nextAt === null ? '跟进已保存' : `跟进已保存 · 下次 ${custom ? this.customNextText() : option.title}`;
+      if (c !== null && stage.length > 0 && stage !== c.stage) {
+        try {
+          await Repo.moveStage(c.id, c.stage, stage, content);
+          note = `${note} · 阶段改为「${label(STAGES, stage)}」`;
+        } catch (e) {
+          note = `跟进已保存，但阶段没改成：${Api.message(e)}`;
+        }
+      }
       this.showFollow = false;
       this.followText = '';
-      this.toast(option.days < 0 ? '跟进已保存' : `跟进已保存 · 下次 ${option.title}`);
+      this.followStage = '';
+      this.toast(note);
       this.changed();
       await this.load();
     } catch (e) {
@@ -288,10 +458,10 @@ export struct CustomerDetailPage {
       Row() {
         this.contactButton('phone', '电话', c.phone.length > 0 || c.whatsapp.length > 0, () => this.dial(c.phone.length > 0 ? c.phone : c.whatsapp))
         this.contactButton('message-circle', 'WhatsApp', true, () => this.openChat())
-        this.contactButton('flag', '改阶段', true, () => this.openStage())
         this.contactButton('pencil', '写跟进', true, () => {
           this.showFollow = true;
         })
+        this.contactButton('ellipsis', '更多', true, () => this.openMoreMenu())
       }
       .width('100%')
     }
@@ -370,7 +540,7 @@ export struct CustomerDetailPage {
           .borderRadius(9)
           .backgroundColor(this.tab === index ? $r('app.color.surface') : Color.Transparent)
           .onClick(() => {
-            this.tab = index;
+            this.selectTab(index);
           })
       }, (title: string): string => title)
     }
@@ -435,6 +605,131 @@ export struct CustomerDetailPage {
   }
 
   @Builder
+  dealsAndQuotes(c: CustomerDetail) {
+    Column({ space: 12 }) {
+      if (c.deals.length > 0) {
+        Column() {
+          ForEach(c.deals, (d: DealRow, index: number) => {
+            Row({ space: 10 }) {
+              Column({ space: 3 }) {
+                Text(`成交 ${Fmt.money(d.dealAmount, d.currency)}`).fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink'))
+                Text(`${Fmt.date(new Date(d.dealDate))}${d.order !== null ? ` · 订单 ${d.order.orderNo}` : ''}`).fontSize(12).fontColor($r('app.color.ink3'))
+              }
+              .alignItems(HorizontalAlign.Start)
+              .layoutWeight(1)
+              if (d.order !== null) {
+                LvIcon({ name: 'chevron-right', iconColor: $r('app.color.ink3'), iconSize: 18 })
+              }
+            }
+            .width('100%')
+            .padding({ top: 12, bottom: 12 })
+            .border({ width: { top: index === 0 ? 0 : 0.5 }, color: $r('app.color.line_soft') })
+            .onClick(() => {
+              if (d.order !== null) {
+                this.pathStack.pushPathByName(Routes.ORDER, new RouteParam(d.order.id));
+              }
+            })
+          }, (d: DealRow): string => d.id)
+        }
+        .padding({ left: 14, right: 14 })
+        .borderRadius(16)
+        .backgroundColor($r('app.color.surface'))
+      }
+
+      Text('报价单').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink')).width('100%')
+      if (this.quotesError.length > 0) {
+        Text(this.quotesError).fontSize(13).fontColor($r('app.color.danger'))
+      } else if (this.quotes === null) {
+        LoadingProgress().width(28).height(28).color($r('app.color.brand_ink'))
+      } else if ((this.quotes as Quotation[]).length === 0) {
+        Text('还没有报价单。报价在电脑端「报价」里制作，发送后会显示在这里。').fontSize(13).fontColor($r('app.color.ink3')).lineHeight(20)
+      } else {
+        Column() {
+          ForEach(this.quotes as Quotation[], (q: Quotation, index: number) => {
+            Column({ space: 4 }) {
+              Row() {
+                Text(q.quoteNumber).fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink')).layoutWeight(1)
+                Pill({ text: label(QUOTE_STATUS, q.status), tone: q.status === 'SENT' ? 'brand' : q.status === 'ACCEPTED' ? 'success' : 'neutral' })
+              }
+              .width('100%')
+              Text(`${q.product} × ${q.quantity}${q.incoterm.length > 0 ? ` · ${q.incoterm}` : ''}`).fontSize(13).fontColor($r('app.color.ink2'))
+                .maxLines(2).textOverflow({ overflow: TextOverflow.Ellipsis })
+              Row() {
+                Text(q.sentAt !== null ? `发送 ${Fmt.ago(q.sentAt)}` : `创建 ${Fmt.ago(q.createdAt)}`).fontSize(12).fontColor($r('app.color.ink3')).layoutWeight(1)
+                Text(q.totalAmount !== null ? Fmt.money(q.totalAmount, q.currency) : `单价 ${Fmt.money(q.unitPrice, q.currency)}`)
+                  .fontSize(15).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+              }
+              .width('100%')
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding({ top: 12, bottom: 12 })
+            .border({ width: { top: index === 0 ? 0 : 0.5 }, color: $r('app.color.line_soft') })
+          }, (q: Quotation): string => q.id)
+        }
+        .padding({ left: 14, right: 14 })
+        .borderRadius(16)
+        .backgroundColor($r('app.color.surface'))
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  moreSheet() {
+    if (this.moreKind === 'task') {
+      TaskEditor({
+        customerId: this.customerId,
+        customerName: this.detail !== null ? (this.detail as CustomerDetail).name : '',
+        task: null,
+        onDone: () => {
+          this.showMore = false;
+          this.changed();
+        },
+        onClose: () => {
+          this.showMore = false;
+        }
+      })
+    } else {
+      Column({ space: 10 }) {
+        Text('分配给').fontSize(18).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+        if (this.assignError.length > 0) {
+          Text(this.assignError).fontSize(13).fontColor($r('app.color.danger'))
+        }
+        if (this.accounts.length === 0 && this.assignError.length === 0) {
+          LoadingProgress().width(28).height(28).color($r('app.color.brand_ink'))
+        }
+        ForEach(this.accounts, (a: SalesAccount) => {
+          Row({ space: 12 }) {
+            Avatar({ name: a.name, grade: '', avatarSize: 36 })
+            Column({ space: 2 }) {
+              Text(a.name).fontSize(15).fontColor($r('app.color.ink'))
+              Text(`${a.role === 'ADMIN' ? '管理员' : '销售'} · ${a.customerCount} 位客户`).fontSize(12).fontColor($r('app.color.ink3'))
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            if (this.detail !== null && (this.detail as CustomerDetail).owner !== null &&
+              ((this.detail as CustomerDetail).owner as OwnerName).name === a.name) {
+              Text('当前').fontSize(12).fontColor($r('app.color.ink3'))
+            }
+          }
+          .width('100%')
+          .height(60)
+          .padding({ left: 12, right: 12 })
+          .borderRadius(12)
+          .backgroundColor($r('app.color.surface2'))
+          .onClick(() => {
+            this.assignTo(a);
+          })
+        }, (a: SalesAccount): string => a.id)
+        Text('分配后对方会收到新客户提醒，和电脑端分配一样。').fontSize(12).fontColor($r('app.color.ink3'))
+      }
+      .alignItems(HorizontalAlign.Start)
+      .padding({ left: 16, right: 16, top: 8, bottom: 24 })
+    }
+  }
+
+  @Builder
   followSheet() {
     Column({ space: 16 }) {
       Column({ space: 8 }) {
@@ -468,8 +763,48 @@ export struct CustomerDetailPage {
             this.followText = value;
             this.followError = '';
           })
+        Flex({ wrap: FlexWrap.Wrap }) {
+          ForEach(PHRASES, (phrase: string) => {
+            Text(phrase)
+              .fontSize(13)
+              .fontColor($r('app.color.ink2'))
+              .backgroundColor($r('app.color.surface2'))
+              .borderRadius(15)
+              .height(30)
+              .padding({ left: 12, right: 12 })
+              .margin({ right: 6, bottom: 6 })
+              .onClick(() => this.addPhrase(phrase))
+          }, (phrase: string): string => phrase)
+        }
         if (this.followError.length > 0) {
           Text(this.followError).fontSize(13).fontColor($r('app.color.danger'))
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+
+      Column({ space: 8 }) {
+        Text('同时改阶段（可选）').fontSize(14).fontColor($r('app.color.ink2'))
+        Flex({ wrap: FlexWrap.Wrap }) {
+          Text('不改')
+            .fontSize(14)
+            .fontColor(this.followStage === '' ? $r('app.color.on_brand') : $r('app.color.ink2'))
+            .backgroundColor(this.followStage === '' ? $r('app.color.brand') : $r('app.color.surface2'))
+            .borderRadius(18).height(36).padding({ left: 14, right: 14 }).margin({ right: 8, bottom: 8 })
+            .onClick(() => {
+              this.followStage = '';
+            })
+          ForEach(STAGE_ORDER, (key: string) => {
+            if (this.detail === null || key !== (this.detail as CustomerDetail).stage) {
+              Text(label(STAGES, key))
+                .fontSize(14)
+                .fontColor(this.followStage === key ? $r('app.color.on_brand') : $r('app.color.ink2'))
+                .backgroundColor(this.followStage === key ? $r('app.color.brand') : $r('app.color.surface2'))
+                .borderRadius(18).height(36).padding({ left: 14, right: 14 }).margin({ right: 8, bottom: 8 })
+                .onClick(() => {
+                  this.followStage = key;
+                })
+            }
+          }, (key: string): string => key)
         }
       }
       .alignItems(HorizontalAlign.Start)
@@ -490,6 +825,22 @@ export struct CustomerDetailPage {
                 this.nextIndex = index;
               })
           }, (option: NextOption): string => option.title)
+          Row({ space: 4 }) {
+            LvIcon({
+              name: 'calendar-clock',
+              iconColor: this.nextIndex === NEXT_OPTIONS.length ? $r('app.color.on_brand') : $r('app.color.brand_ink'),
+              iconSize: 15
+            })
+            Text(this.customNextText())
+              .fontSize(14)
+              .fontColor(this.nextIndex === NEXT_OPTIONS.length ? $r('app.color.on_brand') : $r('app.color.brand_ink'))
+          }
+          .height(36)
+          .padding({ left: 12, right: 14 })
+          .margin({ right: 8, bottom: 8 })
+          .borderRadius(18)
+          .backgroundColor(this.nextIndex === NEXT_OPTIONS.length ? $r('app.color.brand') : $r('app.color.brand_soft'))
+          .onClick(() => this.pickNextDate())
         }
       }
       .alignItems(HorizontalAlign.Start)
@@ -576,22 +927,29 @@ export struct CustomerDetailPage {
           } }).layoutWeight(1)
         } else {
           Scroll() {
-            Column({ space: 14 }) {
-              this.header(this.detail as CustomerDetail)
-              if (this.dueIso(this.detail as CustomerDetail) !== null) {
-                this.dueStrip(this.detail as CustomerDetail)
-              }
-              if ((this.detail as CustomerDetail).aiSummary.length > 0 || (this.detail as CustomerDetail).aiNextAction.length > 0) {
-                this.aiCard(this.detail as CustomerDetail)
-              }
-              this.segment(['动态', '资料'])
-              if (this.tab === 0) {
-                this.timelineView(this.detail as CustomerDetail)
-              } else {
-                this.profileView(this.detail as CustomerDetail)
-              }
+            Column() {
+              // One item per detail snapshot: a refreshed customer rebuilds the body with its new values.
+              ForEach([this.rev], (r: number) => {
+                Column({ space: 14 }) {
+                  this.header(this.detail as CustomerDetail)
+                  if (this.dueIso(this.detail as CustomerDetail) !== null) {
+                    this.dueStrip(this.detail as CustomerDetail)
+                  }
+                  if ((this.detail as CustomerDetail).aiSummary.length > 0 || (this.detail as CustomerDetail).aiNextAction.length > 0) {
+                    this.aiCard(this.detail as CustomerDetail)
+                  }
+                  this.segment(['动态', '资料', '成交与报价'])
+                  if (this.tab === 0) {
+                    this.timelineView(this.detail as CustomerDetail)
+                  } else if (this.tab === 1) {
+                    this.profileView(this.detail as CustomerDetail)
+                  } else {
+                    this.dealsAndQuotes(this.detail as CustomerDetail)
+                  }
+                }
+                .padding({ left: 16, right: 16, top: 8, bottom: 24 })
+              }, (r: number): string => `${r}`)
             }
-            .padding({ left: 16, right: 16, top: 8, bottom: 24 })
           }
           .scrollBar(BarState.Off)
           .align(Alignment.Top)
@@ -631,6 +989,7 @@ export struct CustomerDetailPage {
           .padding({ left: 16, right: 16, top: 10, bottom: 12 })
           .backgroundColor($r('app.color.surface'))
           .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+          .bindSheet($$this.showMore, this.moreSheet(), { detents: [SheetSize.LARGE], dragBar: true })
         }
       }
       .width('100%')

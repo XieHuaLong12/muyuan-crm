@@ -2,7 +2,8 @@ import { Fmt } from '../common/Format';
 import { Api } from '../api/Http';
 import { Repo } from '../api/Repo';
 import { Session } from '../api/Session';
-import { Performance, PerformanceRow } from '../api/Models';
+import { Cockpit, CockpitChannel, FunnelStage, Performance, PerformanceRow, TrendPoint } from '../api/Models';
+import { BarChart } from '../components/BarChart';
 import { LvIcon } from '../components/LvIcon';
 
 /** One step of the funnel. */
@@ -31,6 +32,23 @@ function currentMonth(): string {
   return `${d.getFullYear()}-${Fmt.pad(d.getMonth() + 1)}`;
 }
 
+/** First and last day of a month for the cockpit (custom range), never after today. */
+function monthStart(month: string): string {
+  return `${month}-01`;
+}
+
+function monthEnd(month: string): string {
+  const year = Number(month.slice(0, 4));
+  const index = Number(month.slice(5, 7));
+  const last = new Date(year, index, 0);
+  const today = new Date();
+  const end = last.getTime() > today.getTime() ? today : last;
+  return `${end.getFullYear()}-${Fmt.pad(end.getMonth() + 1)}-${Fmt.pad(end.getDate())}`;
+}
+
+const MODES: string[] = ['month', 'quarter', 'year'];
+const MODE_NAMES: string[] = ['按月', '本季度', '本年度'];
+
 function minutesText(minutes: number | null): string {
   if (minutes === null) return '—';
   if (minutes < 60) return `${Math.round(minutes)} 分钟`;
@@ -52,33 +70,69 @@ export struct AnalyticsPage {
   @Consume('pathStack') pathStack: NavPathStack;
   @State month: string = currentMonth();
   @State data: Performance | null = null;
+  /** The 驾驶舱 numbers for the same period: trend, channels, and (quarter / year) everything. */
+  @State cock: Cockpit | null = null;
+  @State mode: string = 'month';
   @State state: string = 'loading';
   @State error: string = '';
   @State refreshing: boolean = false;
+  /** Bumped on every new snapshot so the body is rebuilt (builder parameters do not refresh). */
+  @State rev: number = 0;
 
   aboutToAppear(): void {
     this.select(this.month);
   }
 
+  private cockpitArgs(): string[] {
+    if (this.mode !== 'month') return [this.mode, '', ''];
+    return ['custom', monthStart(this.month), monthEnd(this.month)];
+  }
+
   private select(month: string): void {
     this.month = month;
+    this.mode = 'month';
     const cached = Repo.peekPerformance(month === currentMonth() ? '' : month);
+    const args = this.cockpitArgs();
+    this.cock = Repo.peekCockpit(args[0], args[1], args[2]);
     if (cached !== null) {
       this.data = cached;
       this.state = 'ready';
+      this.rev++;
     } else {
       this.state = 'loading';
     }
     this.load();
   }
 
+  private selectMode(mode: string): void {
+    if (mode === 'month') {
+      this.select(currentMonth());
+      return;
+    }
+    this.mode = mode;
+    this.cock = Repo.peekCockpit(mode);
+    this.state = this.cock !== null ? 'ready' : 'loading';
+    this.rev++;
+    this.load();
+  }
+
   private async load(): Promise<void> {
     const month = this.month;
+    const mode = this.mode;
+    const args = this.cockpitArgs();
     try {
-      const result = await Repo.performance(month === currentMonth() ? '' : month);
-      if (month === this.month) {
+      if (mode === 'month') {
+        const result = await Repo.performance(month === currentMonth() ? '' : month);
+        if (month !== this.month || mode !== this.mode) return;
         this.data = result;
         this.state = 'ready';
+        this.rev++;
+      }
+      const cockpit = await Repo.cockpit(args[0], args[1], args[2]);
+      if (month === this.month && mode === this.mode) {
+        this.cock = cockpit;
+        this.state = 'ready';
+        this.rev++;
       }
     } catch (e) {
       this.error = Api.message(e);
@@ -330,6 +384,154 @@ export struct AnalyticsPage {
   }
 
   @Builder
+  modeBar() {
+    Row({ space: 2 }) {
+      ForEach(MODES, (m: string, index: number) => {
+        Text(MODE_NAMES[index])
+          .fontSize(14)
+          .fontWeight(this.mode === m ? FontWeight.Medium : FontWeight.Normal)
+          .fontColor(this.mode === m ? $r('app.color.ink') : $r('app.color.ink2'))
+          .textAlign(TextAlign.Center)
+          .height(36)
+          .layoutWeight(1)
+          .borderRadius(9)
+          .backgroundColor(this.mode === m ? $r('app.color.surface') : Color.Transparent)
+          .onClick(() => this.selectMode(m))
+      }, (m: string): string => m)
+    }
+    .width('100%')
+    .padding(3)
+    .borderRadius(12)
+    .backgroundColor($r('app.color.surface2'))
+  }
+
+  @Builder
+  trendCard(c: Cockpit) {
+    Column({ space: 10 }) {
+      Row() {
+        Text(c.trend.view === 'month' ? '成交额 · 按月' : c.trend.view === 'week' ? '成交额 · 按周' : '成交额 · 按天')
+          .fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink')).layoutWeight(1)
+        Text(`订单 ${c.kpis.periodOrders} 单`).fontSize(13).fontColor($r('app.color.ink3'))
+      }
+      .width('100%')
+      BarChart({
+        values: c.trend.points.map((pt: TrendPoint): number => pt.revenue),
+        startLabel: c.trend.points.length > 0 ? c.trend.points[0].label : '',
+        endLabel: c.trend.points.length > 0 ? c.trend.points[c.trend.points.length - 1].label : '',
+        chartHeight: 120
+      })
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(16)
+    .backgroundColor($r('app.color.surface'))
+  }
+
+  @Builder
+  channelsCard(c: Cockpit) {
+    Column() {
+      Row() {
+        Text('询盘来源').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink')).layoutWeight(1)
+        Text('客户 · 成交额').fontSize(12).fontColor($r('app.color.ink3'))
+      }
+      .width('100%')
+      .padding({ bottom: 6 })
+      ForEach(c.channels.filter((ch: CockpitChannel): boolean => ch.customers > 0 || ch.revenue > 0), (ch: CockpitChannel) => {
+        Column({ space: 4 }) {
+          Row() {
+            Text(ch.name).fontSize(14).fontColor($r('app.color.ink')).layoutWeight(1)
+            Text(`${ch.customers} 位`).fontSize(13).fontColor($r('app.color.ink2')).width(60).textAlign(TextAlign.End)
+            Text(Fmt.money(ch.revenue, c.currency)).fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink'))
+              .width(110).textAlign(TextAlign.End).maxLines(1).minFontSize(10).maxFontSize(14)
+          }
+          .width('100%')
+          Stack({ alignContent: Alignment.Start }) {
+            Row().width('100%').height(6).borderRadius(3).backgroundColor($r('app.color.surface2'))
+            Row().width(`${c.kpis.newCustomers > 0 ? Math.min(100, ch.customers / c.kpis.newCustomers * 100) : 0}%`)
+              .height(6).borderRadius(3).backgroundColor($r('app.color.seq2'))
+          }
+          .width('100%')
+        }
+        .width('100%')
+        .padding({ top: 8, bottom: 8 })
+      }, (ch: CockpitChannel): string => ch.id)
+      if (c.channels.filter((ch: CockpitChannel): boolean => ch.customers > 0 || ch.revenue > 0).length === 0) {
+        Text('这段时间没有新询盘').fontSize(13).fontColor($r('app.color.ink3')).padding({ top: 8 })
+      }
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(16)
+    .backgroundColor($r('app.color.surface'))
+  }
+
+  @Builder
+  periodContent(c: Cockpit) {
+    Column({ space: 12 }) {
+      Column({ space: 10 }) {
+        Text(`${c.selected.label} · ${c.scope === '团队' ? '全公司' : '我的'}销售额`).fontSize(13).fontColor($r('app.color.ink3'))
+        Text(Fmt.money(c.kpis.periodRevenue, c.currency)).fontSize(30).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+        if (c.goal.periodGoal !== null && (c.goal.periodGoal as number) > 0) {
+          Stack({ alignContent: Alignment.Start }) {
+            Row().width('100%').height(10).borderRadius(5).backgroundColor($r('app.color.surface2'))
+            Row().width(`${Math.min(100, c.kpis.periodRevenue / (c.goal.periodGoal as number) * 100)}%`).height(10).borderRadius(5)
+              .backgroundColor($r('app.color.brand'))
+          }
+          .width('100%')
+          Text(`目标 ${Fmt.money(c.goal.periodGoal as number, c.currency)} · 完成 ${percent(c.kpis.periodRevenue, c.goal.periodGoal as number)}`)
+            .fontSize(13).fontColor($r('app.color.ink2'))
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding(16)
+      .borderRadius(16)
+      .backgroundColor($r('app.color.surface'))
+
+      Row({ space: 10 }) {
+        this.kpi('订单', `${c.kpis.periodOrders}`, '')
+        this.kpi('新客户', `${c.kpis.newCustomers}`, '')
+        this.kpi(c.kpis.grossProfit !== null ? '毛利' : '报价金额',
+          Fmt.money(c.kpis.grossProfit !== null ? c.kpis.grossProfit as number : c.kpis.quotedAmount, c.currency), '')
+      }
+      .width('100%')
+
+      if (c.trend.points.length > 1) {
+        this.trendCard(c)
+      }
+
+      Column({ space: 10 }) {
+        Text('客户转化').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink')).width('100%')
+        ForEach(c.funnel, (f: FunnelStage, index: number) => {
+          Column({ space: 4 }) {
+            Row() {
+              Text(f.label).fontSize(13).fontColor($r('app.color.ink')).layoutWeight(1)
+              Text(`${f.count}`).fontSize(15).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+              Text(f.conversion !== null ? `${f.conversion}%` : '').fontSize(12).fontColor($r('app.color.ink3')).width(52).textAlign(TextAlign.End)
+            }
+            .width('100%')
+            Stack({ alignContent: Alignment.Start }) {
+              Row().width('100%').height(8).borderRadius(4).backgroundColor($r('app.color.surface2'))
+              Row().width(`${c.funnel[0].count > 0 ? Math.max(2, f.count / c.funnel[0].count * 100) : 0}%`).height(8).borderRadius(4)
+                .backgroundColor(index === c.funnel.length - 1 ? $r('app.color.brand') : $r('app.color.seq2'))
+            }
+            .width('100%')
+          }
+          .width('100%')
+        }, (f: FunnelStage): string => f.label)
+      }
+      .width('100%')
+      .padding(16)
+      .borderRadius(16)
+      .backgroundColor($r('app.color.surface'))
+
+      this.channelsCard(c)
+      Text('与电脑端「驾驶舱」同一口径；渠道按客户来源归类。').fontSize(12).fontColor($r('app.color.ink3'))
+    }
+    .width('100%')
+  }
+
+  @Builder
   content(p: Performance) {
     Column({ space: 12 }) {
       this.revenueCard(p)
@@ -340,7 +542,13 @@ export struct AnalyticsPage {
       }
       .width('100%')
       this.funnel(p)
+      if (this.cock !== null && (this.cock as Cockpit).trend.points.length > 1) {
+        this.trendCard(this.cock as Cockpit)
+      }
       this.speed(p)
+      if (this.cock !== null) {
+        this.channelsCard(this.cock as Cockpit)
+      }
       if (Session.isAdmin() && this.team(p).length > 0) {
         this.teamTable(p)
       }
@@ -353,10 +561,13 @@ export struct AnalyticsPage {
   build() {
     NavDestination() {
       Column({ space: 12 }) {
-        this.monthBar()
+        this.modeBar()
+        if (this.mode === 'month') {
+          this.monthBar()
+        }
         if (this.state === 'loading') {
           LoadingProgress().width(36).height(36).color($r('app.color.brand_ink')).margin({ top: 40 })
-        } else if (this.state === 'error' || this.data === null) {
+        } else if (this.state === 'error' || (this.mode === 'month' ? this.data === null : this.cock === null)) {
           Text(this.error).fontSize(14).fontColor($r('app.color.danger')).lineHeight(21)
           Button('重新加载')
             .type(ButtonType.Normal).height(44).borderRadius(12)
@@ -369,7 +580,13 @@ export struct AnalyticsPage {
           Refresh({ refreshing: $$this.refreshing }) {
             Scroll() {
               Column() {
-                this.content(this.data as Performance)
+                ForEach([this.rev], (r: number) => {
+                  if (this.mode === 'month' && this.data !== null) {
+                    this.content(this.data as Performance)
+                  } else if (this.cock !== null) {
+                    this.periodContent(this.cock as Cockpit)
+                  }
+                }, (r: number): string => `${r}`)
               }
               .padding({ bottom: 24 })
             }

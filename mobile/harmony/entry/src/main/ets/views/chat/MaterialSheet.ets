@@ -33,6 +33,7 @@ export struct MaterialSheet {
   @State segment: number = 0;
   @State keyword: string = '';
   @State selected: string[] = [];
+  @State rev: number = 0;
   private searchTimer: number = -1;
 
   aboutToAppear(): void {
@@ -42,6 +43,7 @@ export struct MaterialSheet {
   private async load(): Promise<void> {
     try {
       this.data = await Repo.materials(this.customerId, this.keyword.trim());
+      this.rev++;
       this.state = 'ready';
     } catch (e) {
       this.error = Api.message(e);
@@ -85,10 +87,11 @@ export struct MaterialSheet {
     this.onSend(items);
   }
 
+  /** Reads the selection itself (a value passed in would not follow taps). */
   @Builder
-  check(picked: boolean) {
+  check(key: string) {
     Row() {
-      if (picked) {
+      if (this.isPicked(key)) {
         LvIcon({ name: 'check', iconColor: Color.White, iconSize: 14 })
       }
     }
@@ -96,8 +99,8 @@ export struct MaterialSheet {
     .height(22)
     .borderRadius(11)
     .justifyContent(FlexAlign.Center)
-    .backgroundColor(picked ? $r('app.color.brand') : $r('app.color.surface'))
-    .border({ width: picked ? 0 : 1.5, color: $r('app.color.ink3') })
+    .backgroundColor(this.isPicked(key) ? $r('app.color.brand') : $r('app.color.surface'))
+    .border({ width: this.isPicked(key) ? 0 : 1.5, color: $r('app.color.ink3') })
   }
 
   @Builder
@@ -118,7 +121,7 @@ export struct MaterialSheet {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
-      this.check(this.isPicked(key))
+      this.check(key)
     }
     .width('100%')
     .padding(12)
@@ -138,7 +141,7 @@ export struct MaterialSheet {
             Stack({ alignContent: Alignment.TopEnd }) {
               AuthImage({ src: img.src, maxSide: 320, boxWidth: 96, boxHeight: 96 })
               Row() {
-                this.check(this.isPicked(`PRODUCT_IMAGE:${img.id}`))
+                this.check(`PRODUCT_IMAGE:${img.id}`)
               }
               .padding({ top: 6, right: 6 })
             }
@@ -250,7 +253,10 @@ export struct MaterialSheet {
         Text(this.error).fontSize(14).fontColor($r('app.color.danger')).padding(16)
         Blank()
       } else {
-        this.listView(this.data as MaterialPicker)
+        // One item per result set: a new search rebuilds the list with the new data.
+        ForEach([this.rev], (r: number) => {
+          this.listView(this.data as MaterialPicker)
+        }, (r: number): string => `${r}`)
       }
 
       Row({ space: 10 }) {

@@ -5,11 +5,13 @@ import { Inbox } from '../api/Inbox';
 import { Repo } from '../api/Repo';
 import { Session } from '../api/Session';
 import {
-  CompanyTotals, NotificationFeed, OrderListPage, OrderReminders, Performance, PerformanceRow, QueueCount, SalesQueue,
+  Cockpit, CockpitSuggestion, QueueCustomer, TrendPoint, CompanyTotals, NotificationFeed, OrderListPage, OrderReminders, Performance, PerformanceRow, QueueCount, SalesQueue,
   TaskListPage, TaskRow
 } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
-import { SectionHead, StatTile, StateView } from '../components/Ui';
+import { Avatar, SectionHead, StatTile, StateView } from '../components/Ui';
+import { BarChart } from '../components/BarChart';
+import { TaskEditor } from './task/TaskEditor';
 
 /** One section of the page: a failure is noted and the other sections still load. */
 async function attempt<T>(name: string, call: Promise<T>, failures: string[]): Promise<T | null> {
@@ -46,6 +48,11 @@ export struct HomeTab {
   /** Sections that did not load this time; the rest of the page still shows. */
   @State warning: string = '';
   @State performance: Performance | null = null;
+  @State cockpit: Cockpit | null = null;
+  @State waitingList: QueueCustomer[] = [];
+  /** Bumped on every new snapshot: the page body is rebuilt with it (builder parameters do not refresh). */
+  @State rev: number = 0;
+  @State showTask: boolean = false;
   @StorageProp('dataChanged') @Watch('onDataChanged') dataChanged: number = 0;
 
   onDataChanged(): void {
@@ -60,11 +67,15 @@ export struct HomeTab {
   /** Last known numbers, so the page is never blank while the network answers. */
   private showCached(): void {
     const feed = Repo.peekNotifications();
-    const queue = Repo.peekQueue('today');
+    const queue = Repo.peekQueue('waiting');
     const orders = Repo.peekOrders('ALL');
     const today = Repo.peekTasks('TODAY', 'OPEN');
     const late = Repo.peekTasks('OVERDUE', '');
     const performance = Repo.peekPerformance();
+    const cockpit = Repo.peekCockpit('month');
+    if (cockpit !== null) {
+      this.cockpit = cockpit;
+    }
     if (feed === null && queue === null && orders === null && today === null && late === null && performance === null) {
       return;
     }
@@ -81,6 +92,7 @@ export struct HomeTab {
     }
     if (queue !== null) {
       this.counts = queue.counts;
+      this.waitingList = queue.customers.slice(0, 3);
     }
     if (orders !== null) {
       this.reminders = orders.reminders;
@@ -106,13 +118,16 @@ export struct HomeTab {
       });
       this.tasks = merged;
     }
+    this.rev++;
   }
 
   private async load(): Promise<void> {
     const failures: string[] = [];
     const performanceCall = attempt<Performance>('本月业绩', Repo.performance(), failures);
     const feedCall = attempt<NotificationFeed>('提醒', Repo.notifications(), failures);
-    const queueCall = attempt<SalesQueue>('跟进队列', Repo.queue('today', '', 1), failures);
+    // The 等你回复 queue answers with every queue's count too, so one call fills both the numbers and the list.
+    const queueCall = attempt<SalesQueue>('跟进队列', Repo.queue('waiting', '', 1), failures);
+    const cockpitCall = attempt<Cockpit>('经营提醒', Repo.cockpit('month'), failures);
     const ordersCall = attempt<OrderListPage>('订单', Repo.orders('ALL', '', 1), failures);
     const todayCall = attempt<TaskListPage>('今日待办', Repo.todayTasks(), failures);
     const lateCall = attempt<TaskListPage>('逾期待办', Repo.overdueTasks(), failures);
@@ -122,6 +137,10 @@ export struct HomeTab {
     const today = await todayCall;
     const late = await lateCall;
     const performance = await performanceCall;
+    const cockpit = await cockpitCall;
+    if (cockpit !== null) {
+      this.cockpit = cockpit;
+    }
     try {
       this.apply(feed, queue, orders, today, late, performance);
     } catch (e) {
@@ -451,6 +470,165 @@ export struct HomeTab {
     .backgroundColor($r('app.color.surface'))
   }
 
+  /** 重要提醒 beyond the lead alerts: logistics exceptions and the cockpit's warnings (overdue tasks, stalled quotes). */
+  private important(): CockpitSuggestion[] {
+    const list: CockpitSuggestion[] = [];
+    const r = this.reminders;
+    if (r !== null && r.shippingException > 0) {
+      const s: CockpitSuggestion = { kind: 'warning', title: `物流异常 ${r.shippingException} 单`, detail: '预计到货已过还没签收，联系货代确认。', href: 'orders' };
+      list.push(s);
+    }
+    const c = this.cockpit;
+    if (c !== null) {
+      c.suggestions.forEach((item: CockpitSuggestion) => {
+        if (item.kind === 'warning') {
+          list.push(item);
+        }
+      });
+    }
+    return list.slice(0, 3);
+  }
+
+  private openSuggestion(item: CockpitSuggestion): void {
+    if (item.href === 'orders') {
+      AppStorage.setOrCreate<number>(StoreKeys.CURRENT_TAB, 2);
+    } else if (item.href.startsWith('/tasks')) {
+      this.pathStack.pushPathByName(Routes.TASKS, new RouteParam(''));
+    } else if (item.href.startsWith('/sales') || item.href.startsWith('/crm')) {
+      this.openQueue('today');
+    } else {
+      this.pathStack.pushPathByName(Routes.ANALYTICS, new RouteParam(''));
+    }
+  }
+
+  private trendValues(): number[] {
+    const c = this.cockpit;
+    return c === null ? [] : c.trend.points.map((p: TrendPoint): number => p.revenue);
+  }
+
+  private trendTotal(): number {
+    const c = this.cockpit;
+    return c === null ? 0 : c.kpis.periodRevenue;
+  }
+
+  @Builder
+  importantList() {
+    Column() {
+      ForEach(this.important(), (item: CockpitSuggestion, index: number) => {
+        Row({ space: 12 }) {
+          Row() {
+            LvIcon({ name: item.href === 'orders' ? 'truck' : 'triangle-alert', iconColor: $r('app.color.warning'), iconSize: 18 })
+          }
+          .width(34).height(34).borderRadius(10).justifyContent(FlexAlign.Center).backgroundColor($r('app.color.warning_bg'))
+          Column({ space: 2 }) {
+            Text(item.title).fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink'))
+            Text(item.detail).fontSize(12).fontColor($r('app.color.ink3')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          LvIcon({ name: 'chevron-right', iconColor: $r('app.color.ink3'), iconSize: 18 })
+        }
+        .width('100%')
+        .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+        .border({ width: { top: index === 0 ? 0 : 0.5 }, color: $r('app.color.line_soft') })
+        .onClick(() => this.openSuggestion(item))
+      }, (item: CockpitSuggestion): string => item.title)
+    }
+    .width('100%')
+    .borderRadius(16)
+    .backgroundColor($r('app.color.surface'))
+  }
+
+  @Builder
+  quickAction(icon: string, title: string, action: () => void) {
+    Column({ space: 6 }) {
+      Row() {
+        LvIcon({ name: icon, iconColor: $r('app.color.brand_ink'), iconSize: 21 })
+      }
+      .width(46).height(46).borderRadius(14).justifyContent(FlexAlign.Center).backgroundColor($r('app.color.surface'))
+      Text(title).fontSize(12).fontColor($r('app.color.ink2'))
+    }
+    .layoutWeight(1)
+    .onClick(() => action())
+  }
+
+  @Builder
+  quickActions() {
+    Row() {
+      this.quickAction('user-plus', '新建客户', () => {
+        this.pathStack.pushPathByName(Routes.NEW_CUSTOMER, new RouteParam(''));
+      })
+      this.quickAction('list-todo', '新建任务', () => {
+        this.showTask = true;
+      })
+      this.quickAction('pencil', '写跟进', () => this.openQueue('today'))
+      this.quickAction('message-circle', 'WhatsApp', () => {
+        AppStorage.setOrCreate<number>(StoreKeys.CURRENT_TAB, 3);
+      })
+    }
+    .width('100%')
+  }
+
+  @Builder
+  waitingCard() {
+    Column({ space: 8 }) {
+      SectionHead({ title: '客户在等你回复', sub: `${this.count('waiting')} 位`, link: '全部', onLink: () => this.openQueue('waiting') })
+      Column() {
+        ForEach(this.waitingList, (c: QueueCustomer, index: number) => {
+          Row({ space: 12 }) {
+            Avatar({ name: c.name, grade: c.leadGrade, avatarSize: 40 })
+            Column({ space: 2 }) {
+              Text(c.name).fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink'))
+                .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text(c.reasons.length > 0 ? c.reasons.join(' · ') : `${c.country} · 最近来信 ${Fmt.ago(c.lastInboundAt)}`)
+                .fontSize(12).fontColor($r('app.color.ink3')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Text('回复').fontSize(13).fontColor($r('app.color.on_brand')).backgroundColor($r('app.color.brand'))
+              .borderRadius(14).height(28).padding({ left: 12, right: 12 })
+          }
+          .width('100%')
+          .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+          .border({ width: { top: index === 0 ? 0 : 0.5 }, color: $r('app.color.line_soft') })
+          .onClick(() => {
+            this.pathStack.pushPathByName(Routes.CHAT, new RouteParam(c.id));
+          })
+        }, (c: QueueCustomer): string => c.id)
+      }
+      .width('100%')
+      .borderRadius(16)
+      .backgroundColor($r('app.color.surface'))
+    }
+  }
+
+  @Builder
+  trendCard() {
+    Column({ space: 10 }) {
+      Row() {
+        Text(Session.isAdmin() ? '本月成交趋势（全公司）' : '本月我的成交趋势').fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink')).layoutWeight(1)
+        Text(Fmt.money(this.trendTotal(), this.cockpit !== null ? (this.cockpit as Cockpit).currency : 'CNY'))
+          .fontSize(15).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+      }
+      .width('100%')
+      BarChart({
+        values: this.trendValues(),
+        startLabel: this.cockpit !== null && (this.cockpit as Cockpit).trend.points.length > 0 ? (this.cockpit as Cockpit).trend.points[0].label : '',
+        endLabel: this.cockpit !== null && (this.cockpit as Cockpit).trend.points.length > 0
+          ? (this.cockpit as Cockpit).trend.points[(this.cockpit as Cockpit).trend.points.length - 1].label : '',
+        chartHeight: 90,
+        highlightLast: true
+      })
+    }
+    .width('100%')
+    .padding(16)
+    .borderRadius(16)
+    .backgroundColor($r('app.color.surface'))
+    .onClick(() => {
+      this.pathStack.pushPathByName(Routes.ANALYTICS, new RouteParam(''));
+    })
+  }
+
   @Builder
   content() {
     Column({ space: 20 }) {
@@ -464,7 +642,13 @@ export struct HomeTab {
         this.alertCard(`${this.feed.counts.pendingFirstContact} 位新客户待首次联系`, this.feed.counts.overdueFirstContact > 0 ? `其中 ${this.feed.counts.overdueFirstContact} 位已超时` : '请尽快联系', 'new')
       }
 
+      if (this.important().length > 0) {
+        this.importantList()
+      }
+
       this.hero()
+
+      this.quickActions()
 
       Column({ space: 10 }) {
         Row({ space: 10 }) {
@@ -480,6 +664,10 @@ export struct HomeTab {
           })
           StatTile({ label: '高意向', icon: 'sparkles', value: `${this.count('high')}`, foot: 'AI 评分 80 以上', onTap: () => this.openQueue('high') })
         }
+      }
+
+      if (this.waitingList.length > 0) {
+        this.waitingCard()
       }
 
       Column({ space: 8 }) {
@@ -504,6 +692,10 @@ export struct HomeTab {
         }
       }
 
+      if (this.cockpit !== null && (this.cockpit as Cockpit).trend.points.length > 1) {
+        this.trendCard()
+      }
+
       if (this.performance !== null) {
         this.performanceCard(this.performance as Performance)
       }
@@ -525,7 +717,10 @@ export struct HomeTab {
           .padding({ left: 16, right: 16, top: 16 })
 
           if (this.state === 'ready') {
-            this.content()
+            // One item per data snapshot: refreshed numbers rebuild the cards (builder parameters do not refresh).
+            ForEach([this.rev], (r: number) => {
+              this.content()
+            }, (r: number): string => `${r}`)
           } else if (this.state === 'error') {
             StateView({ kind: 'error', message: this.error, actionText: '重新加载', onAction: () => {
               this.state = 'loading';
@@ -545,5 +740,20 @@ export struct HomeTab {
       this.load();
     })
     .backgroundColor($r('app.color.bg'))
+    .bindSheet($$this.showTask, this.taskSheet(), { detents: [SheetSize.LARGE], dragBar: true })
+  }
+
+  @Builder
+  taskSheet() {
+    TaskEditor({
+      task: null,
+      onDone: () => {
+        this.showTask = false;
+        this.load();
+      },
+      onClose: () => {
+        this.showTask = false;
+      }
+    })
   }
 }

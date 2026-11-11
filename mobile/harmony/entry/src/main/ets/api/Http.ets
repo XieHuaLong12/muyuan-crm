@@ -207,6 +207,14 @@ export class Api {
     return Api.request<T>(http.RequestMethod.POST, path, body, undefined, readTimeout);
   }
 
+  static put<T>(path: string, body: Object): Promise<T> {
+    return Api.request<T>(http.RequestMethod.PUT, path, body);
+  }
+
+  static del<T>(path: string): Promise<T> {
+    return Api.request<T>(http.RequestMethod.DELETE, path);
+  }
+
   private static authHeader(): Record<string, string> {
     const header: Record<string, string> = { 'Accept': 'application/json', 'X-Client': AppConfig.CLIENT };
     const token = Session.cookieValue();

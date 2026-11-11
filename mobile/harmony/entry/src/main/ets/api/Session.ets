@@ -39,6 +39,7 @@ export class Session {
       AppStorage.setOrCreate<string>(StoreKeys.USER_NAME, (await Session.prefs.get('userName', '')) as string);
       AppStorage.setOrCreate<string>(StoreKeys.USER_ROLE, (await Session.prefs.get('userRole', '')) as string);
       AppStorage.setOrCreate<string>(StoreKeys.USER_EMAIL, (await Session.prefs.get('userEmail', '')) as string);
+      AppStorage.setOrCreate<string>(StoreKeys.USER_ID, (await Session.prefs.get('userId', '')) as string);
     } catch (e) {
       hilog.error(0x0000, 'LVANJUBOS', 'preferences unavailable: %{public}s', JSON.stringify(e));
     }
@@ -89,6 +90,20 @@ export class Session {
     }
   }
 
+  /** The signed-in user's id (owner of a customer created on this phone). */
+  static async rememberUserId(id: string): Promise<void> {
+    AppStorage.setOrCreate<string>(StoreKeys.USER_ID, id);
+    if (Session.prefs) {
+      await Session.prefs.put('userId', id);
+      await Session.prefs.flush();
+    }
+  }
+
+  static userId(): string {
+    const id = AppStorage.get<string>(StoreKeys.USER_ID);
+    return id === undefined ? '' : id;
+  }
+
   static isAdmin(): boolean {
     return AppStorage.get<string>(StoreKeys.USER_ROLE) === 'ADMIN';
   }
@@ -99,6 +114,7 @@ export class Session {
     Cache.clear();
     await Session.removeToken();
     await Session.rememberUser('', '', '');
+    await Session.rememberUserId('');
     AppStorage.setOrCreate<number>(StoreKeys.BADGE_CUSTOMERS, 0);
     AppStorage.setOrCreate<number>(StoreKeys.BADGE_INBOX, 0);
     AppStorage.setOrCreate<boolean>(StoreKeys.LOGGED_IN, false);

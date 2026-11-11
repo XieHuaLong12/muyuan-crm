@@ -1,6 +1,6 @@
 import { RouteParam, Routes } from '../common/Config';
 import { Fmt } from '../common/Format';
-import { STAGES, label, stageTone } from '../common/Labels';
+import { SOURCES, STAGES, label, stageTone } from '../common/Labels';
 import { Api } from '../api/Http';
 import { Repo } from '../api/Repo';
 import { Session } from '../api/Session';
@@ -35,6 +35,27 @@ class CustomerItem {
   dueSoon: boolean = false;
   firstContact: boolean = false;
 }
+
+class Option {
+  key: string;
+  title: string;
+
+  constructor(key: string, title: string) {
+    this.key = key;
+    this.title = title;
+  }
+}
+
+const STAGE_KEYS: string[] = ['NEW', 'CONTACTED', 'REPLIED', 'CATALOG_SENT', 'NEEDS_CONFIRMED', 'PRODUCT_CONFIRMED', 'QUOTED', 'FOLLOW_UP',
+  'ORDER', 'WON', 'PAUSED', 'LOST', 'INVALID'];
+const SOURCE_KEYS: string[] = ['FACEBOOK', 'META_CLICK_TO_WHATSAPP', 'INSTAGRAM', 'TIKTOK', 'WHATSAPP', 'WEBSITE', 'ALIBABA', 'EXHIBITION',
+  'REFERRAL', 'OUTBOUND', 'OTHER'];
+const GRADES: Option[] = [new Option('A', 'A 级'), new Option('B', 'B 级'), new Option('C', 'C 级'), new Option('D', 'D 级'), new Option('none', '未评级')];
+/** GET /api/customers sort keys (lib/customer-columns.ts) with the direction that reads naturally. */
+const SORTS: Option[] = [
+  new Option('priority', '智能排序'), new Option('nextFollowUpAt', '下次跟进最近'), new Option('inquiryAt', '最新进线'),
+  new Option('lastWhatsAppAt', '最近 WhatsApp'), new Option('aiScore', 'AI 评分最高')
+];
 
 /** Queues defined once on the server (services/bos-sales-service.ts queueFilters); 待分配 is the assignment pool. */
 const QUEUES: QueueDef[] = [
@@ -93,6 +114,16 @@ export struct CustomersTab {
   @State loadingMore: boolean = false;
   @State poolCount: number = 0;
   @StorageProp('dataChanged') @Watch('onDataChanged') dataChanged: number = 0;
+  // 筛选与排序 (GET /api/customers): applied values, and the draft edited in the sheet.
+  @State fStage: string = '';
+  @State fSource: string = '';
+  @State fGrade: string = '';
+  @State fSort: string = 'priority';
+  @State dStage: string = '';
+  @State dSource: string = '';
+  @State dGrade: string = '';
+  @State dSort: string = 'priority';
+  @State showFilter: boolean = false;
   private searchTimer: number = -1;
 
   /** A follow-up, stage or task changed somewhere: the queues may have moved. */
@@ -126,7 +157,7 @@ export struct CustomersTab {
 
   /** The last list of this queue, shown at once while the fresh one loads. */
   private showCached(): void {
-    if (this.keyword.length > 0) {
+    if (this.keyword.length > 0 || this.filtered()) {
       return;
     }
     if (this.queue === 'pool') {
@@ -167,7 +198,18 @@ export struct CustomersTab {
     const page = reset ? 1 : this.page + 1;
     const queue = this.queue;
     try {
-      if (queue === 'pool') {
+      if (this.filtered()) {
+        const result = await Repo.customers(this.filterQuery(), page);
+        if (!this.filtered()) return;
+        const rows = result.rows.map(fromList);
+        if (reset) {
+          this.source.reset(rows);
+        } else {
+          this.source.append(rows);
+        }
+        this.count = this.source.totalCount();
+        this.total = result.total;
+      } else if (queue === 'pool') {
         const result = await Repo.pool(this.keyword);
         if (queue !== this.queue) return;
         this.applyPool(result);
@@ -197,8 +239,145 @@ export struct CustomersTab {
     return found === undefined ? -1 : found.count;
   }
 
+  private filtered(): boolean {
+    return this.fStage.length > 0 || this.fSource.length > 0 || this.fGrade.length > 0 || this.fSort !== 'priority';
+  }
+
+  private filterQuery(): Record<string, string> {
+    const query: Record<string, string> = {
+      'group': 'all', 'q': this.keyword, 'stage': this.fStage, 'source': this.fSource, 'grade': this.fGrade, 'sort': this.fSort,
+      'dir': this.fSort === 'priority' || this.fSort === 'nextFollowUpAt' ? 'asc' : 'desc'
+    };
+    return query;
+  }
+
+  private filterSummary(): string {
+    const parts: string[] = [];
+    if (this.fStage.length > 0) parts.push(label(STAGES, this.fStage));
+    if (this.fSource.length > 0) parts.push(label(SOURCES, this.fSource));
+    if (this.fGrade.length > 0) parts.push(this.fGrade === 'none' ? '未评级' : `${this.fGrade} 级`);
+    const sort = SORTS.find((o: Option): boolean => o.key === this.fSort);
+    if (this.fSort !== 'priority' && sort !== undefined) parts.push(sort.title);
+    return parts.join(' · ');
+  }
+
+  private openFilter(): void {
+    this.dStage = this.fStage;
+    this.dSource = this.fSource;
+    this.dGrade = this.fGrade;
+    this.dSort = this.fSort;
+    this.showFilter = true;
+  }
+
+  private applyFilter(): void {
+    this.fStage = this.dStage;
+    this.fSource = this.dSource;
+    this.fGrade = this.dGrade;
+    this.fSort = this.dSort;
+    this.showFilter = false;
+    this.state = 'loading';
+    this.load(true);
+  }
+
+  private clearFilter(): void {
+    this.fStage = '';
+    this.fSource = '';
+    this.fGrade = '';
+    this.fSort = 'priority';
+    this.state = 'loading';
+    this.showCached();
+    this.load(true);
+  }
+
+  private draftOf(which: string): string {
+    if (which === 'stage') return this.dStage;
+    if (which === 'source') return this.dSource;
+    if (which === 'grade') return this.dGrade;
+    return this.dSort;
+  }
+
+  private setDraft(which: string, key: string): void {
+    const value = this.draftOf(which) === key && which !== 'sort' ? '' : key;
+    if (which === 'stage') this.dStage = value;
+    else if (which === 'source') this.dSource = value;
+    else if (which === 'grade') this.dGrade = value;
+    else this.dSort = value;
+  }
+
+  @Builder
+  optionChips(which: string, options: Option[]) {
+    Flex({ wrap: FlexWrap.Wrap }) {
+      ForEach(options, (o: Option) => {
+        Text(o.title)
+          .fontSize(14)
+          .fontColor(this.draftOf(which) === o.key ? $r('app.color.on_brand') : $r('app.color.ink2'))
+          .backgroundColor(this.draftOf(which) === o.key ? $r('app.color.brand') : $r('app.color.surface2'))
+          .borderRadius(17)
+          .height(34)
+          .padding({ left: 12, right: 12 })
+          .margin({ right: 8, bottom: 8 })
+          .onClick(() => this.setDraft(which, o.key))
+      }, (o: Option): string => o.key)
+    }
+  }
+
+  private stageOptions(): Option[] {
+    return STAGE_KEYS.map((k: string): Option => new Option(k, label(STAGES, k)));
+  }
+
+  private sourceOptions(): Option[] {
+    return SOURCE_KEYS.map((k: string): Option => new Option(k, label(SOURCES, k)));
+  }
+
+  @Builder
+  filterSheet() {
+    Column() {
+      Scroll() {
+        Column({ space: 12 }) {
+          Text('筛选与排序').fontSize(18).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+          Text('排序').fontSize(14).fontColor($r('app.color.ink2'))
+          this.optionChips('sort', SORTS)
+          Text('阶段').fontSize(14).fontColor($r('app.color.ink2'))
+          this.optionChips('stage', this.stageOptions())
+          Text('等级').fontSize(14).fontColor($r('app.color.ink2'))
+          this.optionChips('grade', GRADES)
+          Text('来源').fontSize(14).fontColor($r('app.color.ink2'))
+          this.optionChips('source', this.sourceOptions())
+        }
+        .alignItems(HorizontalAlign.Start)
+        .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+      }
+      .scrollBar(BarState.Off)
+      .align(Alignment.Top)
+      .layoutWeight(1)
+      Row({ space: 10 }) {
+        Button('重置')
+          .type(ButtonType.Normal).height(46).borderRadius(12).layoutWeight(1)
+          .fontColor($r('app.color.ink')).backgroundColor($r('app.color.surface2'))
+          .onClick(() => {
+            this.dStage = '';
+            this.dSource = '';
+            this.dGrade = '';
+            this.dSort = 'priority';
+          })
+        Button('查看结果')
+          .type(ButtonType.Normal).height(46).borderRadius(12).layoutWeight(2)
+          .fontColor($r('app.color.on_brand')).backgroundColor($r('app.color.brand'))
+          .onClick(() => this.applyFilter())
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
   private select(key: string): void {
-    if (key === this.queue) return;
+    if (key === this.queue && !this.filtered()) return;
+    this.fStage = '';
+    this.fSource = '';
+    this.fGrade = '';
+    this.fSort = 'priority';
     this.queue = key;
     this.state = 'loading';
     this.showCached();
@@ -227,7 +406,7 @@ export struct CustomersTab {
       Text(q.title)
         .fontSize(14)
         .fontWeight(FontWeight.Medium)
-        .fontColor(this.queue === q.key ? $r('app.color.on_brand') : $r('app.color.ink2'))
+        .fontColor(this.queue === q.key && !this.filtered() ? $r('app.color.on_brand') : $r('app.color.ink2'))
       if (this.countOf(q.key) >= 0 && q.key !== 'recent') {
         Text(`${this.countOf(q.key)}`)
           .fontSize(12)
@@ -237,7 +416,7 @@ export struct CustomersTab {
     .height(36)
     .padding({ left: 14, right: 14 })
     .borderRadius(18)
-    .backgroundColor(this.queue === q.key ? $r('app.color.brand') : $r('app.color.surface'))
+    .backgroundColor(this.queue === q.key && !this.filtered() ? $r('app.color.brand') : $r('app.color.surface'))
     .border({ width: this.queue === q.key ? 0 : 1, color: $r('app.color.line') })
     .onClick(() => this.select(q.key))
   }
@@ -296,11 +475,29 @@ export struct CustomersTab {
   build() {
     Column() {
       Column({ space: 10 }) {
-        Column({ space: 2 }) {
-          Text('客户').fontSize(24).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
-          Text(Session.isAdmin() ? '全公司客户 · 队列与电脑端「跟进队列」一致' : '我负责的客户').fontSize(13).fontColor($r('app.color.ink3'))
+        Row({ space: 8 }) {
+          Column({ space: 2 }) {
+            Text('客户').fontSize(24).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+            Text(Session.isAdmin() ? '全公司客户 · 队列与电脑端「跟进队列」一致' : '我负责的客户').fontSize(13).fontColor($r('app.color.ink3'))
+              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Row() {
+            LvIcon({ name: 'list-filter', iconColor: this.filtered() ? $r('app.color.on_brand') : $r('app.color.ink'), iconSize: 20 })
+          }
+          .width(40).height(40).borderRadius(20).justifyContent(FlexAlign.Center)
+          .backgroundColor(this.filtered() ? $r('app.color.brand') : $r('app.color.surface'))
+          .onClick(() => this.openFilter())
+          Row() {
+            LvIcon({ name: 'plus', iconColor: $r('app.color.on_brand'), iconSize: 22 })
+          }
+          .width(40).height(40).borderRadius(20).justifyContent(FlexAlign.Center)
+          .backgroundColor($r('app.color.brand'))
+          .onClick(() => {
+            this.pathStack.pushPathByName(Routes.NEW_CUSTOMER, new RouteParam(''));
+          })
         }
-        .alignItems(HorizontalAlign.Start)
         .width('100%')
         .padding({ left: 16, right: 16, top: 16 })
 
@@ -321,8 +518,20 @@ export struct CustomersTab {
         .scrollable(ScrollDirection.Horizontal)
         .scrollBar(BarState.Off)
         .width('100%')
+
+        if (this.filtered()) {
+          Row({ space: 8 }) {
+            LvIcon({ name: 'list-filter', iconColor: $r('app.color.brand_ink'), iconSize: 16 })
+            Text(`筛选：${this.filterSummary()}`).fontSize(13).fontColor($r('app.color.brand_ink')).layoutWeight(1)
+              .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text('清除').fontSize(13).fontColor($r('app.color.ink2')).onClick(() => this.clearFilter())
+          }
+          .width('100%')
+          .padding({ left: 28, right: 16 })
+        }
       }
       .padding({ bottom: 10 })
+      .bindSheet($$this.showFilter, this.filterSheet(), { detents: [SheetSize.LARGE], dragBar: true })
       .backgroundColor($r('app.color.bg'))
 
       if (this.state === 'loading') {
@@ -355,7 +564,7 @@ export struct CustomersTab {
               }
             }, (item: CustomerItem): string => `${this.source.generation}-${item.id}`)
 
-            if (this.queue !== 'pool' && this.count < this.total) {
+            if ((this.filtered() || this.queue !== 'pool') && this.count < this.total) {
               ListItem() {
                 Button(this.loadingMore ? '加载中' : '加载更多')
                   .type(ButtonType.Normal).borderRadius(12).height(44).width('100%')

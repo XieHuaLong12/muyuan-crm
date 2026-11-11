@@ -1,15 +1,32 @@
-import { RouteParam, Routes } from '../common/Config';
+import { RouteParam, Routes, StoreKeys } from '../common/Config';
 import { Fmt } from '../common/Format';
 import { ORDER_STAGES, orderTone } from '../common/Labels';
 import { Api } from '../api/Http';
 import { Repo } from '../api/Repo';
+import { Session } from '../api/Session';
 import { OrderDetail, OrderQuotation } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { Avatar, OrderSteps, Pill, StateView } from '../components/Ui';
 
+class StageChoice {
+  key: string;
+  title: string;
+
+  constructor(key: string, title: string) {
+    this.key = key;
+    this.title = title;
+  }
+}
+
+/** lib/order-status.ts ORDER_STATUS; 已完成 is confirmed by an administrator (services/order-service.ts). */
+const MILESTONES: StageChoice[] = [
+  new StageChoice('PENDING_PAYMENT', '待付款'), new StageChoice('PRODUCING', '生产中'), new StageChoice('SHIPPED', '已发货'),
+  new StageChoice('IN_TRANSIT', '运输中'), new StageChoice('COMPLETED', '已完成')
+];
+
 /**
- * GET /api/orders/:id. Read-only in this version: changing the status and cancelling stay on the PC
- * (cancelling is administrator-only and voids the linked deal — services/order-service.ts cancelOrder).
+ * GET /api/orders/:id, with 更新进度 (PATCH /api/orders/:id — sales move production, shipping and transport;
+ * 已完成 needs an administrator) and 取消订单 (administrators; voids the linked deal, POST /api/orders/:id/cancel).
  */
 @Component
 export struct OrderDetailPage {
@@ -18,11 +35,19 @@ export struct OrderDetailPage {
   @State order: OrderDetail | null = null;
   @State state: string = 'loading';
   @State error: string = '';
+  /** Bumped on every new order snapshot so the page body is rebuilt with it. */
+  @State rev: number = 0;
+  @State showSheet: boolean = false;
+  @State sheet: string = '';
+  @State reason: string = '';
+  @State saving: boolean = false;
+  @State actionError: string = '';
 
   aboutToAppear(): void {
     const cached = Repo.peekOrder(this.orderId);
     if (cached !== null) {
       this.order = cached;
+      this.rev++;
       this.state = 'ready';
     }
     this.load();
@@ -31,6 +56,7 @@ export struct OrderDetailPage {
   private async load(): Promise<void> {
     try {
       this.order = await Repo.order(this.orderId);
+      this.rev++;
       this.state = 'ready';
     } catch (e) {
       this.error = Api.message(e);
@@ -38,6 +64,115 @@ export struct OrderDetailPage {
         this.state = 'error';
       }
     }
+  }
+
+  private toast(message: string): void {
+    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2200 });
+  }
+
+  private canMove(): boolean {
+    const o = this.order;
+    if (o === null || o.status === 'CANCELLED') return false;
+    return Session.isAdmin() || o.status !== 'COMPLETED';
+  }
+
+  private choices(): StageChoice[] {
+    const o = this.order;
+    const admin = Session.isAdmin();
+    return MILESTONES.filter((m: StageChoice): boolean => o !== null && m.key !== o.status && (admin || m.key !== 'COMPLETED'));
+  }
+
+  private open(kind: string): void {
+    this.sheet = kind;
+    this.reason = '';
+    this.actionError = '';
+    this.showSheet = true;
+  }
+
+  private async move(stage: StageChoice): Promise<void> {
+    const o = this.order;
+    if (o === null || this.saving) return;
+    this.saving = true;
+    this.actionError = '';
+    try {
+      await Repo.orderMilestone(o.id, stage.key, o.updatedAt);
+      this.showSheet = false;
+      this.toast(`订单已更新为「${stage.title}」`);
+      AppStorage.setOrCreate<number>(StoreKeys.DATA_CHANGED, Date.now());
+      await this.load();
+    } catch (e) {
+      this.actionError = Api.message(e);
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  private async cancel(): Promise<void> {
+    const o = this.order;
+    if (o === null || this.saving) return;
+    if (this.reason.trim().length < 2) {
+      this.actionError = '请写明取消原因（至少 2 个字）';
+      return;
+    }
+    this.saving = true;
+    this.actionError = '';
+    try {
+      await Repo.cancelOrder(o.id, this.reason.trim(), o.updatedAt);
+      this.showSheet = false;
+      this.toast('订单已取消，关联的成交已作废');
+      AppStorage.setOrCreate<number>(StoreKeys.DATA_CHANGED, Date.now());
+      await this.load();
+    } catch (e) {
+      this.actionError = Api.message(e);
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  @Builder
+  sheetContent() {
+    Column({ space: 12 }) {
+      if (this.sheet === 'move') {
+        Text('更新订单进度').fontSize(18).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+        Text(Session.isAdmin() ? '选一个阶段。' : '销售可以推进生产、发货与运输；「已完成」由管理员确认。').fontSize(13).fontColor($r('app.color.ink3'))
+        ForEach(this.choices(), (m: StageChoice) => {
+          Row() {
+            Text(m.title).fontSize(16).fontColor($r('app.color.ink')).layoutWeight(1)
+            LvIcon({ name: 'chevron-right', iconColor: $r('app.color.ink3'), iconSize: 18 })
+          }
+          .width('100%')
+          .height(52)
+          .padding({ left: 14, right: 14 })
+          .borderRadius(12)
+          .backgroundColor($r('app.color.surface2'))
+          .enabled(!this.saving)
+          .onClick(() => {
+            this.move(m);
+          })
+        }, (m: StageChoice): string => m.key)
+      } else {
+        Text('取消订单').fontSize(18).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+        Text('取消后关联的成交会作废并留痕，业绩里不再计入。').fontSize(13).fontColor($r('app.color.ink2'))
+        TextArea({ placeholder: '取消原因（必填）', text: this.reason })
+          .height(96).fontSize(16).backgroundColor($r('app.color.surface2'))
+          .onChange((v: string) => {
+            this.reason = v;
+            this.actionError = '';
+          })
+        Button(this.saving ? '正在取消' : '确认取消订单')
+          .type(ButtonType.Normal).width('100%').height(48).borderRadius(12)
+          .fontColor(Color.White).backgroundColor($r('app.color.danger'))
+          .enabled(!this.saving)
+          .onClick(() => {
+            this.cancel();
+          })
+      }
+      if (this.actionError.length > 0) {
+        Text(this.actionError).fontSize(13).fontColor($r('app.color.danger'))
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .padding({ left: 16, right: 16, top: 8, bottom: 24 })
   }
 
   private late(o: OrderDetail): boolean {
@@ -181,7 +316,6 @@ export struct OrderDetailPage {
         .alignItems(HorizontalAlign.Start)
       }
 
-      Text('改状态、取消订单请在电脑端操作。').fontSize(12).fontColor($r('app.color.ink3')).width('100%').textAlign(TextAlign.Center)
     }
     .padding({ left: 16, right: 16, top: 8, bottom: 24 })
   }
@@ -196,12 +330,46 @@ export struct OrderDetailPage {
           this.load();
         } })
       } else {
-        Scroll() {
-          this.content(this.order as OrderDetail)
+        Column() {
+          Scroll() {
+            Column() {
+              // One item per snapshot: a new order snapshot rebuilds the body with the new values.
+              ForEach([this.rev], (r: number) => {
+                this.content(this.order as OrderDetail)
+              }, (r: number): string => `${r}`)
+            }
+          }
+          .scrollBar(BarState.Off)
+          .align(Alignment.Top)
+          .layoutWeight(1)
+
+          if (this.canMove() || (Session.isAdmin() && this.order !== null && this.order.status !== 'CANCELLED')) {
+            Column() {
+              Row({ space: 10 }) {
+                if (Session.isAdmin() && this.order !== null && this.order.status !== 'CANCELLED') {
+                  Button('取消订单')
+                    .type(ButtonType.Normal).height(48).borderRadius(12).layoutWeight(1)
+                    .fontColor($r('app.color.danger')).backgroundColor($r('app.color.surface2'))
+                    .onClick(() => this.open('cancel'))
+                }
+                if (this.canMove()) {
+                  Button('更新进度')
+                    .type(ButtonType.Normal).height(48).borderRadius(12).layoutWeight(2)
+                    .fontColor($r('app.color.on_brand')).backgroundColor($r('app.color.brand'))
+                    .onClick(() => this.open('move'))
+                }
+              }
+              .width('100%')
+            }
+            .width('100%')
+            .padding({ left: 16, right: 16, top: 10, bottom: 12 })
+            .backgroundColor($r('app.color.surface'))
+            .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
+          }
         }
-        .scrollBar(BarState.Off)
-        .align(Alignment.Top)
+        .width('100%')
         .height('100%')
+        .bindSheet($$this.showSheet, this.sheetContent(), { detents: [SheetSize.MEDIUM, SheetSize.LARGE], dragBar: true })
       }
     }
     .title(this.order !== null ? this.order.orderNo : '订单详情')

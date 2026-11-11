@@ -35,11 +35,18 @@ export struct MainTabs {
    * One tab: the icon pill and the label share one centre line. The unread count is a system Badge on the pill's
    * top-right corner, so it never pushes the icon off centre.
    */
+  /** Read inside the tab (not passed in) so the unread counts follow every refresh. */
+  private badgeOf(index: number): number {
+    if (index === 1) return this.badgeCustomers;
+    if (index === 3) return this.badgeInbox;
+    return 0;
+  }
+
   @Builder
-  tabItem(index: number, title: string, icon: string, badge: number) {
+  tabItem(index: number, title: string, icon: string) {
     Column({ space: 4 }) {
       Badge({
-        count: badge,
+        count: this.badgeOf(index),
         maxCount: 99,
         position: BadgePosition.RightTop,
         style: { badgeSize: 16, badgeColor: $r('app.color.danger'), fontSize: 10, color: Color.White }
@@ -80,27 +87,27 @@ export struct MainTabs {
         TabContent() {
           HomeTab()
         }
-        .tabBar(this.tabItem(0, '工作台', 'layout-dashboard', 0))
+        .tabBar(this.tabItem(0, '工作台', 'layout-dashboard'))
 
         TabContent() {
           CustomersTab()
         }
-        .tabBar(this.tabItem(1, '客户', 'users', this.badgeCustomers))
+        .tabBar(this.tabItem(1, '客户', 'users'))
 
         TabContent() {
           OrdersTab()
         }
-        .tabBar(this.tabItem(2, '订单', 'package', 0))
+        .tabBar(this.tabItem(2, '订单', 'package'))
 
         TabContent() {
           InboxTab()
         }
-        .tabBar(this.tabItem(3, '消息', 'message-circle', this.badgeInbox))
+        .tabBar(this.tabItem(3, '消息', 'message-circle'))
 
         TabContent() {
           MeTab()
         }
-        .tabBar(this.tabItem(4, '我的', 'user-round', 0))
+        .tabBar(this.tabItem(4, '我的', 'user-round'))
       }
       .barHeight(64)
       .scrollable(false)

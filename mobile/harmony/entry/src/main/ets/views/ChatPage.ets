@@ -733,6 +733,17 @@ export struct ChatPage {
     return hours >= 1 ? `可直接回复 · 24 小时窗口还剩 ${Math.floor(hours)} 小时` : `可直接回复 · 窗口还剩 ${Math.max(1, Math.round(hours * 60))} 分钟`;
   }
 
+  private headerKey(): string {
+    const t = this.thread;
+    return t === null ? '' : `${t.customer.stage}|${t.window.status}|${t.customer.name}|${t.customer.country}`;
+  }
+
+  private toolTitle(key: string): string {
+    if (key === 'ai') return this.aiState === 'loading' ? 'AI 写作中' : 'AI 回复';
+    if (key === 'translate') return this.translating ? '翻译中' : '译成外文';
+    return key;
+  }
+
   private openCustomer(): void {
     const names = this.pathStack.getAllPathName();
     if (names.length >= 2 && names[names.length - 2] === Routes.CUSTOMER) {
@@ -922,11 +933,12 @@ export struct ChatPage {
     })
   }
 
+  /** title: a fixed label, or 'ai' / 'translate' whose label follows the busy state (read here, not passed in). */
   @Builder
   tool(icon: string, title: string, action: () => void) {
     Row({ space: 4 }) {
       LvIcon({ name: icon, iconColor: $r('app.color.brand_ink'), iconSize: 15 })
-      Text(title).fontSize(13).fontColor($r('app.color.ink'))
+      Text(this.toolTitle(title)).fontSize(13).fontColor($r('app.color.ink'))
     }
     .height(32)
     .padding({ left: 10, right: 12 })
@@ -940,11 +952,11 @@ export struct ChatPage {
   toolBar() {
     Scroll() {
       Row({ space: 8 }) {
-        this.tool('sparkles', this.aiState === 'loading' ? 'AI 写作中' : 'AI 回复', () => {
+        this.tool('sparkles', 'ai', () => {
           this.askAi();
         })
         this.tool('pencil', '优化话术', () => this.openSheet('polish'))
-        this.tool('languages', this.translating ? '翻译中' : '译成外文', () => {
+        this.tool('languages', 'translate', () => {
           this.translateDraft();
         })
         this.tool('inbox', '快捷回复', () => this.openSheet('quick'))
@@ -1246,7 +1258,10 @@ export struct ChatPage {
     NavDestination() {
       Column() {
         if (this.thread !== null) {
-          this.header(this.thread as Thread)
+          // Rebuilt when the window or stage changes (a polled thread replaces the object).
+          ForEach([this.headerKey()], (k: string) => {
+            this.header(this.thread as Thread)
+          }, (k: string): string => k)
         }
         if (this.state === 'loading') {
           StateView({ kind: 'loading' }).layoutWeight(1)
