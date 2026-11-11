@@ -1,0 +1,136 @@
+{
+  "float": [
+    {
+      "name": "space_1",
+      "value": "4vp"
+    },
+    {
+      "name": "space_2",
+      "value": "8vp"
+    },
+    {
+      "name": "space_3",
+      "value": "12vp"
+    },
+    {
+      "name": "space_4",
+      "value": "16vp"
+    },
+    {
+      "name": "space_5",
+      "value": "20vp"
+    },
+    {
+      "name": "space_6",
+      "value": "24vp"
+    },
+    {
+      "name": "space_8",
+      "value": "32vp"
+    },
+    {
+      "name": "space_10",
+      "value": "40vp"
+    },
+    {
+      "name": "space_gutter",
+      "value": "16vp"
+    },
+    {
+      "name": "radius_xs",
+      "value": "6vp"
+    },
+    {
+      "name": "radius_sm",
+      "value": "10vp"
+    },
+    {
+      "name": "radius_md",
+      "value": "12vp"
+    },
+    {
+      "name": "radius_lg",
+      "value": "16vp"
+    },
+    {
+      "name": "radius_xl",
+      "value": "20vp"
+    },
+    {
+      "name": "radius_sheet",
+      "value": "24vp"
+    },
+    {
+      "name": "radius_pill",
+      "value": "999vp"
+    },
+    {
+      "name": "size_touch_target",
+      "value": "48vp"
+    },
+    {
+      "name": "size_control",
+      "value": "44vp"
+    },
+    {
+      "name": "size_app_bar",
+      "value": "56vp"
+    },
+    {
+      "name": "size_bottom_nav",
+      "value": "64vp"
+    },
+    {
+      "name": "size_fab",
+      "value": "56vp"
+    },
+    {
+      "name": "size_avatar",
+      "value": "44vp"
+    },
+    {
+      "name": "size_avatar_lg",
+      "value": "56vp"
+    },
+    {
+      "name": "size_icon",
+      "value": "22vp"
+    },
+    {
+      "name": "size_icon_sm",
+      "value": "18vp"
+    },
+    {
+      "name": "font_display",
+      "value": "32fp"
+    },
+    {
+      "name": "font_title_l",
+      "value": "24fp"
+    },
+    {
+      "name": "font_title_m",
+      "value": "18fp"
+    },
+    {
+      "name": "font_title_s",
+      "value": "16fp"
+    },
+    {
+      "name": "font_body",
+      "value": "15fp"
+    },
+    {
+      "name": "font_body_s",
+      "value": "14fp"
+    },
+    {
+      "name": "font_caption",
+      "value": "13fp"
+    },
+    {
+      "name": "font_micro",
+      "value": "12fp"
+    }
+  ]
+}

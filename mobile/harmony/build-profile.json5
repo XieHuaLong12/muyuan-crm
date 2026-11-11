@@ -1,0 +1,30 @@
+{
+  "app": {
+    // 签名：用 DevEco Studio 登录华为账号后「File → Project Structure → Signing Configs → 自动签名」生成，会写回这里。
+    // 签名文件与密码不要提交到代码仓库。
+    "signingConfigs": [],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        // 代码只用到 API 12（HarmonyOS 5.0）已有的能力；公司手机为 HarmonyOS 7（API 26）。
+        // 用 DevEco Studio 26 打开后，按提示把 targetSdkVersion 设为已安装的 HarmonyOS 7 SDK。
+        "compatibleSdkVersion": "5.0.0(12)",
+        "runtimeOS": "HarmonyOS"
+      }
+    ],
+    "buildModeSet": [
+      { "name": "debug" },
+      { "name": "release" }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        { "name": "default", "applyToProducts": ["default"] }
+      ]
+    }
+  ]
+}

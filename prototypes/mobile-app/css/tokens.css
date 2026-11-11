@@ -1,0 +1,134 @@
+/*
+ * LVANJU BOS Mobile · Design tokens (prototype)
+ * Source of truth: ../tokens.json — the same values feed the Android (Compose) and HarmonyOS (ArkUI) themes.
+ *
+ * Layout concept: one green, quiet canvas; white cards carry the data, the deep forest green carries actions only.
+ * Brand green #164b3a is the existing BOS `--bos-green`; focus #498b73, warning #85521b/#faf1e6 and error #a44b36
+ * come from app/bos.css, so the app and the PC system read as one product.
+ *
+ * Theme switching (three states, as on the phone):
+ *   - follow system  → :root + prefers-color-scheme
+ *   - explicit light → .theme-light on #device
+ *   - explicit dark  → .theme-dark on #device
+ * Custom properties declared on #device override the inherited :root values for the whole app subtree.
+ */
+:root,
+.theme-light {
+  /* Surfaces */
+  --c-bg: #f5f6f2;            /* canvas, green-biased off-white */
+  --c-surface: #ffffff;       /* cards, sheets, bars */
+  --c-surface-2: #eff1ec;     /* inset fields, segmented track, idle chips */
+  --c-surface-3: #e5e9e3;     /* pressed state */
+  --c-scrim: rgba(12, 26, 20, .44);
+  --c-line: rgba(22, 52, 40, .10);
+  --c-line-soft: rgba(22, 52, 40, .06);
+
+  /* Ink */
+  --c-ink: #15211b;           /* 16.6:1 on surface */
+  --c-ink-2: #56635c;         /* 6.3:1 */
+  --c-ink-3: #6b766f;         /* 4.7:1 — metadata only */
+  --c-ink-disabled: #a9b2ac;
+
+  /* Brand */
+  --c-brand: #164b3a;         /* primary action fill, active nav (BOS --bos-green) */
+  --c-brand-pressed: #0f3a2d;
+  --c-brand-ink: #164b3a;     /* brand-coloured text/icons on light */
+  --c-brand-soft: #e6f0ea;    /* selected chip, soft badge (8.6:1 with brand ink) */
+  --c-brand-tint: #f0f6f2;
+  --c-on-brand: #ffffff;
+  --c-focus: #498b73;         /* BOS focus ring */
+  --c-logo: #2e534b;          /* exact logo field green, used only behind the logo */
+
+  /* Semantic (state, never decoration) */
+  --c-success: #1f7a4d;  --c-success-bg: #e5f3ea;
+  --c-warning: #8a5414;  --c-warning-bg: #fbf0e1;
+  --c-danger:  #a8432f;  --c-danger-bg:  #fbebe6;
+  --c-info:    #2b5d8c;  --c-info-bg:    #e8f0f8;
+
+  /* Lead grades — one green ramp, never a rainbow */
+  --c-grade-a: #164b3a; --c-grade-a-ink: #ffffff;
+  --c-grade-b: #cfe3d7; --c-grade-b-ink: #164b3a;
+  --c-grade-c: #eceee9; --c-grade-c-ink: #56635c;
+  --c-grade-d: #f3f3f1; --c-grade-d-ink: #8a928d;
+
+  /* Charts — single-hue magnitude + a recessive comparison */
+  --c-chart-1: #1f6b52;       /* 6.4:1 on surface */
+  --c-chart-1-wash: rgba(31, 107, 82, .10);
+  --c-chart-prev: #b4bdb7;
+  --c-chart-grid: rgba(22, 52, 40, .08);
+  --c-seq-1: #164b3a; --c-seq-2: #5f9b82; --c-seq-3: #cfe0d6;
+
+  /* Elevation (light uses soft shadow; dark uses borders) */
+  --e-1: 0 1px 2px rgba(16, 36, 28, .04);
+  --e-2: 0 6px 24px rgba(16, 36, 28, .08);
+  --e-3: 0 -10px 40px rgba(16, 36, 28, .16);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-bg: #0d1310; --c-surface: #151c18; --c-surface-2: #1c2520; --c-surface-3: #25302a;
+    --c-scrim: rgba(0, 0, 0, .56); --c-line: rgba(220, 240, 228, .10); --c-line-soft: rgba(220, 240, 228, .06);
+    --c-ink: #e7ede9; --c-ink-2: #a9b5ae; --c-ink-3: #8e9a93; --c-ink-disabled: #56615a;
+    --c-brand: #2f7a5f; --c-brand-pressed: #276a52; --c-brand-ink: #86cfae; --c-brand-soft: #1b3329; --c-brand-tint: #17241e; --c-on-brand: #ffffff; --c-focus: #6fb898; --c-logo: #2e534b;
+    --c-success: #74c99a; --c-success-bg: #173225; --c-warning: #e3b06a; --c-warning-bg: #3a2a14;
+    --c-danger: #f0907a; --c-danger-bg: #3b1d17; --c-info: #8db8e8; --c-info-bg: #172a3d;
+    --c-grade-a: #86cfae; --c-grade-a-ink: #0d1310; --c-grade-b: #24453a; --c-grade-b-ink: #bfe6d3;
+    --c-grade-c: #252d29; --c-grade-c-ink: #a9b5ae; --c-grade-d: #1c2220; --c-grade-d-ink: #75807a;
+    --c-chart-1: #5fbf96; --c-chart-1-wash: rgba(95, 191, 150, .12); --c-chart-prev: #4a564f; --c-chart-grid: rgba(220, 240, 228, .08);
+    --c-seq-1: #86cfae; --c-seq-2: #3f8a6c; --c-seq-3: #25433a;
+    --e-1: none; --e-2: 0 8px 28px rgba(0, 0, 0, .4); --e-3: 0 -10px 40px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"],
+.theme-dark {
+  --c-bg: #0d1310; --c-surface: #151c18; --c-surface-2: #1c2520; --c-surface-3: #25302a;
+  --c-scrim: rgba(0, 0, 0, .56); --c-line: rgba(220, 240, 228, .10); --c-line-soft: rgba(220, 240, 228, .06);
+  --c-ink: #e7ede9; --c-ink-2: #a9b5ae; --c-ink-3: #8e9a93; --c-ink-disabled: #56615a;
+  --c-brand: #2f7a5f; --c-brand-pressed: #276a52; --c-brand-ink: #86cfae; --c-brand-soft: #1b3329; --c-brand-tint: #17241e; --c-on-brand: #ffffff; --c-focus: #6fb898; --c-logo: #2e534b;
+  --c-success: #74c99a; --c-success-bg: #173225; --c-warning: #e3b06a; --c-warning-bg: #3a2a14;
+  --c-danger: #f0907a; --c-danger-bg: #3b1d17; --c-info: #8db8e8; --c-info-bg: #172a3d;
+  --c-grade-a: #86cfae; --c-grade-a-ink: #0d1310; --c-grade-b: #24453a; --c-grade-b-ink: #bfe6d3;
+  --c-grade-c: #252d29; --c-grade-c-ink: #a9b5ae; --c-grade-d: #1c2220; --c-grade-d-ink: #75807a;
+  --c-chart-1: #5fbf96; --c-chart-1-wash: rgba(95, 191, 150, .12); --c-chart-prev: #4a564f; --c-chart-grid: rgba(220, 240, 228, .08);
+  --c-seq-1: #86cfae; --c-seq-2: #3f8a6c; --c-seq-3: #25433a;
+  --e-1: none; --e-2: 0 8px 28px rgba(0, 0, 0, .4); --e-3: 0 -10px 40px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+:root {
+  /* Type — Chinese first; Inter only supplies Latin letters and figures. */
+  --f-sans: "Inter", "HarmonyOS Sans SC", "PingFang SC", "MiSans", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --f-num: "Inter", "HarmonyOS Sans", "Roboto", system-ui, sans-serif;
+
+  /* Scale in rem so the in-app "字体大小" setting (root font-size) scales everything that is text. */
+  --t-display: 2rem;      /* 32 · hero figure, one per view */
+  --t-title-l: 1.5rem;    /* 24 · large page title */
+  --t-title-m: 1.125rem;  /* 18 · app bar, sheet title */
+  --t-title-s: 1rem;      /* 16 · card title, list primary */
+  --t-body: .9375rem;     /* 15 · body */
+  --t-body-s: .875rem;    /* 14 · secondary body */
+  --t-caption: .8125rem;  /* 13 · metadata */
+  --t-micro: .75rem;      /* 12 · badges, nav labels — the floor for Chinese */
+
+  /* Space — 4pt grid */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+  --gutter: 16px;
+
+  /* Radius */
+  --r-xs: 6px; --r-sm: 10px; --r-md: 12px; --r-lg: 16px; --r-xl: 20px; --r-sheet: 24px; --r-pill: 999px;
+
+  /* Size */
+  --h-touch: 48px;        /* Android minimum touch target; HarmonyOS hot zone ≥ 40vp */
+  --h-control: 44px;      /* inputs, secondary buttons */
+  --h-appbar: 56px;
+  --h-tabbar: 64px;
+
+  /* Motion — short, decelerating; disabled under reduced motion */
+  --m-fast: 140ms; --m-base: 220ms; --m-slow: 320ms;
+  --m-ease: cubic-bezier(.2, .8, .2, 1);
+  --m-ease-in: cubic-bezier(.4, 0, 1, 1);
+}
