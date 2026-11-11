@@ -52,6 +52,17 @@ const passwordChange=z.object({currentPassword:z.string().min(1,'请填写当前
   .refine(v=>v.currentPassword!==v.newPassword,{message:'新密码不能与当前密码相同',path:['newPassword']});
 
 /** Every user changes their own password. Other sessions end; the caller receives a fresh session version. */
+/** 退出其他设备：every other signed-in device loses its session (the version moves on); the caller gets a new one. */
+export async function signOutOtherDevices(user:Actor){
+  return retryTransaction(()=>db.$transaction(async tx=>{
+    const current=await tx.user.findUniqueOrThrow({where:{id:user.id},select:{sessionVersion:true}});
+    const changed=await tx.user.updateMany({where:{id:user.id,sessionVersion:current.sessionVersion,isActive:true},data:{sessionVersion:{increment:1}}});
+    if(changed.count!==1)throw new HttpError(409,'账号状态已变化，请重新登录后再试');
+    await tx.accountAudit.create({data:{subjectId:user.id,actorId:user.id,action:'SIGNED_OUT_OTHERS'}});
+    return tx.user.findUniqueOrThrow({where:{id:user.id},select:{id:true,sessionVersion:true}});
+  }));
+}
+
 export async function changeOwnPassword(input:unknown,user:Actor){
   const v=passwordChange.parse(input);
   const current=await db.user.findUniqueOrThrow({where:{id:user.id},select:{passwordHash:true,sessionVersion:true}});
