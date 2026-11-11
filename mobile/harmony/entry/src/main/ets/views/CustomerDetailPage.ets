@@ -602,31 +602,35 @@ export struct CustomerDetailPage {
             title: { title: '改阶段', subtitle: this.detail !== null ? `当前：${label(STAGES, this.detail.stage)}` : '' }
           })
 
-          Row({ space: 10 }) {
-            Button('打电话')
-              .type(ButtonType.Normal).height(48).borderRadius(12).layoutWeight(1)
-              .fontColor($r('app.color.ink')).backgroundColor($r('app.color.surface'))
-              .border({ width: 1, color: $r('app.color.line') })
-              .onClick(() => {
-                const c = this.detail;
-                if (c !== null) {
-                  this.dial(c.phone.length > 0 ? c.phone : c.whatsapp);
-                }
-              })
-            Button('WhatsApp')
-              .type(ButtonType.Normal).height(48).borderRadius(12).layoutWeight(1)
-              .fontColor($r('app.color.brand_ink')).backgroundColor($r('app.color.brand_soft'))
-              .onClick(() => this.openChat())
-            Button('写跟进')
-              .type(ButtonType.Normal).height(48).borderRadius(12).layoutWeight(1)
-              .fontColor($r('app.color.on_brand')).backgroundColor($r('app.color.brand'))
-              .onClick(() => {
-                this.showFollow = true;
-              })
+          Column() {
+            Row({ space: 10 }) {
+              Button('打电话')
+                .type(ButtonType.Normal).height(48).borderRadius(12).layoutWeight(1)
+                .fontColor($r('app.color.ink')).backgroundColor($r('app.color.surface'))
+                .border({ width: 1, color: $r('app.color.line') })
+                .onClick(() => {
+                  const c = this.detail;
+                  if (c !== null) {
+                    this.dial(c.phone.length > 0 ? c.phone : c.whatsapp);
+                  }
+                })
+              Button('WhatsApp')
+                .type(ButtonType.Normal).height(48).borderRadius(12).layoutWeight(1)
+                .fontColor($r('app.color.brand_ink')).backgroundColor($r('app.color.brand_soft'))
+                .onClick(() => this.openChat())
+              Button('写跟进')
+                .type(ButtonType.Normal).height(48).borderRadius(12).layoutWeight(1)
+                .fontColor($r('app.color.on_brand')).backgroundColor($r('app.color.brand'))
+                .onClick(() => {
+                  this.showFollow = true;
+                })
+            }
+            .width('100%')
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 10, bottom: 12 })
           .backgroundColor($r('app.color.surface'))
+          .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
         }
       }
       .width('100%')
