@@ -127,7 +127,9 @@ export struct HomeTab {
     const feedCall = attempt<NotificationFeed>('提醒', Repo.notifications(), failures);
     // The 等你回复 queue answers with every queue's count too, so one call fills both the numbers and the list.
     const queueCall = attempt<SalesQueue>('跟进队列', Repo.queue('waiting', '', 1), failures);
-    const cockpitCall = attempt<Cockpit>('经营提醒', Repo.cockpit('month'), failures);
+    // Optional extras (reminders, trend): a server without GET /api/bos/cockpit yet just leaves them out.
+    const optional: string[] = [];
+    const cockpitCall = attempt<Cockpit>('经营提醒', Repo.cockpit('month'), optional);
     const ordersCall = attempt<OrderListPage>('订单', Repo.orders('ALL', '', 1), failures);
     const todayCall = attempt<TaskListPage>('今日待办', Repo.todayTasks(), failures);
     const lateCall = attempt<TaskListPage>('逾期待办', Repo.overdueTasks(), failures);
