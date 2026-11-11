@@ -1,10 +1,10 @@
 import { RouteParam, Routes } from '../common/Config';
 import { Fmt } from '../common/Format';
 import { orderTone, paymentTone } from '../common/Labels';
-import { Api } from '../data/Http';
-import { Repo } from '../data/Repo';
-import { Session } from '../data/Session';
-import { OrderReminders, OrderRow, OrderTab } from '../data/Models';
+import { Api } from '../api/Http';
+import { Repo } from '../api/Repo';
+import { Session } from '../api/Session';
+import { OrderReminders, OrderRow, OrderTab } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { Pill, StateView } from '../components/Ui';
 
@@ -98,7 +98,7 @@ export struct OrdersTab {
   @Builder
   reminderTile(def: ReminderDef, index: number) {
     Column({ space: 2 }) {
-      LvIcon({ name: def.icon, iconColor: index === 2 && this.reminderCount(index) > 0 ? $r('app.color.danger') : $r('app.color.ink3'), size: 18 })
+      LvIcon({ name: def.icon, iconColor: index === 2 && this.reminderCount(index) > 0 ? $r('app.color.danger') : $r('app.color.ink3'), iconSize: 18 })
       Text(`${this.reminderCount(index)}`)
         .fontSize(18).fontWeight(FontWeight.Bold)
         .fontColor(index === 2 && this.reminderCount(index) > 0 ? $r('app.color.danger') : $r('app.color.ink'))
@@ -191,7 +191,7 @@ export struct OrdersTab {
         Row({ space: 8 }) {
           ForEach(REMINDERS, (def: ReminderDef, index: number) => {
             this.reminderTile(def, index)
-          }, (def: ReminderDef) => def.title)
+          }, (def: ReminderDef): string => def.title)
         }
         .padding({ left: 16, right: 16 })
 
@@ -199,14 +199,14 @@ export struct OrdersTab {
           .height(44)
           .margin({ left: 16, right: 16 })
           .backgroundColor($r('app.color.surface2'))
-          .onChange((value: string) => this.onSearch(value))
+          .onChange((value: string): void => this.onSearch(value))
 
         Scroll() {
           Row({ space: 8 }) {
             this.chip('ALL', '全部', this.allCount)
             ForEach(this.tabs, (t: OrderTab) => {
               this.chip(t.key, t.label, t.count)
-            }, (t: OrderTab) => t.key)
+            }, (t: OrderTab): string => t.key)
           }
           .padding({ left: 16, right: 16 })
         }
@@ -235,7 +235,7 @@ export struct OrdersTab {
               ListItem() {
                 this.card(o)
               }
-            }, (o: OrderRow) => o.id)
+            }, (o: OrderRow): string => o.id)
             if (this.orders.length < this.total) {
               ListItem() {
                 Button('加载更多')

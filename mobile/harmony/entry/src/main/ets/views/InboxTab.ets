@@ -1,9 +1,9 @@
 import { RouteParam, Routes, StoreKeys } from '../common/Config';
 import { Fmt } from '../common/Format';
-import { Api } from '../data/Http';
-import { Inbox } from '../data/Inbox';
-import { Repo } from '../data/Repo';
-import { NotificationItem } from '../data/Models';
+import { Api } from '../api/Http';
+import { Inbox } from '../api/Inbox';
+import { Repo } from '../api/Repo';
+import { NotificationItem } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { Pill, StateView, toneBg, toneInk } from '../components/Ui';
 
@@ -83,7 +83,7 @@ export struct InboxTab {
   row(item: NotificationItem) {
     Row({ space: 12 }) {
       Row() {
-        LvIcon({ name: iconOf(item.kind), iconColor: toneInk(toneOf(item.kind)), size: 18 })
+        LvIcon({ name: iconOf(item.kind), iconColor: toneInk(toneOf(item.kind)), iconSize: 18 })
       }
       .width(36).height(36).borderRadius(11).justifyContent(FlexAlign.Center).backgroundColor(toneBg(toneOf(item.kind)))
 
@@ -148,7 +148,7 @@ export struct InboxTab {
               ListItem() {
                 this.row(item)
               }
-            }, (item: NotificationItem) => item.id)
+            }, (item: NotificationItem): string => item.id)
           }
           .padding({ left: 16, right: 16, bottom: 24 })
           .scrollBar(BarState.Off)

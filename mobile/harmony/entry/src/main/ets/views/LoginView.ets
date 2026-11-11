@@ -1,7 +1,7 @@
 import { AppConfig } from '../common/Config';
-import { Session } from '../data/Session';
-import { Api } from '../data/Http';
-import { Repo } from '../data/Repo';
+import { Session } from '../api/Session';
+import { Api } from '../api/Http';
+import { Repo } from '../api/Repo';
 import { LvIcon } from '../components/LvIcon';
 
 /**
@@ -76,7 +76,7 @@ export struct LoginView {
 
           if (this.error.length > 0) {
             Row({ space: 8 }) {
-              LvIcon({ name: 'circle-alert', iconColor: $r('app.color.danger'), size: 18 })
+              LvIcon({ name: 'circle-alert', iconColor: $r('app.color.danger'), iconSize: 18 })
               Text(this.error).fontSize(14).fontColor($r('app.color.danger')).layoutWeight(1)
             }
             .width('100%')
@@ -165,7 +165,7 @@ export struct LoginView {
             }
           } else {
             Row({ space: 6 }) {
-              LvIcon({ name: 'server', iconColor: $r('app.color.ink3'), size: 14 })
+              LvIcon({ name: 'server', iconColor: $r('app.color.ink3'), iconSize: 14 })
               Text(`服务器：${this.server.replace('https://', '')}`).fontSize(12).fontColor($r('app.color.ink3'))
               Text('更改').fontSize(12).fontColor($r('app.color.brand_ink'))
             }

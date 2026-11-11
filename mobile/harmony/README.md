@@ -62,7 +62,7 @@ mobile/harmony/
 │   │   ├── pages/Index.ets      根导航：一个 Navigation 栈，五个页签在底层，详情页压在上面
 │   │   ├── views/               登录、页签（工作台 / 客户 / 订单 / 消息 / 我的）、客户详情、订单详情
 │   │   ├── components/          设计系统组件：LvIcon、Pill、Avatar、StateView、StatTile、OrderSteps
-│   │   ├── data/                Http（{success,data} 信封、会话 Cookie、401 回到登录）、Session、Repo、Models、Inbox
+│   │   ├── api/                 Http（{success,data} 信封、会话 Cookie、401 回到登录）、Session、Repo、Models、Inbox
 │   │   └── common/              配置、文案常量（与 lib/constants.ts 一致）、格式化
 │   └── resources/               颜色（浅色 / 深色）、尺寸、字符串、图标与 Logo
 └── README.md

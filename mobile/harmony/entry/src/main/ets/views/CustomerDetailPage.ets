@@ -2,9 +2,9 @@ import { call } from '@kit.TelephonyKit';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { Fmt } from '../common/Format';
 import { FOLLOW_TYPES, FOLLOW_TYPE_KEYS, PURCHASES, SOURCES, STAGES, label, stageTone } from '../common/Labels';
-import { Api } from '../data/Http';
-import { Repo } from '../data/Repo';
-import { CustomerDetail, DealRow, FollowUpBody, FollowUpRow, StageChange } from '../data/Models';
+import { Api } from '../api/Http';
+import { Repo } from '../api/Repo';
+import { CustomerDetail, DealRow, FollowUpBody, FollowUpRow, StageChange } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { Avatar, Pill, StateView } from '../components/Ui';
 
@@ -140,7 +140,7 @@ export struct CustomerDetailPage {
       new InfoRow('无效 / 暂停原因', c.invalidReason),
       new InfoRow('备注', c.notes)
     ];
-    return rows.filter((r: InfoRow) => r.value.length > 0);
+    return rows.filter((r: InfoRow): boolean => r.value.length > 0);
   }
 
   private async saveFollowUp(): Promise<void> {
@@ -175,7 +175,7 @@ export struct CustomerDetailPage {
   contactButton(icon: string, title: string, enabled: boolean, action: () => void) {
     Column({ space: 6 }) {
       Row() {
-        LvIcon({ name: icon, iconColor: $r('app.color.brand_ink'), size: 21 })
+        LvIcon({ name: icon, iconColor: $r('app.color.brand_ink'), iconSize: 21 })
       }
       .width(46).height(46).borderRadius(23).justifyContent(FlexAlign.Center).backgroundColor($r('app.color.brand_soft'))
       Text(title).fontSize(12).fontColor($r('app.color.ink2'))
@@ -240,7 +240,7 @@ export struct CustomerDetailPage {
       LvIcon({
         name: Fmt.due(this.dueIso(c)).late ? 'triangle-alert' : 'alarm-clock',
         iconColor: Fmt.due(this.dueIso(c)).late ? $r('app.color.danger') : $r('app.color.brand_ink'),
-        size: 20
+        iconSize: 20
       })
       Column({ space: 1 }) {
         Text(this.isFirstContact(c) ? '首次联系截止' : '下次跟进').fontSize(12).fontColor($r('app.color.ink3'))
@@ -270,7 +270,7 @@ export struct CustomerDetailPage {
   aiCard(c: CustomerDetail) {
     Column({ space: 8 }) {
       Row({ space: 6 }) {
-        LvIcon({ name: 'sparkles', iconColor: $r('app.color.brand_ink'), size: 16 })
+        LvIcon({ name: 'sparkles', iconColor: $r('app.color.brand_ink'), iconSize: 16 })
         Text('AI 建议').fontSize(13).fontWeight(FontWeight.Medium).fontColor($r('app.color.brand_ink'))
         Blank()
         Text('仅供参考，需人工确认').fontSize(12).fontColor($r('app.color.ink3'))
@@ -306,7 +306,7 @@ export struct CustomerDetailPage {
           .onClick(() => {
             this.tab = index;
           })
-      }, (title: string) => title)
+      }, (title: string): string => title)
     }
     .width('100%')
     .padding(3)
@@ -323,7 +323,7 @@ export struct CustomerDetailPage {
       ForEach(this.timeline(c), (e: TimelineEntry) => {
         Row({ space: 10 }) {
           Row() {
-            LvIcon({ name: e.icon, iconColor: $r('app.color.brand_ink'), size: 16 })
+            LvIcon({ name: e.icon, iconColor: $r('app.color.brand_ink'), iconSize: 16 })
           }
           .width(32).height(32).borderRadius(10).justifyContent(FlexAlign.Center).backgroundColor($r('app.color.brand_soft'))
           Column({ space: 4 }) {
@@ -342,7 +342,7 @@ export struct CustomerDetailPage {
         .alignItems(VerticalAlign.Top)
         .width('100%')
         .padding({ top: 10, bottom: 10 })
-      }, (e: TimelineEntry) => e.key)
+      }, (e: TimelineEntry): string => e.key)
     }
     .width('100%')
   }
@@ -360,7 +360,7 @@ export struct CustomerDetailPage {
         .width('100%')
         .padding({ top: 10, bottom: 10 })
         .border({ width: { top: index === 0 ? 0 : 0.5 }, color: $r('app.color.line_soft') })
-      }, (row: InfoRow) => row.name)
+      }, (row: InfoRow): string => row.name)
     }
     .width('100%')
     .padding({ left: 14, right: 14 })
@@ -386,7 +386,7 @@ export struct CustomerDetailPage {
               .onClick(() => {
                 this.followType = key;
               })
-          }, (key: string) => key)
+          }, (key: string): string => key)
         }
       }
       .alignItems(HorizontalAlign.Start)
@@ -423,7 +423,7 @@ export struct CustomerDetailPage {
               .onClick(() => {
                 this.nextIndex = index;
               })
-          }, (option: NextOption) => option.title)
+          }, (option: NextOption): string => option.title)
         }
       }
       .alignItems(HorizontalAlign.Start)

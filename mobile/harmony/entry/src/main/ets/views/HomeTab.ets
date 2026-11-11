@@ -1,10 +1,10 @@
 import { RouteParam, Routes, StoreKeys } from '../common/Config';
 import { Fmt, DueLabel } from '../common/Format';
-import { Api } from '../data/Http';
-import { Inbox } from '../data/Inbox';
-import { Repo } from '../data/Repo';
-import { Session } from '../data/Session';
-import { NotificationFeed, OrderReminders, QueueCount, TaskRow } from '../data/Models';
+import { Api } from '../api/Http';
+import { Inbox } from '../api/Inbox';
+import { Repo } from '../api/Repo';
+import { Session } from '../api/Session';
+import { NotificationFeed, OrderReminders, QueueCount, TaskRow } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { SectionHead, StatTile, StateView } from '../components/Ui';
 
@@ -75,7 +75,7 @@ export struct HomeTab {
   }
 
   private count(key: string): number {
-    const found = this.counts.find((c: QueueCount) => c.key === key);
+    const found = this.counts.find((c: QueueCount): boolean => c.key === key);
     return found === undefined ? 0 : found.count;
   }
 
@@ -96,7 +96,7 @@ export struct HomeTab {
   private async complete(task: TaskRow): Promise<void> {
     try {
       await Repo.completeTask(task.id);
-      this.tasks = this.tasks.filter((t: TaskRow) => t.id !== task.id);
+      this.tasks = this.tasks.filter((t: TaskRow): boolean => t.id !== task.id);
       this.toast(`已完成：${task.title}`);
     } catch (e) {
       this.toast(Api.message(e));
@@ -107,7 +107,7 @@ export struct HomeTab {
   alertCard(title: string, text: string, queue: string) {
     Row({ space: 12 }) {
       Row() {
-        LvIcon({ name: 'bell', iconColor: Color.White, size: 18 })
+        LvIcon({ name: 'bell', iconColor: Color.White, iconSize: 18 })
       }
       .width(36).height(36).borderRadius(11).justifyContent(FlexAlign.Center).backgroundColor($r('app.color.danger'))
 
@@ -118,7 +118,7 @@ export struct HomeTab {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      LvIcon({ name: 'chevron-right', iconColor: $r('app.color.danger'), size: 18 })
+      LvIcon({ name: 'chevron-right', iconColor: $r('app.color.danger'), iconSize: 18 })
     }
     .width('100%')
     .padding(12)
@@ -273,7 +273,7 @@ export struct HomeTab {
                 Divider().color($r('app.color.line_soft')).margin({ left: 48 })
               }
               this.taskRow(task)
-            }, (task: TaskRow) => task.id)
+            }, (task: TaskRow): string => task.id)
           }
           .backgroundColor($r('app.color.surface'))
           .borderRadius(16)
@@ -281,7 +281,7 @@ export struct HomeTab {
       }
 
       Row({ space: 10 }) {
-        LvIcon({ name: 'trending-up', iconColor: $r('app.color.ink3'), size: 18 })
+        LvIcon({ name: 'trending-up', iconColor: $r('app.color.ink3'), iconSize: 18 })
         Text('销售额、目标完成和趋势图将在服务端增加经营数据接口后显示（与电脑端驾驶舱同一口径）。')
           .fontSize(13).fontColor($r('app.color.ink3')).layoutWeight(1).lineHeight(20)
       }

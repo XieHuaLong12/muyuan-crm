@@ -1,6 +1,6 @@
 import { AppConfig } from '../common/Config';
-import { Inbox } from '../data/Inbox';
-import { Repo } from '../data/Repo';
+import { Inbox } from '../api/Inbox';
+import { Repo } from '../api/Repo';
 import { LvIcon } from '../components/LvIcon';
 import { HomeTab } from './HomeTab';
 import { CustomersTab } from './CustomersTab';
@@ -36,7 +36,7 @@ export struct MainTabs {
     Column({ space: 3 }) {
       Stack({ alignContent: Alignment.TopEnd }) {
         Row() {
-          LvIcon({ name: icon, iconColor: this.current === index ? $r('app.color.brand_ink') : $r('app.color.ink3'), size: 22 })
+          LvIcon({ name: icon, iconColor: this.current === index ? $r('app.color.brand_ink') : $r('app.color.ink3'), iconSize: 22 })
         }
         .width(56)
         .height(30)

@@ -123,7 +123,7 @@ export struct SectionHead {
       if (this.link.length > 0) {
         Row({ space: 2 }) {
           Text(this.link).fontSize(13).fontColor($r('app.color.brand_ink'))
-          LvIcon({ name: 'chevron-right', iconColor: $r('app.color.brand_ink'), size: 16 })
+          LvIcon({ name: 'chevron-right', iconColor: $r('app.color.brand_ink'), iconSize: 16 })
         }
         .height(32)
         .onClick(() => this.onLink())
@@ -155,7 +155,7 @@ export struct StateView {
         Text('加载中').fontSize(13).fontColor($r('app.color.ink3'))
       } else {
         Row() {
-          LvIcon({ name: this.kind === 'error' ? 'wifi-off' : this.icon, iconColor: this.kind === 'error' ? $r('app.color.danger') : $r('app.color.brand_ink'), size: 26 })
+          LvIcon({ name: this.kind === 'error' ? 'wifi-off' : this.icon, iconColor: this.kind === 'error' ? $r('app.color.danger') : $r('app.color.brand_ink'), iconSize: 26 })
         }
         .width(56)
         .height(56)
@@ -199,7 +199,7 @@ export struct StatTile {
   build() {
     Column({ space: 6 }) {
       Row({ space: 6 }) {
-        LvIcon({ name: this.icon, iconColor: $r('app.color.ink3'), size: 16 })
+        LvIcon({ name: this.icon, iconColor: $r('app.color.ink3'), iconSize: 16 })
         Text(this.label).fontSize(13).fontColor($r('app.color.ink2'))
       }
       Text(this.value).fontSize(26).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
@@ -235,7 +235,7 @@ export struct OrderSteps {
         Column({ space: 6 }) {
           Row() {
             if (!this.cancelled && this.done[index] === true) {
-              LvIcon({ name: 'check', iconColor: $r('app.color.on_brand'), size: 12 })
+              LvIcon({ name: 'check', iconColor: $r('app.color.on_brand'), iconSize: 12 })
             }
           }
           .width(20)
@@ -249,7 +249,7 @@ export struct OrderSteps {
             .fontColor(!this.cancelled && this.done[index] === true ? $r('app.color.ink2') : $r('app.color.ink3'))
         }
         .layoutWeight(1)
-      }, (stage: string) => stage)
+      }, (stage: string): string => stage)
     }
     .width('100%')
   }

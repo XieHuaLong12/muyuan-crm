@@ -1,10 +1,10 @@
 import { RouteParam, Routes } from '../common/Config';
 import { Fmt } from '../common/Format';
 import { STAGES, label, stageTone } from '../common/Labels';
-import { Api } from '../data/Http';
-import { Repo } from '../data/Repo';
-import { Session } from '../data/Session';
-import { ListCustomerRow, QueueCount, QueueCustomer } from '../data/Models';
+import { Api } from '../api/Http';
+import { Repo } from '../api/Repo';
+import { Session } from '../api/Session';
+import { ListCustomerRow, QueueCount, QueueCustomer } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { Avatar, Pill, StateView } from '../components/Ui';
 
@@ -140,7 +140,7 @@ export struct CustomersTab {
 
   private countOf(key: string): number {
     if (key === 'pool') return this.poolCount;
-    const found = this.counts.find((c: QueueCount) => c.key === key);
+    const found = this.counts.find((c: QueueCount): boolean => c.key === key);
     return found === undefined ? -1 : found.count;
   }
 
@@ -164,7 +164,7 @@ export struct CustomersTab {
 
   private visibleQueues(): QueueDef[] {
     const admin = Session.isAdmin();
-    return QUEUES.filter((q: QueueDef) => admin || !q.adminOnly);
+    return QUEUES.filter((q: QueueDef): boolean => admin || !q.adminOnly);
   }
 
   @Builder
@@ -205,7 +205,7 @@ export struct CustomersTab {
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
-        LvIcon({ name: 'chevron-right', iconColor: $r('app.color.ink3'), size: 18 })
+        LvIcon({ name: 'chevron-right', iconColor: $r('app.color.ink3'), iconSize: 18 })
       }
       .width('100%')
 
@@ -213,7 +213,7 @@ export struct CustomersTab {
         Row({ space: 10 }) {
           if (item.dueText.length > 0) {
             Row({ space: 4 }) {
-              LvIcon({ name: item.firstContact ? 'timer' : 'alarm-clock', iconColor: item.dueLate ? $r('app.color.danger') : item.dueSoon ? $r('app.color.warning') : $r('app.color.ink3'), size: 14 })
+              LvIcon({ name: item.firstContact ? 'timer' : 'alarm-clock', iconColor: item.dueLate ? $r('app.color.danger') : item.dueSoon ? $r('app.color.warning') : $r('app.color.ink3'), iconSize: 14 })
               Text(`${item.firstContact ? '首联 ' : ''}${item.dueText}`)
                 .fontSize(12)
                 .fontWeight(item.dueLate || item.dueSoon ? FontWeight.Medium : FontWeight.Normal)
@@ -254,13 +254,13 @@ export struct CustomersTab {
           .height(44)
           .margin({ left: 16, right: 16 })
           .backgroundColor($r('app.color.surface2'))
-          .onChange((value: string) => this.onSearch(value))
+          .onChange((value: string): void => this.onSearch(value))
 
         Scroll() {
           Row({ space: 8 }) {
             ForEach(this.visibleQueues(), (q: QueueDef) => {
               this.chip(q)
-            }, (q: QueueDef) => q.key)
+            }, (q: QueueDef): string => q.key)
           }
           .padding({ left: 16, right: 16 })
         }
@@ -299,7 +299,7 @@ export struct CustomersTab {
               ListItem() {
                 this.card(item)
               }
-            }, (item: CustomerItem) => item.id)
+            }, (item: CustomerItem): string => item.id)
 
             if (this.queue !== 'pool' && this.items.length < this.total) {
               ListItem() {

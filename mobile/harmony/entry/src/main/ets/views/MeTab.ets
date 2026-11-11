@@ -1,8 +1,8 @@
 import { AppConfig } from '../common/Config';
 import { Fmt } from '../common/Format';
-import { Api } from '../data/Http';
-import { Repo } from '../data/Repo';
-import { Session } from '../data/Session';
+import { Api } from '../api/Http';
+import { Repo } from '../api/Repo';
+import { Session } from '../api/Session';
 import { LvIcon } from '../components/LvIcon';
 
 /** 我的: account, server, version, sign out. Notification settings, offline data and updates come in later versions. */
@@ -49,7 +49,7 @@ export struct MeTab {
   cell(icon: string, title: string, value: string) {
     Row({ space: 12 }) {
       Row() {
-        LvIcon({ name: icon, iconColor: $r('app.color.brand_ink'), size: 19 })
+        LvIcon({ name: icon, iconColor: $r('app.color.brand_ink'), iconSize: 19 })
       }
       .width(34).height(34).borderRadius(10).justifyContent(FlexAlign.Center).backgroundColor($r('app.color.brand_tint'))
       Text(title).fontSize(15).fontColor($r('app.color.ink')).layoutWeight(1)
@@ -93,7 +93,7 @@ export struct MeTab {
         .backgroundColor($r('app.color.surface'))
 
         Row({ space: 12 }) {
-          LvIcon({ name: 'log-out', iconColor: $r('app.color.danger'), size: 19 })
+          LvIcon({ name: 'log-out', iconColor: $r('app.color.danger'), iconSize: 19 })
           Text(this.busy ? '正在退出' : '退出登录').fontSize(15).fontColor($r('app.color.danger'))
         }
         .width('100%')

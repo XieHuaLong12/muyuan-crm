@@ -1,9 +1,9 @@
 import { RouteParam, Routes } from '../common/Config';
 import { Fmt } from '../common/Format';
 import { ORDER_STAGES, orderTone } from '../common/Labels';
-import { Api } from '../data/Http';
-import { Repo } from '../data/Repo';
-import { OrderDetail, OrderQuotation } from '../data/Models';
+import { Api } from '../api/Http';
+import { Repo } from '../api/Repo';
+import { OrderDetail, OrderQuotation } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { Avatar, OrderSteps, Pill, StateView } from '../components/Ui';
 
@@ -59,7 +59,7 @@ export struct OrderDetailPage {
     Column({ space: 14 }) {
       if (this.late(o)) {
         Row({ space: 10 }) {
-          LvIcon({ name: 'triangle-alert', iconColor: $r('app.color.danger'), size: 20 })
+          LvIcon({ name: 'triangle-alert', iconColor: $r('app.color.danger'), iconSize: 20 })
           Column({ space: 4 }) {
             Text('物流异常 · 已超过预计到货日期').fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.danger'))
             Text(`预计 ${(o.estimatedDelivery as string).slice(0, 10)} 到货，目前仍未完成。${o.notes}`).fontSize(13).fontColor($r('app.color.ink2')).lineHeight(20)
@@ -127,7 +127,7 @@ export struct OrderDetailPage {
           }
           .alignItems(HorizontalAlign.Start)
           .layoutWeight(1)
-          LvIcon({ name: 'chevron-right', iconColor: $r('app.color.ink3'), size: 18 })
+          LvIcon({ name: 'chevron-right', iconColor: $r('app.color.ink3'), iconSize: 18 })
         }
         .width('100%')
         .padding(14)
@@ -156,7 +156,7 @@ export struct OrderDetailPage {
               .width('100%')
               .padding({ top: 10, bottom: 10 })
               .border({ width: { top: index === 0 ? 0 : 0.5 }, color: $r('app.color.line_soft') })
-            }, (q: OrderQuotation) => q.id)
+            }, (q: OrderQuotation): string => q.id)
           }
           .padding({ left: 14, right: 14 })
           .borderRadius(16)

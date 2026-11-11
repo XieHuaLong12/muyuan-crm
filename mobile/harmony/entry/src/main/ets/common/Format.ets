@@ -119,7 +119,7 @@ export class Fmt {
 
   /** Initials for avatars: "Ahmed Al-Harbi" → "AA"; Chinese names → first character. */
   static initials(name: string): string {
-    const words = name.trim().split(/\s+/).filter((w: string) => w.length > 0);
+    const words = name.trim().split(/\s+/).filter((w: string): boolean => w.length > 0);
     if (words.length === 0) return '?';
     if (words.length === 1) return words[0].charAt(0).toUpperCase();
     return `${words[0].charAt(0)}${words[1].charAt(0)}`.toUpperCase();
