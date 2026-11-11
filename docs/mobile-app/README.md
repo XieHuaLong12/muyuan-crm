@@ -14,6 +14,7 @@
 | 6 · 开发落地 | [NATIVE_PLAN.md](NATIVE_PLAN.md)：已确认决定、服务端加性改动、认证、离线、两端推送与通知、Android / HarmonyOS 技术选型与企业内部分发、里程碑、待确认决定 |
 | 开工准备 | [PREPARATION.md](PREPARATION.md)：手机、账号证书与资质、品牌素材、服务器与开发环境、团队、离线默认值、开工顺序 |
 | HarmonyOS 版工程 | [`mobile/harmony`](../../mobile/harmony/README.md)：0.1 版（登录、工作台、客户与写跟进、订单、消息、我的），用 DevEco Studio 26 打开 |
+| HarmonyOS 版发布 | [HARMONY_RELEASE_GUIDE.md](HARMONY_RELEASE_GUIDE.md)：从开发调试、邀请测试到企业内部发布的逐步操作；后台资料、隐私政策草稿、图标在 `mobile/harmony/store/` |
 
 ## 预览原型
 

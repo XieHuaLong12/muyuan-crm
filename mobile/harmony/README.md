@@ -30,6 +30,8 @@ LVANJU BOS 的 HarmonyOS 原生 App（ArkTS + ArkUI，Stage 模型）。设计�
 
 ## 用 DevEco Studio 打开和运行
 
+> 第一次发布 App？按 [docs/mobile-app/HARMONY_RELEASE_GUIDE.md](../../docs/mobile-app/HARMONY_RELEASE_GUIDE.md) 一步步做。华为后台「应用上架 / 软件包管理」是公开上架用的，企业内部分发现在不用碰。
+
 1. 安装 **DevEco Studio 26**（带 HarmonyOS 7 / API 26 SDK）。
 2. 「Open」选择本目录 `mobile/harmony`。首次打开会同步 hvigor 和 ohpm；若提示升级 `modelVersion` 或设置 `targetSdkVersion`，按提示操作（目标选 HarmonyOS 7）。
 3. 签名：「File → Project Structure → Signing Configs」勾选「Automatically generate signature」，用公司华为开发者账号登录。自动签名会使用包名 `online.avenlee.bos`，所以要先在 AppGallery Connect 创建好这个 APP ID。**签名文件不要提交到仓库**（`.gitignore` 已排除）。
