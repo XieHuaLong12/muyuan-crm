@@ -86,6 +86,7 @@ Lucide 0.468（与 PC `lucide-react` 同版本），线宽 1.75，24 网格；�
 | 进度 | 订单七段步骤条、目标进度条 | 自定义 / `LinearProgressIndicator` | 自定义 / `Progress` |
 | 时间线 | 跟进、消息（含译文）、阶段变化、报价、留资 | `LazyColumn` 自定义 | `List` 自定义 |
 | 空 / 错 / 骨架 | 见 IA §4 | 自定义 | 自定义（`LoadingProgress` 仅用于按钮内） |
+| 离线提示条 | 顶栏下方，警示色浅底，写明数据保存时间；不遮挡内容、不可关闭 | 自定义 + `ConnectivityManager` 监听 | 自定义 + `@kit.NetworkKit` 连接状态监听 |
 
 ## 7. 图表
 

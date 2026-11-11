@@ -82,6 +82,10 @@
     error({ title = '加载失败', text = '网络连接不稳定，数据没有更新。检查网络后重试，已填写的内容不会丢失。' } = {}) {
       return `<div class="state is-error"><span class="state-mark">${I('wifi-off')}</span><h3>${title}</h3><p>${text}</p>${LV.ui.btn('重新加载', { kind: 'secondary', icon: 'rotate-ccw', attrs: LV.attr('retry') })}</div>`;
     },
+    offlineBlock({ title = '这页需要联网', text = '离线时可以查看最近联系的客户；订单、报价、任务、消息和经营数据联网后更新。' } = {}) {
+      const onCustomers = LV.state.tab === 'customers';
+      return `<div class="state"><span class="state-mark">${I('wifi-off')}</span><h3>${title}</h3><p>${text}</p>${onCustomers ? '' : LV.ui.btn('查看离线客户', { kind: 'tonal', icon: 'users', attrs: LV.attr('open', { tab: 'customers', to: 'customers', p: { queue: 'all' } }) })}</div>`;
+    },
     skeleton(kind = 'list') {
       const card = `<div class="card skel-card"><div style="display:flex;gap:12px;align-items:center"><div class="skel" style="width:44px;height:44px;border-radius:14px"></div><div style="flex:1;display:grid;gap:8px"><div class="skel skel-line" style="width:55%"></div><div class="skel skel-line" style="width:80%"></div></div></div><div class="skel skel-line" style="width:40%"></div></div>`;
       if (kind === 'dash') return `<div class="pad stack" aria-busy="true" aria-label="加载中"><div class="skel" style="height:150px;border-radius:16px"></div><div class="kpi-grid">${'<div class="skel" style="height:104px;border-radius:16px"></div>'.repeat(4)}</div><div class="skel" style="height:180px;border-radius:16px"></div></div>`;

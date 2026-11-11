@@ -48,7 +48,7 @@
           { label: '已付清', value: pay.PAID, color: 'var(--c-seq-1)', ink: 'var(--c-on-brand)' },
           { label: '已付定金', value: pay.DEPOSIT_PAID, color: 'var(--c-seq-2)', ink: '#fff' },
           { label: '未付款', value: pay.UNPAID, color: 'var(--c-seq-3)', ink: 'var(--c-ink)' },
-        ], { label: '订单付款状态' })}<p class="chart-note">按订单付款状态统计（单）。BOS 目前只记录付款状态，没有逐笔收款金额；要看回款金额，需要先新增收款记录。</p></div></div>`, { sub: '进行中的订单' })}
+        ], { label: '订单付款状态' })}<p class="chart-note">按订单付款状态统计（单）。目前只记录付款状态，不记录逐笔收款金额。</p></div></div>`, { sub: '进行中的订单' })}
         ${admin ? U.section('销售排行', `<div class="pad"><div class="card card-body">${LV.charts.bars(m.ranking.map(x => ({ label: LV.USERS[x.u].name, value: x.revenue, display: `¥${F.int(x.revenue)}`, sub: `${x.deals} 笔成交 · 占 ${F.pct(x.revenue, mo.revenue)}` })))}</div></div>`, { sub: '本月 · 按成交金额' })
           + U.section('询盘来源', `<div class="pad"><div class="card card-body">${LV.charts.bars(m.sources.map(s => ({ label: s.k, value: s.v, display: `${s.v} · ${F.pct(s.v, mo.inquiries)}` })))}</div></div>`, { sub: '本月' })
           : `<div class="pad">${U.lock('毛利、财务和团队排行只有管理员可以查看，与电脑端权限一致。')}</div>`}

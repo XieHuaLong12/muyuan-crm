@@ -1,5 +1,5 @@
 /*
- * 我的：个人信息、账号安全、通知设置、语言、外观（主题 / 字体）、关于、退出登录。
+ * 我的：个人信息、账号安全、通知设置、离线数据、外观（主题 / 字体）、关于、退出登录。（2026-11-11 确认不需要英文界面，去掉语言设置。）
  * 通知设置按「通知分类 = 系统通知渠道」设计：Android 8+ 的 NotificationChannel、HarmonyOS 的 NotificationSlot
  * 创建后声音 / 振动由用户在系统里控制，App 内的提醒方式通过切换渠道实现，详见 docs/mobile-app/NATIVE_PLAN.md。
  */
@@ -32,7 +32,7 @@
             ${U.cell({ icon: 'bell', title: '通知设置', sub: '分类、铃声、振动、免打扰', attrs: LV.go('notify-settings') })}
             ${U.cell({ icon: 'shield-check', title: '账号与安全', sub: '修改密码、登录设备', attrs: LV.go('security') })}
             ${U.cell({ icon: 'sun-moon', title: '外观', trail: `${THEMES[LV.state.theme]} · 字体${FONTS[LV.state.fontScale]}`, attrs: LV.go('appearance') })}
-            ${U.cell({ icon: 'languages', title: '语言', trail: '简体中文', attrs: LV.attr('language') })}
+            ${U.cell({ icon: 'cloud-download', title: '离线数据', trail: `${LV.state.offlineCleared ? 0 : LV.offlineCustomers().length} 位客户`, attrs: LV.attr('offline-data') })}
           </div></div>`)}
           ${U.section('其他', `<div class="pad"><div class="list">
             ${U.cell({ icon: 'circle-help', title: '帮助与反馈', attrs: LV.attr('noop-toast', { t: '反馈会发送给管理员（原型略）' }) })}
@@ -52,6 +52,7 @@
     return `<div class="form">
       <div class="field"><span class="label">演示身份</span>${opt('pt-role', LV.me().role, [['ADMIN', '管理员 陈立'], ['SALES', '销售 林晓']])}</div>
       <div class="field"><span class="label">平台</span>${opt('pt-platform', s.platform, [['android', 'Android'], ['harmony', 'HarmonyOS']])}</div>
+      <div class="field"><span class="label">网络</span>${opt('pt-net', s.offline ? 'off' : 'on', [['on', '在线'], ['off', '离线']])}</div>
       <div class="field"><span class="label">数据状态</span>${opt('pt-demo', s.demo, [['normal', '正常'], ['loading', '加载中'], ['empty', '空'], ['error', '出错']])}</div>
       <div class="field"><span class="label">模拟推送</span>${opt('pt-push', '', [['lead', '新询盘'], ['order', '新订单'], ['task', '任务到期'], ['exception', '物流异常'], ['inapp', '前台置顶响铃']])}</div>
     </div><p class="sheet-note">示例数据（MOCK）。系统推送只模拟通知外观与点击跳转。</p>`;
@@ -59,6 +60,7 @@
   LV.on('proto-tools', () => LV.sheet({ name: 'proto', title: '原型演示工具', body: protoBody() }));
   LV.on('pt-role', el => { LV.closeSheet(); LV.state.session = { userId: LV.DEMO_LOGIN[el.dataset.v] }; LV.resetData(); LV.mountApp(); LV.syncPanel?.(); });
   LV.on('pt-platform', el => { LV.setPlatform(el.dataset.v); LV.updateSheet(protoBody(), 'proto'); });
+  LV.on('pt-net', el => { LV.setOffline(el.dataset.v === 'off'); LV.updateSheet(protoBody(), 'proto'); });
   LV.on('pt-demo', el => { LV.state.demo = el.dataset.v; LV.syncPanel?.(); LV.updateSheet(protoBody(), 'proto'); });
   LV.on('pt-push', el => { LV.closeSheet(); setTimeout(() => (el.dataset.v === 'inapp' ? LV.inAppLead() : LV.simulatePush(el.dataset.v)), 260); });
 
@@ -124,7 +126,7 @@
       };
     },
   };
-  LV.on('pwd', () => LV.sheet({ name: 'pwd', title: '修改登录密码', body: `<form class="form" data-submit="pwd-save" novalidate>${U.field({ id: 'pw-old', label: '当前密码', type: 'password', autocomplete: 'current-password' })}${U.field({ id: 'pw-new', label: '新密码', type: 'password', hint: '至少 8 位', autocomplete: 'new-password' })}${U.field({ id: 'pw-new2', label: '再次输入新密码', type: 'password', autocomplete: 'new-password' })}</form>`, foot: U.btn('保存新密码', { kind: 'primary', attrs: LV.attr('pwd-save') }) }));
+  LV.on('pwd', () => !LV.needOnline('修改密码') && LV.sheet({ name: 'pwd', title: '修改登录密码', body: `<form class="form" data-submit="pwd-save" novalidate>${U.field({ id: 'pw-old', label: '当前密码', type: 'password', autocomplete: 'current-password' })}${U.field({ id: 'pw-new', label: '新密码', type: 'password', hint: '至少 8 位', autocomplete: 'new-password' })}${U.field({ id: 'pw-new2', label: '再次输入新密码', type: 'password', autocomplete: 'new-password' })}</form>`, foot: U.btn('保存新密码', { kind: 'primary', attrs: LV.attr('pwd-save') }) }));
   LV.on('pwd-save', () => {
     const a = document.getElementById('pw-new').value, b = document.getElementById('pw-new2').value, old = document.getElementById('pw-old').value;
     const err = !old ? '请填写当前密码' : a.length < 8 ? '新密码至少 8 位' : a !== b ? '两次输入的新密码不一致' : '';
@@ -133,7 +135,26 @@
   });
   LV.on('logout-others', async () => { const ok = await LV.confirm({ title: '退出其他设备？', message: '除这台手机外，所有设备都需要重新登录。', ok: '全部退出', danger: true }); if (ok) LV.toast('其他设备已退出登录', { icon: 'shield-check' }); });
 
-  /* ── Appearance & language ────────────────────────────── */
+  /* ── Offline data ─────────────────────────────────────── */
+  const offlineBody = () => {
+    const n = LV.state.offlineCleared ? 0 : LV.offlineCustomers().length, pending = LV.pendingFollowUps().length;
+    return `<dl class="kv">
+        <div><dt>已保存</dt><dd>${n} 位最近客户</dd></div>
+        <div><dt>占用空间</dt><dd class="num">约 ${(n * 0.04).toFixed(1)} MB</dd></div>
+        <div><dt>最后同步</dt><dd>${LV.state.offlineCleared ? '—' : `${F.date(LV.OFFLINE_SAVED_AT)} ${F.time(LV.OFFLINE_SAVED_AT)}`}</dd></div>
+        <div><dt>待同步跟进</dt><dd>${pending} 条</dd></div>
+      </dl>
+      <p class="sheet-note">范围：你负责的或最近查看过的客户中，最近 30 天联系过或有待跟进的，最多 100 位；包括资料、联系方式、阶段、标签和最近 20 条动态。订单、报价、经营数据不离线保存。<br>数据加密保存在本机；退出登录、账号停用、修改密码或公司远程擦除手机时自动清除。</p>`;
+  };
+  LV.on('offline-data', () => LV.sheet({ name: 'offline', title: '离线数据', body: offlineBody(), foot: `${U.btn('清除离线数据', { kind: 'danger-ghost', attrs: LV.attr('offline-clear') })}${U.btn('立即同步', { kind: 'primary', icon: 'refresh-cw', attrs: LV.attr('offline-sync') })}` }));
+  LV.on('offline-sync', () => { if (LV.needOnline('同步')) return; LV.state.offlineCleared = false; LV.updateSheet(offlineBody(), 'offline'); LV.refresh(); LV.toast('离线数据已更新', { icon: 'refresh-cw' }); });
+  LV.on('offline-clear', async () => {
+    const pending = LV.pendingFollowUps().length;
+    const ok = await LV.confirm({ title: '清除离线数据？', message: pending ? `还有 ${pending} 条跟进没有同步，清除后会丢失。` : '清除后，离线时将无法查看客户；联网后会重新保存。', ok: '清除', danger: true });
+    if (!ok) return; LV.state.offlineCleared = true; LV.closeSheet(); LV.refresh(); LV.toast('离线数据已清除');
+  });
+
+  /* ── Appearance ───────────────────────────────────────── */
   LV.screens.appearance = {
     render() {
       return {
@@ -147,7 +168,6 @@
     mount(el, r) { if (r.ui.font && Number(r.ui.font) !== LV.state.fontScale) { LV.setFont(Number(r.ui.font)); } },
   };
   LV.on('theme-set', el => { LV.setTheme(el.dataset.k); LV.refresh(); });
-  LV.on('language', () => LV.sheet({ title: '语言', body: `<div class="action-list"><button type="button" class="action-item is-selected"><span class="radio is-on"></span><span><strong>简体中文</strong></span></button><button type="button" class="action-item" ${LV.attr('noop-toast', { t: 'English 界面在规划中，客户资料与报价单已支持英文' })}><span class="radio"></span><span><strong>English ${U.planned()}</strong><small>BOS 目前只有中文界面</small></span></button></div>` }));
 
   /*
    * Enterprise in-house distribution (decided 2026-11-11): no app store. Android installs a company-signed APK from the

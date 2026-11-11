@@ -76,6 +76,7 @@
   LV.screens.task = {
     render(p) {
       const t = LV.db.tasks.find(x => x.id === p.id); if (!t) return { title: '任务', body: U.empty({ icon: 'circle-x', title: '任务已删除' }) };
+      if (LV.state.offline) return { title: '任务详情', body: U.offlineBlock() };
       const c = t.customer && LV.customer(t.customer), o = t.order && LV.order(t.order), due = F.due(t.due);
       return {
         title: '任务详情',

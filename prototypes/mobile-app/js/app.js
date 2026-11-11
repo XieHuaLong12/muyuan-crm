@@ -102,6 +102,7 @@
       <div class="pp-group"><span>屏幕宽度（dp）</span>${seg('width', s.width, [[360, '360'], [390, '390'], [412, '412'], [430, '430']])}</div>
       <div class="pp-group"><span>主题</span>${seg('theme', s.theme, [['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']])}</div>
       <div class="pp-group"><span>字体大小</span>${seg('font', s.fontScale, [[1, '标准'], [1.12, '大'], [1.25, '特大']])}</div>
+      <div class="pp-group"><span>网络</span>${seg('net', s.offline ? 'off' : 'on', [['on', '在线'], ['off', '离线（只读最近客户）']])}</div>
       <div class="pp-group"><span>数据状态</span>${seg('demo', s.demo, [['normal', '正常'], ['loading', '加载中'], ['empty', '空'], ['error', '出错']])}</div>
       <div class="pp-group"><span>推送与提醒</span><div class="pp-actions">
         <button type="button" data-push="lead">模拟系统推送：新询盘（App 在后台）</button>
@@ -123,6 +124,7 @@
       if (group === 'width') return LV.setWidth(Number(v));
       if (group === 'theme') { LV.setTheme(v); LV.refresh(); return; }
       if (group === 'font') return LV.setFont(Number(v));
+      if (group === 'net') { if (!LV.state.session) ensureLogin('SALES'); return LV.setOffline(v === 'off'); }
       if (group === 'demo') { LV.state.demo = v; LV.syncPanel(); LV.refresh(); return; }
       if (b.dataset.page) { const i = Number(b.dataset.page); if (i > 0) ensureLogin(LV.state.session ? LV.me().role : 'ADMIN'); PAGES[i][1](); LV.syncPanel(); return; }
       if (b.dataset.push) { ensureLogin(LV.state.session ? LV.me().role : 'ADMIN'); LV.syncPanel(); LV.simulatePush(b.dataset.push); return; }

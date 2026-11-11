@@ -19,7 +19,7 @@
 
   function filtered(ui) {
     const q = (ui.q || '').trim().toLowerCase(), f = ui.filters || {};
-    let list = LV.scope.customers().filter(QUEUES[ui.queue || 'all'].test);
+    let list = (LV.state.offline ? LV.offlineCustomers() : LV.scope.customers()).filter(QUEUES[ui.queue || 'all'].test);
     if (q) list = list.filter(c => [c.name, c.company, c.country, c.city, c.whatsapp, c.email, c.model].join(' ').toLowerCase().includes(q));
     if (f.stages?.length) list = list.filter(c => f.stages.includes(c.stage));
     if (f.grades?.length) list = list.filter(c => f.grades.includes(c.grade));
@@ -62,28 +62,29 @@
       return q ? U.empty({ icon: 'text-search', title: `没有找到「${LV.esc(q)}」`, text: '换个关键词，或按姓名、公司、国家、WhatsApp 号码搜索。', action: U.btn('新建客户', { kind: 'tonal', icon: 'user-plus', attrs: LV.go('customer-new', { name: q }) }) })
         : U.empty({ icon: 'users', title: ui.queue === 'pool' ? '没有待分配的线索' : '这里还没有客户', text: ui.queue === 'pool' ? '新的广告线索会先进入待分配，再由管理员分配。' : '新建客户，或等待广告线索自动进入。', action: U.btn('新建客户', { kind: 'tonal', icon: 'user-plus', attrs: LV.go('customer-new') }) });
     }
-    return `<p class="list-count">共 ${list.length} 位 · 按${SORTS[ui.filters?.sort || 'next']}排序</p><div class="stack">${list.map(customerCard).join('')}</div>`;
+    return `<p class="list-count">${LV.state.offline ? `离线 · 本机保存的最近客户中有 ${list.length} 位符合` : `共 ${list.length} 位`} · 按${SORTS[ui.filters?.sort || 'next']}排序</p><div class="stack">${list.map(customerCard).join('')}</div>`;
   }
 
   LV.screens.customers = {
-    root: true, large: true, ptr: true, title: '客户',
+    root: true, large: true, ptr: true, title: '客户', offline: true,
     render(p, ui, r) {
       if (p.queue && !ui.queueSet) { ui.queue = p.queue; ui.queueSet = true; }
       if (!ui.queue) ui.queue = LV.isAdmin() ? 'all' : 'today';
-      const counts = Object.fromEntries(Object.entries(QUEUES).map(([k, q]) => [k, LV.scope.customers().filter(q.test).length]));
+      const base = LV.state.offline ? LV.offlineCustomers() : LV.scope.customers();
+      const counts = Object.fromEntries(Object.entries(QUEUES).map(([k, q]) => [k, base.filter(q.test).length]));
       const n = filterCount(ui.filters);
       const chips = Object.entries(QUEUES).filter(([, q]) => !q.admin || LV.isAdmin()).map(([k, q]) => U.chip(q.label, { pressed: ui.queue === k, count: counts[k], alert: ['pool', 'new', 'waiting'].includes(k) && counts[k] > 0, attrs: LV.attr('set', { k: 'queue', v: JSON.stringify(k) }) })).join('');
       return {
         title: '客户',
         actions: U.iconBtn('user-plus', { label: '新建客户', attrs: LV.go('customer-new') }),
-        body: `${U.largeTitle('客户', LV.isAdmin() ? `全公司 ${LV.db.customers.length} 位 · 待分配 ${counts.pool}` : `我负责的 ${LV.scope.customers().length} 位客户`)}
+        body: `${U.largeTitle('客户', LV.state.offline ? `离线 · 本机保存 ${base.length} 位最近客户` : LV.isAdmin() ? `全公司 ${LV.db.customers.length} 位 · 待分配 ${counts.pool}` : `我负责的 ${LV.scope.customers().length} 位客户`)}
           <div class="sticky-tools">
             <div class="toolbar"><label class="search">${I('search')}<span class="sr-only">搜索客户</span><input type="search" id="cust-q" placeholder="姓名、公司、国家、WhatsApp" value="${LV.esc(ui.q || '')}" data-input="cust-search" enterkeyhint="search"></label>
             <button type="button" class="filter-btn" ${LV.attr('cust-filter')} aria-label="筛选和排序${n ? `，已选 ${n} 项` : ''}">${I('sliders-horizontal')}筛选${n ? `<b>${n}</b>` : ''}</button></div>
             <div class="chip-row" role="tablist" aria-label="客户队列">${chips}</div>
           </div>
           <div class="pad" data-region="list">${LV.gate(r, ui, () => listRegion(p, ui))}</div>`,
-        fab: `<button type="button" class="fab" ${LV.go('customer-new')} aria-label="新建客户">${I('plus')}<span>新建客户</span></button>`,
+        fab: LV.state.offline ? '' : `<button type="button" class="fab" ${LV.go('customer-new')} aria-label="新建客户">${I('plus')}<span>新建客户</span></button>`,
       };
     },
     mount(el, r) { if (r.params.focus && !r.ui.focused) { r.ui.focused = true; setTimeout(() => el.querySelector('#cust-q')?.focus(), 360); } },
@@ -116,7 +117,7 @@
   const TL_ICON = { IN: ['message-circle', 't-in'], OUT: ['send', ''], FOLLOW: ['pencil', 't-brand'], STAGE: ['flag', ''], QUOTE: ['file-text', 't-warning'], LEAD: ['user-round-plus', 't-brand'], ORDER: ['package', 't-brand'] };
   function timeline(c) {
     const items = LV.db.timeline[c.id] || [{ at: c.inquiryAt, type: 'LEAD', title: `${C.sources[c.source]} 留资${c.grade ? ` · ${c.grade} 级` : ''}`, body: c.gradeReason }];
-    return `<div class="timeline">${items.map(t => { const [icon, tone] = TL_ICON[t.type] || ['circle', '']; return `<div class="tl-item"><span class="tl-dot ${tone}">${I(icon)}</span><div><div class="tl-head"><strong>${t.title}</strong><time>${F.ago(t.at)}</time></div>${t.body ? `<div class="tl-body">${t.type === 'IN' ? `<div class="quote">${LV.esc(t.body)}${t.trans ? `<div class="trans">${I('languages')}${LV.esc(t.trans)}</div>` : ''}</div>` : LV.esc(t.body)}</div>` : ''}${t.by ? `<div class="tl-meta">${owner(t.by)}</div>` : ''}</div></div>`; }).join('')}</div>`;
+    return `<div class="timeline">${items.map(t => { const [icon, tone] = TL_ICON[t.type] || ['circle', '']; return `<div class="tl-item${t.pending ? ' is-pending' : ''}"><span class="tl-dot ${tone}">${I(icon)}</span><div><div class="tl-head"><strong>${t.title}</strong><time>${F.ago(t.at)}</time></div>${t.body ? `<div class="tl-body">${t.type === 'IN' ? `<div class="quote">${LV.esc(t.body)}${t.trans ? `<div class="trans">${I('languages')}${LV.esc(t.trans)}</div>` : ''}</div>` : LV.esc(t.body)}</div>` : ''}${t.by ? `<div class="tl-meta">${owner(t.by)}</div>` : ''}</div></div>`; }).join('')}</div>`;
   }
   function profile(c) {
     const kv = rows => `<dl class="kv">${rows.filter(([, v]) => v).map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
@@ -134,9 +135,12 @@
   }
 
   LV.screens.customer = {
+    offline: true,
     render(p, ui, r) {
       const c = LV.customer(p.id);
       if (!c) return { title: '客户', body: U.empty({ icon: 'circle-x', title: '客户不存在或已移入回收站' }) };
+      if (!LV.state.offline && !LV.state.viewed.includes(c.id)) LV.state.viewed.unshift(c.id);
+      if (LV.state.offline && !LV.isCached(c.id)) return { title: LV.esc(c.name), body: U.offlineBlock({ title: '这位客户没有离线保存', text: '本机只保存最近 30 天联系过或有待跟进的客户（最多 100 位）。联网后可以查看。' }) };
       const tab = ui.tab || 'timeline';
       const due = c.firstContactDueAt && !c.lastContactAt ? { ...F.due(c.firstContactDueAt), label: '首次联系截止' } : c.nextFollowUpAt ? { ...F.due(c.nextFollowUpAt), label: '下次跟进' } : null;
       const content = LV.gate(r, ui, () => `
@@ -173,6 +177,7 @@
   LV.on('dial', (el, e) => { e.preventDefault(); const id = el.dataset.id; LV.closeSheet(); LV.toast('已打开系统拨号（原型示意）', { icon: 'phone' }); setTimeout(() => LV.confirm({ title: '记录这次通话？', message: '通话结束后补一条跟进，方便同事接手。', ok: '记录', cancel: '稍后' }).then(ok => ok && LV.openFollowSheet(id, 'PHONE')), 900); });
   LV.on('contact-wa', el => {
     const c = LV.customer(el.dataset.id);
+    if (LV.state.offline) { LV.sheet({ title: `WhatsApp · ${c.name}`, body: `<div class="action-list"><button type="button" class="action-item" ${LV.attr('wa-app', { id: c.id })}>${I('external-link')}<span><strong>打开 WhatsApp App</strong><small>离线时无法在 BOS 会话中发送；手机上发的消息联网后会同步回 BOS</small></span></button></div><div class="number-box"><span class="num">${c.whatsapp}</span>${U.btn('复制号码', { kind: 'secondary', size: 'sm', icon: 'copy', attrs: LV.attr('copy-text', { text: c.whatsapp }) })}</div>` }); return; }
     LV.sheet({ title: `WhatsApp · ${c.name}`, body: `<div class="action-list">
       <button type="button" class="action-item" ${LV.attr('open', { tab: 'inbox', to: 'chat', p: { id: c.id } })}>${I('message-square-text')}<span><strong>在 BOS 会话中回复${c.unread ? ` · ${c.unread} 条未读` : ''}</strong><small>推荐：消息自动留痕，可翻译、用常用话术</small></span></button>
       <button type="button" class="action-item" ${LV.attr('wa-app', { id: c.id })}>${I('external-link')}<span><strong>打开 WhatsApp App</strong><small>手机上发的消息会同步回 BOS 会话（需已连接 WhatsApp 同步）</small></span></button>
@@ -190,7 +195,7 @@
       <div class="field"><span class="label">跟进方式</span><div class="option-grid">${Object.entries(C.followTypes).map(([k, l]) => U.chip(l, { pressed: fdraft.type === k, attrs: LV.attr('fd-type', { v: k }) })).join('')}</div></div>
       <div class="field${fdraft.error ? ' has-error' : ''}"><label for="fd-content">跟进内容<i>*</i></label><textarea class="textarea" id="fd-content" data-input="fd-content" placeholder="客户说了什么、我们答应了什么、下一步是什么" aria-describedby="fd-err">${LV.esc(fdraft.content)}</textarea>${fdraft.error ? `<span class="field-error" id="fd-err">${I('circle-alert')}${fdraft.error}</span>` : ''}
         <div class="option-grid phrase-row">${['客户已读未回', '已发报价', '客户要样品', '约了下次通话', '确认了款式'].map(t => `<button type="button" class="phrase" ${LV.attr('fd-phrase', { t })}>+ ${t}</button>`).join('')}</div></div>
-      <div class="field"><label for="fd-stage">阶段</label><select class="select" id="fd-stage" data-change="fd-stage">${C.stageFlow.concat(C.closedStages).map(s => `<option value="${s}" ${fdraft.stage === s ? 'selected' : ''}>${C.stages[s]}${s === c.stage ? '（当前）' : ''}</option>`).join('')}</select></div>
+      <div class="field"><label for="fd-stage">阶段</label><select class="select" id="fd-stage" data-change="fd-stage" ${LV.state.offline ? 'disabled' : ''}>${C.stageFlow.concat(C.closedStages).map(s => `<option value="${s}" ${fdraft.stage === s ? 'selected' : ''}>${C.stages[s]}${s === c.stage ? '（当前）' : ''}</option>`).join('')}</select>${LV.state.offline ? '<span class="field-hint">离线时不能改阶段；跟进会保存在本机，联网后自动同步</span>' : ''}</div>
       <div class="field"><span class="label">下次跟进</span><div class="option-grid">${NEXT.map(([k, l]) => U.chip(l, { pressed: fdraft.next === k, attrs: LV.attr('fd-next', { v: k }) })).join('')}</div></div>
     </form>`;
   }
@@ -208,6 +213,11 @@
   LV.on('follow-save', async () => {
     if (!fdraft.content.trim()) { fdraft.error = '请填写跟进内容'; LV.updateSheet(followBody(), 'follow'); document.getElementById('fd-content')?.focus(); return; }
     const c = LV.customer(fdraft.id), prevStage = c.stage;
+    if (LV.state.offline) {
+      // Follow-ups are append-only, so an offline one is kept on the phone and sent when the network returns.
+      (LV.db.timeline[c.id] ||= []).unshift({ at: LV.NOW, type: 'FOLLOW', title: `跟进 · ${C.followTypes[fdraft.type]}（待同步）`, by: LV.me().id, body: fdraft.content.trim(), pending: true });
+      LV.closeSheet(); LV.refresh(); LV.toast('已保存在本机，联网后自动同步', { icon: 'wifi-off' }); return;
+    }
     if (fdraft.stage !== c.stage && C.reasonStages.includes(fdraft.stage)) {
       const reason = await LV.confirm({ title: `标记为「${C.stages[fdraft.stage]}」`, message: '暂不需要、已流失、无效客户都需要说明原因，便于管理员复核。', ok: '确认', field: { label: '原因', required: true, min: 2, placeholder: fdraft.stage === 'INVALID' ? C.invalidReasons.join(' / ') : '例如：项目延期到明年', error: '请填写原因（至少 2 个字）' } });
       if (!reason) return;
@@ -233,7 +243,7 @@
       <div class="field"><span class="label">提前提醒</span><div class="option-grid">${[[0, '准时'], [15, '15 分钟'], [30, '30 分钟'], [60, '1 小时']].map(([v, l]) => U.chip(l, { pressed: rdraft.remind === v, attrs: LV.attr('rv-remind', { v }) })).join('')}</div><span class="field-hint">到时间会推送「跟进提醒」到手机通知栏</span></div>
     </div>`;
   }
-  LV.on('revisit', el => { const c = LV.customer(el.dataset.id); rdraft = { id: c.id, at: c.nextFollowUpAt || '2026-11-11T10:00', remind: 30 }; LV.sheet({ name: 'revisit', title: '设置回访时间', sub: c.name, body: revisitBody(), foot: `${c.nextFollowUpAt ? U.btn('清除', { kind: 'secondary', attrs: LV.attr('rv-clear') }) : ''}${U.btn('保存', { kind: 'primary', attrs: LV.attr('rv-save') })}` }); });
+  LV.on('revisit', el => { if (LV.needOnline('修改回访时间')) return; const c = LV.customer(el.dataset.id); rdraft = { id: c.id, at: c.nextFollowUpAt || '2026-11-11T10:00', remind: 30 }; LV.sheet({ name: 'revisit', title: '设置回访时间', sub: c.name, body: revisitBody(), foot: `${c.nextFollowUpAt ? U.btn('清除', { kind: 'secondary', attrs: LV.attr('rv-clear') }) : ''}${U.btn('保存', { kind: 'primary', attrs: LV.attr('rv-save') })}` }); });
   LV.on('rv-pick', el => { rdraft.at = el.dataset.v; LV.updateSheet(revisitBody(), 'revisit'); });
   LV.on('rv-remind', el => { rdraft.remind = Number(el.dataset.v); LV.updateSheet(revisitBody(), 'revisit'); });
   LV.onInput('rv-at', el => { rdraft.at = el.value; });
@@ -242,6 +252,7 @@
 
   /* ── Stage sheet ──────────────────────────────────────── */
   LV.on('stage-sheet', el => {
+    if (LV.needOnline('修改阶段')) return;
     const c = LV.customer(el.dataset.id);
     const item = s => `<button type="button" class="action-item${c.stage === s ? ' is-selected' : ''}" ${LV.attr('stage-set', { id: c.id, s })}><span class="radio${c.stage === s ? ' is-on' : ''}"></span><span><strong>${C.stages[s]}</strong>${C.reasonStages.includes(s) ? '<small>需要填写原因</small>' : ''}</span></button>`;
     LV.sheet({ title: '修改阶段', sub: `${c.name} · 当前：${C.stages[c.stage]}`, body: `<div class="action-list">${C.stageFlow.map(item).join('')}</div><h3 class="sheet-sub">结束跟进</h3><div class="action-list">${C.closedStages.map(item).join('')}</div>` });
@@ -263,6 +274,7 @@
 
   /* ── Tags ─────────────────────────────────────────────── */
   LV.on('tag-sheet', el => {
+    if (LV.needOnline('修改标签')) return;
     const c = LV.customer(el.dataset.id);
     const body = () => `<div class="option-grid">${Object.entries(LV.TAGS).map(([k, t]) => U.chip(t.name, { pressed: c.tags.includes(k), attrs: LV.attr('tag-toggle', { id: c.id, t: k }) })).join('')}</div><p class="sheet-note">标签全公司共用，在电脑端「消息」里管理标签库。</p>`;
     LV.sheet({ name: 'tags', title: '客户标签', sub: c.name, body: body() });
@@ -271,6 +283,7 @@
 
   /* ── Assign (admin) ───────────────────────────────────── */
   LV.on('assign', el => {
+    if (LV.needOnline('分配客户')) return;
     const c = LV.customer(el.dataset.id);
     const sales = Object.values(LV.USERS).filter(u => u.role === 'SALES');
     LV.sheet({ title: '分配给', sub: `${c.name} · ${c.grade} 级 · ${c.gradeReason}`, body: `<div class="action-list">${sales.map(u => { const n = LV.db.customers.filter(x => x.owner === u.id && !C.closedStages.includes(x.stage)).length, t = LV.db.tasks.filter(x => x.assignee === u.id && x.status !== 'DONE' && F.dayDiff(x.due) <= 0).length; return `<button type="button" class="action-item" ${LV.attr('assign-to', { id: c.id, u: u.id })}>${U.avatar(u.name, { size: 'sm' })}<span><strong>${u.name}</strong><small>跟进中 ${n} 位 · 今日待办 ${t} 项</small></span></button>`; }).join('')}</div><p class="sheet-note">分配后负责人手机会收到通知；24 小时内的广告留资需在 5 分钟内首次联系。</p>` });
@@ -288,6 +301,7 @@
 
   /* ── More actions ─────────────────────────────────────── */
   LV.on('customer-more', el => {
+    if (LV.needOnline('编辑客户')) return;
     const c = LV.customer(el.dataset.id);
     LV.sheet({ title: c.name, body: `<div class="action-list">
       <button type="button" class="action-item" ${LV.attr('noop-toast', { t: '编辑资料与新建页使用同一表单（原型略）' })}>${I('pencil')}<span><strong>编辑资料</strong></span></button>
@@ -314,6 +328,7 @@
   LV.screens['customer-new'] = {
     guard: r => Object.entries(r.ui.form || {}).some(([k, v]) => v && !['source', 'purchase', 'product', 'stage', 'currency', 'inquiryAt', 'owner', 'next'].includes(k)),
     render(p, ui) {
+      if (LV.state.offline) return { title: '新建客户', body: U.offlineBlock({ title: '新建客户需要联网', text: '保存前要和全公司客户查重，联网后再新建。' }) };
       const f = ui.form || (ui.form = { name: p.name || '', company: '', country: '', city: '', whatsapp: '', phone: '', email: '', source: 'FACEBOOK', inquiryAt: LV.TODAY, purchase: '', product: '', model: '', quantity: '', amount: '', currency: 'USD', stage: 'NEW', owner: LV.isAdmin() ? 'u2' : LV.me().id, next: 'tomorrow', notes: '' });
       const e = ui.errors || {};
       const dup = f.whatsapp && LV.db.customers.find(c => c.whatsapp.replace(/\D/g, '') === f.whatsapp.replace(/\D/g, ''));

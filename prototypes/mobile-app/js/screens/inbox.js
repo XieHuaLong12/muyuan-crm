@@ -48,6 +48,7 @@
     root: true, large: true, ptr: true, title: '消息',
     hideTabbar: r => !!r.ui.edit,
     render(p, ui, r) {
+      if (LV.state.offline) return { title: '消息', body: `${U.largeTitle('消息')}${U.offlineBlock({ title: '消息需要联网', text: '联网后会收到离线期间的通知和客户消息。离线时可以在客户页打开 WhatsApp App 联系客户。' })}` };
       const seg = ui.seg || 'notes', c = LV.counts(), mine = LV.scope.notifications();
       const catChips = [['all', '全部', mine.filter(n => !n.read).length], ...Object.entries(CATS).map(([k, v]) => [k, v.label, mine.filter(n => n.cat === k && !n.read).length])]
         .map(([k, l, n]) => U.chip(l, { pressed: (ui.cat || 'all') === k, count: n || null, alert: n > 0 && k !== 'all', attrs: LV.attr('set', { k: 'cat', v: JSON.stringify(k) }) })).join('');
@@ -88,6 +89,7 @@
   LV.screens.chat = {
     render(p, ui) {
       const c = LV.customer(p.id), msgs = LV.db.chats[c.id] || (LV.db.chats[c.id] = []);
+      if (LV.state.offline) return { title: LV.esc(c.name), body: U.offlineBlock({ title: '会话需要联网', text: '离线时可以在客户页打开 WhatsApp App 联系客户，消息联网后会同步回 BOS。' }) };
       if (c.unread) { c.unread = 0; setTimeout(LV.renderTabbar, 0); }
       const showTrans = ui.trans !== false;
       let lastDay = '';

@@ -378,3 +378,8 @@
 .lock-card svg { width: 20px; height: 20px; flex: none; color: var(--c-ink-3); }
 
 svg.i { width: 20px; height: 20px; flex: none; }
+
+/* Offline: read-only banner under the app bar */
+.offline-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px var(--gutter); background: var(--c-warning-bg); color: var(--c-warning); font-size: var(--t-caption); font-weight: 500; }
+.offline-bar svg { width: 16px; height: 16px; flex: none; }
+.tl-item.is-pending .tl-dot { background: var(--c-warning-bg); color: var(--c-warning); }

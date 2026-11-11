@@ -48,6 +48,7 @@
     root: true, large: true, ptr: true, title: '订单',
     render(p, ui, r) {
       if (p.seg && !ui.segSet) { ui.seg = p.seg; ui.segSet = true; }
+      if (LV.state.offline) return { title: '订单', body: `${U.largeTitle('订单')}${U.offlineBlock({ title: '订单需要联网', text: '订单和报价不离线保存，避免看到过期的付款和发货状态。离线时可以查看最近客户。' })}` };
       if (p.status && !ui.statusSet) { ui.status = p.status; ui.statusSet = true; }
       const seg = ui.seg || 'orders';
       const all = LV.scope.orders();

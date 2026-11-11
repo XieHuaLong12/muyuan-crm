@@ -122,7 +122,8 @@
     const back = s.root ? '' : `<button class="icon-btn" ${LV.attr('back')} aria-label="返回">${LV.icon('chevron-left')}</button>`;
     const bar = out.appbar === false ? '' : `<header class="appbar${s.large ? ' has-large' : ''}${out.surface ? ' is-surface' : ''}">${back}${s.root && !s.large ? '<span style="width:8px"></span>' : ''}<div class="appbar-title">${out.title ?? s.title ?? ''}${out.sub ? `<small>${out.sub}</small>` : ''}</div><div class="appbar-actions">${out.actions || ''}</div></header>`;
     void stackLen;
-    return `${bar}<div class="scroll"${s.ptr ? ' data-ptr' : ''}>${s.ptr ? `<div class="ptr" aria-hidden="true">${LV.icon('refresh-cw')}</div>` : ''}<div class="scroll-inner">${out.body || ''}</div></div>${out.footer ? `<div class="actionbar">${out.footer}</div>` : ''}${out.fab || ''}`;
+    const offlineBar = LV.state.offline && LV.state.session ? `<div class="offline-bar" role="status">${LV.icon('wifi-off')}<span>离线 · 显示 ${LV.fmt.date(LV.OFFLINE_SAVED_AT)} ${LV.fmt.time(LV.OFFLINE_SAVED_AT)} 保存在本机的数据</span></div>` : '';
+    return `${bar}${offlineBar}<div class="scroll"${s.ptr ? ' data-ptr' : ''}>${s.ptr ? `<div class="ptr" aria-hidden="true">${LV.icon('refresh-cw')}</div>` : ''}<div class="scroll-inner">${out.body || ''}</div></div>${out.footer ? `<div class="actionbar">${out.footer}</div>` : ''}${out.fab || ''}`;
   }
 
   function paint(el, r, keepScroll = true) {
@@ -448,6 +449,7 @@
 
   /* ── Loading / empty / error gate for data screens ───── */
   LV.gate = (r, ui, content, { skeleton = 'list', empty } = {}) => {
+    if (LV.state.offline && !LV.screens[r.name].offline) return LV.ui.offlineBlock();
     const demo = LV.state.demo;
     if (demo === 'loading') return LV.ui.skeleton(skeleton);
     if (demo === 'error') return LV.ui.error();
@@ -456,6 +458,31 @@
     return content();
   };
   LV.on('retry', () => { LV.state.demo = 'normal'; LV.syncPanel?.(); const r = top(); r.ui.loaded = false; LV.refresh(); });
+
+  /*
+   * Offline (decided 2026-11-11: staff may read recent customers offline). Scope: my customers contacted in the last
+   * 30 days or with a follow-up scheduled, at most 100, encrypted on the phone. Offline is read-only, except new
+   * follow-ups, which are append-only records: they are kept on the phone and sent when the network returns.
+   */
+  LV.OFFLINE_SAVED_AT = '2026-11-10T10:24';
+  // Administrators keep their own customers plus the ones they opened recently, never the whole company.
+  LV.state.viewed = ['c1', 'c3', 'c8'];
+  LV.offlineCustomers = () => LV.state.offlineCleared ? [] : LV.scope.customers()
+    .filter(c => c.owner === LV.me().id || LV.state.viewed.includes(c.id))
+    .filter(c => !c.pool && ((c.lastContactAt && LV.fmt.dayDiff(c.lastContactAt) >= -30) || c.nextFollowUpAt))
+    .sort((a, b) => (b.lastContactAt || '').localeCompare(a.lastContactAt || '')).slice(0, 100);
+  LV.isCached = id => LV.offlineCustomers().some(c => c.id === id);
+  LV.needOnline = what => { if (!LV.state.offline) return false; LV.toast(`离线时不能${what}，联网后再试`, { icon: 'wifi-off', tone: 'danger' }); return true; };
+  LV.pendingFollowUps = () => Object.values(LV.db.timeline).flat().filter(t => t.pending);
+  LV.setOffline = on => {
+    LV.state.offline = on;
+    if (!on) {
+      const pending = LV.pendingFollowUps();
+      pending.forEach(t => { t.pending = false; t.title = t.title.replace('（待同步）', ''); });
+      if (pending.length) setTimeout(() => LV.toast(`已联网，${pending.length} 条离线跟进已同步`, { icon: 'refresh-cw' }), 50);
+    }
+    LV.refresh(); LV.syncPanel?.();
+  };
 
   LV.boot = () => { bindEvents(); LV.mountApp(); };
 })();
