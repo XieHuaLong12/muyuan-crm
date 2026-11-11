@@ -189,7 +189,7 @@
       }
       if (tab !== 'home') { LV.nav.tab('home'); return; }
       if (LV.state.exitArmed) { LV.toast('原型中不会真正退出 App', { icon: 'info' }); return; }
-      LV.state.exitArmed = true; LV.toast('再按一次退出 LVANJU BOS', { icon: 'info', duration: 2000 });
+      LV.state.exitArmed = true; LV.toast('再按一次退出 LVANJUBOS', { icon: 'info', duration: 2000 });
       setTimeout(() => { LV.state.exitArmed = false; }, 2000);
     },
     tab(tab) {

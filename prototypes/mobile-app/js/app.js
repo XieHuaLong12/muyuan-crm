@@ -46,7 +46,7 @@
     const el = document.createElement('div');
     el.className = `heads-up${LV.state.platform === 'harmony' ? ' is-harmony' : ''}`;
     el.setAttribute('role', 'alert');
-    el.innerHTML = `<div class="hu-app"><i>L</i>LVANJU BOS · ${p.channel}<em>现在</em></div><div class="hu-title">${p.title}</div><div class="hu-text">${p.text}</div>${p.route ? `<div class="hu-actions"><span>${kind === 'lead' ? '去处理' : '查看'}</span><span>稍后</span></div>` : ''}<span class="hu-sim">模拟系统通知 · ${LV.state.platform === 'harmony' ? 'Push Kit' : '厂商通道 / FCM'}</span>`;
+    el.innerHTML = `<div class="hu-app"><i>L</i>LVANJUBOS · ${p.channel}<em>现在</em></div><div class="hu-title">${p.title}</div><div class="hu-text">${p.text}</div>${p.route ? `<div class="hu-actions"><span>${kind === 'lead' ? '去处理' : '查看'}</span><span>稍后</span></div>` : ''}<span class="hu-sim">模拟系统通知 · ${LV.state.platform === 'harmony' ? 'Push Kit' : '厂商通道 / FCM'}</span>`;
     void hide;
     document.getElementById('app').appendChild(el);
     const close = () => { el.style.transition = 'opacity .2s, transform .2s'; el.style.opacity = 0; el.style.transform = 'translateY(-16px)'; setTimeout(() => el.remove(), 220); };

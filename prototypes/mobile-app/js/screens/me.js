@@ -36,7 +36,7 @@
           </div></div>`)}
           ${U.section('其他', `<div class="pad"><div class="list">
             ${U.cell({ icon: 'circle-help', title: '帮助与反馈', attrs: LV.attr('noop-toast', { t: '反馈会发送给管理员（原型略）' }) })}
-            ${U.cell({ icon: 'info', title: '关于 LVANJU BOS', trail: '1.0.0（原型）', attrs: LV.go('about') })}
+            ${U.cell({ icon: 'info', title: '关于 LVANJUBOS', trail: '1.0.0（原型）', attrs: LV.go('about') })}
           </div></div>`)}
           ${U.section('原型演示', `<div class="pad"><div class="list">${U.cell({ icon: 'monitor-smartphone', title: '原型演示工具', sub: '切换身份、平台、数据状态，模拟系统推送', attrs: LV.attr('proto-tools') })}</div></div>`)}
           <div class="pad"><div class="list">${U.cell({ icon: 'log-out', title: '退出登录', danger: true, attrs: LV.attr('logout'), chevron: false })}</div></div>
@@ -79,7 +79,7 @@
         title: '通知设置',
         body: `<div class="stack-lg" style="padding-top:4px">
           <div class="pad">${perm ? `<div class="perm-card is-ok">${I('circle-check')}<div><strong>系统通知已开启</strong><p>${isHarmony() ? 'HarmonyOS 通知 · 推送服务 Push Kit 已注册' : 'Android 通知权限已授予 · 推送通道：厂商通道（华为 / 荣耀 / 小米 / OPPO / vivo）+ FCM'}</p></div></div>`
-            : `<div class="perm-card">${I('bell-off')}<div><strong>系统通知未开启</strong><p>新询盘和跟进提醒无法在 App 关闭时送达。${isHarmony() ? '需要在系统设置中允许 LVANJU BOS 发送通知。' : 'Android 13 及以上需要授予通知权限。'}</p>${U.btn('去系统设置开启', { kind: 'primary', size: 'sm', attrs: LV.attr('perm-grant') })}</div></div>`}</div>
+            : `<div class="perm-card">${I('bell-off')}<div><strong>系统通知未开启</strong><p>新询盘和跟进提醒无法在 App 关闭时送达。${isHarmony() ? '需要在系统设置中允许 LVANJUBOS 发送通知。' : 'Android 13 及以上需要授予通知权限。'}</p>${U.btn('去系统设置开启', { kind: 'primary', size: 'sm', attrs: LV.attr('perm-grant') })}</div></div>`}</div>
           ${U.section('通知分类', `<div class="pad"><div class="list">${Object.keys(C.notifyCategories).map(channel).join('')}</div><p class="list-foot">每个分类对应一个系统通知渠道，也可以在系统设置里单独调整。</p></div>`)}
           ${U.section('提醒方式', `<div class="pad"><div class="list">
             ${U.cell({ icon: 'volume-2', title: '提示音', trail: SOUNDS[s.sound], attrs: LV.attr('sound') })}
@@ -180,7 +180,7 @@
     return `<div class="update-card"><div class="update-head"><strong>版本 ${UPDATE.version}</strong><span>${h ? '企业内部分发' : `${UPDATE.size} · 公司签名`}</span></div>
       <ul>${UPDATE.notes.map(n => `<li>${n}</li>`).join('')}</ul></div>
       ${dl != null && !h ? `<div class="update-progress"><div class="meter"><i style="width:${dl}%"></i></div><span class="num">${dl < 100 ? `正在下载 ${dl}%` : '下载完成，已校验安装包签名'}</span></div>` : ''}
-      <p class="sheet-note">${h ? '点「前往安装」后由系统的企业应用安装页完成更新，数据和登录状态保留。' : '下载完成后由系统安装程序完成更新。首次需要允许「LVANJU BOS 安装未知应用」，之后不再询问。低于最低支持版本时，打开 App 会直接提示更新。'}</p>`;
+      <p class="sheet-note">${h ? '点「前往安装」后由系统的企业应用安装页完成更新，数据和登录状态保留。' : '下载完成后由系统安装程序完成更新。首次需要允许「LVANJUBOS 安装未知应用」，之后不再询问。低于最低支持版本时，打开 App 会直接提示更新。'}</p>`;
   };
   LV.on('check-update', () => {
     LV.state.updateSeen = true; LV.state.updateProgress = null;
@@ -198,7 +198,7 @@
       return {
         title: '关于',
         body: `<div class="pad stack-lg" style="padding-top:12px">
-          <div class="about-brand"><img src="assets/brand/lvanju-logo.jpg" alt="LVANJU 绿安居" width="208" height="84"><strong>LVANJU BOS</strong><span class="num">版本 1.0.0 · 企业内部版（原型）</span></div>
+          <div class="about-brand"><img src="assets/brand/lvanju-logo.jpg" alt="LVANJU 绿安居" width="208" height="84"><strong>LVANJUBOS</strong><span class="num">版本 1.0.0 · 企业内部版（原型）</span></div>
           <div class="list">${U.cell({ icon: 'cloud-download', title: '检查更新', trail: LV.state.updateSeen ? '有新版本' : '', attrs: LV.attr('check-update') })}${U.cell({ icon: 'shield-check', title: '安装来源', sub: isHarmony() ? 'LVANJU 企业内部分发（华为企业应用）' : 'LVANJU 企业内部分发 · 公司签名', chevron: false })}${U.cell({ icon: 'file-text', title: '隐私政策与权限说明', attrs: LV.attr('noop-toast', { t: '内部分发同样需要告知员工收集哪些数据、为什么申请通知等权限' }) })}${U.cell({ icon: 'file-check', title: '开源许可', sub: 'Lucide Icons（ISC）等', chevron: false })}</div>
           ${U.mockNote('© LVANJU 绿安居 · 原型仅用于设计评审')}
         </div>`,
