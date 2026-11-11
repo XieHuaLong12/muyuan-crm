@@ -10,6 +10,7 @@ import './insights.css';
 import './motion.css';
 import './messages.css';
 import './workbench.css';
+import './ideas.css';
 // Last, so the phone layout wins over the page styles above at the same specificity.
 import './mobile-shell.css';
 import './mobile-lists.css';

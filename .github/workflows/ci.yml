@@ -114,12 +114,15 @@ jobs:
           mv prisma/migrations/20261030090000_customer_tags_and_pending /tmp/identity-ci-migrations/
           mv prisma/migrations/20261030120000_chat_translate_materials_replies /tmp/identity-ci-migrations/
           mv prisma/migrations/20261102090000_entry_time_demand_plan /tmp/identity-ci-migrations/
+          mv prisma/migrations/20261110090000_idea_wall_daily_sign /tmp/identity-ci-migrations/
           pnpm exec prisma migrate deploy
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "13"
           mysql -h127.0.0.1 -uroot -proot muyuan_reuse -e "INSERT INTO User (id,name,email,passwordHash) VALUES ('reuse-sentinel','Existing user','existing@example.com','preserve-me')"
           mv /tmp/identity-ci-migrations/* prisma/migrations/
           pnpm exec prisma migrate deploy
-          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "30"
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e 'SELECT COUNT(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL')" = "31"
+          # 想法墙与每日一签：两张新表（20261110090000_idea_wall_daily_sign）
+          test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('WallNote','DailySign')")" = "2"
           # 进线时间、需求画像、广告按小时花费与 AI 计划建议：工作时间两列、需求提取时间、三张新表（20261102090000_entry_time_demand_plan）
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='muyuan_reuse' AND ((table_name='Setting' AND column_name IN ('workStartHour','workEndHour')) OR (table_name='Customer' AND column_name='demandScannedAt'))")" = "3"
           test "$(mysql -h127.0.0.1 -uroot -proot -N muyuan_reuse -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='muyuan_reuse' AND table_name IN ('CustomerDemandField','AdHourlyMetric','PlanSuggestion')")" = "3"

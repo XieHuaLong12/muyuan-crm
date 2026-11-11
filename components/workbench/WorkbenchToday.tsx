@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import { DailySignCard } from './DailySignCard';
 import Link from 'next/link';
 import { AlertTriangle, ArrowUpRight, Check, ChevronDown, Clock, Pin, PinOff, Plus, Trash2 } from 'lucide-react';
 import { Button, Card, EmptyState, Header } from '@/components/ui/bos';
@@ -32,6 +33,7 @@ export function WorkbenchToday({ initial }: { initial: Data }) {
     `已连续复盘 ${s.streak} 天`, s.weekRate === null ? '' : `本周完成率 ${s.weekRate}%`].filter(Boolean).join(' · ');
   return <div className="bos-wb">
     <Header title="工作日历" description={description} actions={<WorkbenchNav current="today" />} />
+    <DailySignCard />
     {error && <p className="bos-sales-error" role="alert">{error}</p>}
     <FocusCard focus={data.focus} month={data.month} week={data.week} busy={busy} act={act} />
     <div className="bos-wb-main">

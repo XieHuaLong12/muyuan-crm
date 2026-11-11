@@ -26,6 +26,7 @@ const customerTabs = [
 const adminSections: readonly NavSection[] = [
   { href: '/workbench', label: '工作台', icon: 'workbench', tabs: [
     { href: '/workbench', label: '工作日历' },
+    { href: '/ideas', label: '想法墙' },
     ...scriptTabs,
   ] },
   { href: '/command-center', label: '经营总览', icon: 'dashboard', keepPeriod: true, tabs: [
@@ -74,6 +75,7 @@ const salesSections: readonly NavSection[] = [
   { href: '/sales', label: '今日工作', icon: 'today', badge: 'today', tabs: [
     { href: '/sales', label: '今日跟进' },
     { href: '/tasks', label: '全部待办' },
+    { href: '/ideas', label: '想法墙' },
   ] },
   { href: '/messages', label: '消息', icon: 'messages', badge: 'messages' },
   { href: '/outreach/review', label: '话术', icon: 'scripts', tabs: [scriptTabs[2], scriptTabs[0], scriptTabs[1]] },
