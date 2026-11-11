@@ -46,7 +46,7 @@
     const el = document.createElement('div');
     el.className = `heads-up${LV.state.platform === 'harmony' ? ' is-harmony' : ''}`;
     el.setAttribute('role', 'alert');
-    el.innerHTML = `<div class="hu-app"><i>L</i>LVANJUBOS · ${p.channel}<em>现在</em></div><div class="hu-title">${p.title}</div><div class="hu-text">${p.text}</div>${p.route ? `<div class="hu-actions"><span>${kind === 'lead' ? '去处理' : '查看'}</span><span>稍后</span></div>` : ''}<span class="hu-sim">模拟系统通知 · ${LV.state.platform === 'harmony' ? 'Push Kit' : '厂商通道 / FCM'}</span>`;
+    el.innerHTML = `<div class="hu-app"><i>L</i>LVANJUBOS · ${p.channel}<em>现在</em></div><div class="hu-title">${p.title}</div><div class="hu-text">${p.text}</div>${p.route ? `<div class="hu-actions"><span>${kind === 'lead' ? '去处理' : '查看'}</span><span>稍后</span></div>` : ''}<span class="hu-sim">模拟系统通知 · ${LV.state.platform === 'harmony' ? 'Push Kit' : '华为推送 HMS'}</span>`;
     void hide;
     document.getElementById('app').appendChild(el);
     const close = () => { el.style.transition = 'opacity .2s, transform .2s'; el.style.opacity = 0; el.style.transform = 'translateY(-16px)'; setTimeout(() => el.remove(), 220); };
@@ -112,7 +112,7 @@
         <button type="button" data-inapp="1">App 在前台：A 级线索置顶响铃</button>
         <button type="button" data-reset="1">重置示例数据</button>
       </div></div>
-      <p class="pp-note">所有数据为 MOCK 示例。系统推送在真机由 Android 厂商通道 / FCM、HarmonyOS Push Kit 下发，这里只模拟通知外观与点击跳转。</p>`;
+      <p class="pp-note">所有数据为 MOCK 示例。系统推送在真机由华为推送下发（Android 用 HMS Push Kit，HarmonyOS 用 Push Kit），这里只模拟通知外观与点击跳转。</p>`;
   };
   function bindPanel() {
     const panel = document.getElementById('proto-panel');

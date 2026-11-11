@@ -53,10 +53,11 @@ LV.CONST = {
 
 LV.USERS = {
   u1: { id: 'u1', name: '陈立', role: 'ADMIN', email: 'admin@lvanju.example', title: '管理员' },
-  u2: { id: 'u2', name: '林晓', role: 'SALES', email: 'linxiao@lvanju.example', title: '销售顾问' },
-  u3: { id: 'u3', name: '周敏', role: 'SALES', email: 'zhoumin@lvanju.example', title: '销售顾问' },
-  u4: { id: 'u4', name: '陈航', role: 'SALES', email: 'chenhang@lvanju.example', title: '销售顾问' },
-  u5: { id: 'u5', name: '王蕾', role: 'SALES', email: 'wanglei@lvanju.example', title: '销售顾问' },
+  // wa: each salesperson's own WhatsApp number once BOS connects several numbers (planned); masked, not real numbers.
+  u2: { id: 'u2', name: '林晓', role: 'SALES', email: 'linxiao@lvanju.example', title: '销售顾问', wa: '+86 138 **** 0002' },
+  u3: { id: 'u3', name: '周敏', role: 'SALES', email: 'zhoumin@lvanju.example', title: '销售顾问', wa: '+86 138 **** 0003' },
+  u4: { id: 'u4', name: '陈航', role: 'SALES', email: 'chenhang@lvanju.example', title: '销售顾问', wa: '+86 138 **** 0004' },
+  u5: { id: 'u5', name: '王蕾', role: 'SALES', email: 'wanglei@lvanju.example', title: '销售顾问', wa: '+86 138 **** 0005' },
 };
 LV.DEMO_LOGIN = { ADMIN: 'u1', SALES: 'u2' };
 

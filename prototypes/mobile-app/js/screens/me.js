@@ -78,7 +78,7 @@
       return {
         title: '通知设置',
         body: `<div class="stack-lg" style="padding-top:4px">
-          <div class="pad">${perm ? `<div class="perm-card is-ok">${I('circle-check')}<div><strong>系统通知已开启</strong><p>${isHarmony() ? 'HarmonyOS 通知 · 推送服务 Push Kit 已注册' : 'Android 通知权限已授予 · 推送通道：厂商通道（华为 / 荣耀 / 小米 / OPPO / vivo）+ FCM'}</p></div></div>`
+          <div class="pad">${perm ? `<div class="perm-card is-ok">${I('circle-check')}<div><strong>系统通知已开启</strong><p>${isHarmony() ? 'HarmonyOS 通知 · 推送服务 Push Kit 已注册' : 'Android 通知权限已授予 · 推送服务：华为推送（HMS Push Kit）'}</p></div></div>`
             : `<div class="perm-card">${I('bell-off')}<div><strong>系统通知未开启</strong><p>新询盘和跟进提醒无法在 App 关闭时送达。${isHarmony() ? '需要在系统设置中允许 LVANJUBOS 发送通知。' : 'Android 13 及以上需要授予通知权限。'}</p>${U.btn('去系统设置开启', { kind: 'primary', size: 'sm', attrs: LV.attr('perm-grant') })}</div></div>`}</div>
           ${U.section('通知分类', `<div class="pad"><div class="list">${Object.keys(C.notifyCategories).map(channel).join('')}</div><p class="list-foot">每个分类对应一个系统通知渠道，也可以在系统设置里单独调整。</p></div>`)}
           ${U.section('提醒方式', `<div class="pad"><div class="list">
@@ -91,7 +91,7 @@
             <div class="cell has-lead"><span class="cell-lead">${I('flame')}</span><span class="cell-main"><span class="cell-title" style="display:block">A 级询盘仍然提醒</span><span class="cell-sub" style="display:block">免打扰期间，A 级新询盘照常响铃</span></span>${U.switch(s.dndExceptA, LV.attr('st-toggle', { k: 'dndExceptA' }) + (s.dnd ? '' : ' disabled'), 'A 级询盘仍然提醒')}</div>
           </div></div>`)}
           <div class="pad stack">${U.btn('发送一条测试通知', { kind: 'secondary', icon: 'bell-ring', block: true, attrs: LV.attr('test-push') })}
-          <p class="mock-note">${isHarmony() ? 'HarmonyOS：通知渠道对应 NotificationSlot；后台推送走 Push Kit，消息需申请「工作事项」等服务类分类权益才会响铃。' : 'Android：每个分类是一个 NotificationChannel；国内手机通过厂商推送通道送达，海外与有 GMS 的设备走 FCM。'}</p></div>
+          <p class="mock-note">${isHarmony() ? 'HarmonyOS：通知渠道对应 NotificationSlot；后台推送走 Push Kit，消息需申请「工作事项」等服务类分类权益才会响铃。' : 'Android：每个分类是一个 NotificationChannel；后台推送走华为推送（HMS Push Kit），手机需要带华为移动服务（HMS）。'}</p></div>
         </div>`,
       };
     },

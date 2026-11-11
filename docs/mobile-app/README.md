@@ -32,7 +32,7 @@
 
 ## 按 PROJECT_RULES §0.5.2 的 7 段摘要
 
-1. **需求理解**：为 Android 与 HarmonyOS 5/6 设计原生 App 的 UI/UX，先交付设计规范与可交互原型，确认后再开发。
+1. **需求理解**：为 Android 与 HarmonyOS（公司手机为 HarmonyOS 7）设计原生 App 的 UI/UX，先交付设计规范与可交互原型，确认后再开发。
 2. **对 BOS 的影响**：新增两个客户端，共用现有 API 与业务规则；不改变各模块边界。
 3. **涉及模块**：本次仅新增 `docs/mobile-app/`、`prototypes/mobile-app/`，以及 ESLint 忽略原型目录。
 4. **数据变化**：本次无。后续建议的加性表 / 列见 NATIVE_PLAN §2（DeviceToken、NotificationRead、NotificationPreference、Announcement、FollowUp.clientRequestId）；审批、收款记录已确认不做。

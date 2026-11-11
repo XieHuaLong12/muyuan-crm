@@ -101,6 +101,7 @@
         title: LV.esc(c.name), sub: `WhatsApp · ${c.country} · ${LV.CONST.stages[c.stage]}`, surface: true,
         actions: `${U.iconBtn('phone', { label: '打电话', attrs: LV.attr('contact-call', { id: c.id }) })}${U.iconBtn('user-round', { label: '客户详情', attrs: LV.attr('open', { tab: 'customers', to: 'customer', p: { id: c.id } }) })}`,
         body: `<div class="chat">
+          <div class="window-note">${I('smartphone')}<span>从 ${c.owner === LV.me().id ? '你' : LV.USERS[c.owner]?.name ?? '公司'} 的 WhatsApp 号码发送 · <b class="num">${LV.USERS[c.owner]?.wa ?? ''}</b></span>${U.planned('多号码')}</div>
           <div class="window-note">${I('clock')}<span>24 小时客服窗口内，可以发送自由消息 · 剩余约 <b class="num">23</b> 小时</span></div>
           ${bubbles || U.empty({ icon: 'message-circle', title: '还没有消息', text: '窗口外只能先发送已审核的 WhatsApp 模板。' })}
         </div>`,

@@ -180,7 +180,7 @@
     if (LV.state.offline) { LV.sheet({ title: `WhatsApp · ${c.name}`, body: `<div class="action-list"><button type="button" class="action-item" ${LV.attr('wa-app', { id: c.id })}>${I('external-link')}<span><strong>打开 WhatsApp App</strong><small>离线时无法在 BOS 会话中发送；手机上发的消息联网后会同步回 BOS</small></span></button></div><div class="number-box"><span class="num">${c.whatsapp}</span>${U.btn('复制号码', { kind: 'secondary', size: 'sm', icon: 'copy', attrs: LV.attr('copy-text', { text: c.whatsapp }) })}</div>` }); return; }
     LV.sheet({ title: `WhatsApp · ${c.name}`, body: `<div class="action-list">
       <button type="button" class="action-item" ${LV.attr('open', { tab: 'inbox', to: 'chat', p: { id: c.id } })}>${I('message-square-text')}<span><strong>在 BOS 会话中回复${c.unread ? ` · ${c.unread} 条未读` : ''}</strong><small>推荐：消息自动留痕，可翻译、用常用话术</small></span></button>
-      <button type="button" class="action-item" ${LV.attr('wa-app', { id: c.id })}>${I('external-link')}<span><strong>打开 WhatsApp App</strong><small>手机上发的消息会同步回 BOS 会话（需已连接 WhatsApp 同步）</small></span></button>
+      <button type="button" class="action-item" ${LV.attr('wa-app', { id: c.id })}>${I('external-link')}<span><strong>打开 WhatsApp App</strong><small>公司手机登录的是你在 BOS 连接的号码，手机上发的消息会同步回 BOS 会话</small></span></button>
     </div><div class="number-box"><span class="num">${c.whatsapp}</span>${U.btn('复制号码', { kind: 'secondary', size: 'sm', icon: 'copy', attrs: LV.attr('copy-text', { text: c.whatsapp }) })}</div>` });
   });
   LV.on('wa-app', () => { LV.closeSheet(); LV.toast('将跳转 WhatsApp（原型中不跳转）', { icon: 'external-link' }); });
