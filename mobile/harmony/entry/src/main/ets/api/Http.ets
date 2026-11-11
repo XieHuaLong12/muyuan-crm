@@ -1,4 +1,5 @@
 import { http } from '@kit.NetworkKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppConfig } from '../common/Config';
 import { Session } from './Session';
@@ -10,11 +11,32 @@ import { Session } from './Session';
  */
 export class ApiError extends Error {
   status: number;
+  path: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, path: string = '') {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.path = path;
+  }
+}
+
+/** Network-stack failures (error code = 2300000 + the libcurl code), in words a salesperson can act on. */
+function networkMessage(code: number): string {
+  switch (code) {
+    case 2300006:
+      return '找不到服务器地址，请检查服务器设置或手机网络';
+    case 2300007:
+      return '连不上服务器，请检查手机网络';
+    case 2300028:
+      return '服务器响应超时，请下拉刷新重试';
+    case 2300035:
+    case 2300058:
+    case 2300060:
+    case 2300077:
+      return '服务器 HTTPS 证书校验失败，请联系管理员';
+    default:
+      return '网络连接失败，请检查网络后重试';
   }
 }
 
@@ -82,12 +104,14 @@ export class Api {
         header: header,
         extraData: body === undefined ? undefined : JSON.stringify(body),
         expectDataType: http.HttpDataType.STRING,
+        usingCache: false,
         connectTimeout: 15000,
-        readTimeout: 20000
+        readTimeout: 30000
       });
-    } catch (e) {
-      hilog.warn(0x0000, 'LVANJUBOS', 'request failed %{public}s %{public}s', path, JSON.stringify(e));
-      throw new ApiError(0, '网络连接失败，请检查网络后重试');
+    } catch (err) {
+      const e = err as BusinessError;
+      hilog.warn(0x0000, 'LVANJUBOS', 'request failed %{public}s %{public}d %{public}s', path, e.code, e.message);
+      throw new ApiError(0, `${networkMessage(e.code)}（错误码 ${e.code}）`, path);
     } finally {
       client.destroy();
     }
@@ -104,13 +128,19 @@ export class Api {
     }
     if (res.responseCode === 401) {
       await Session.clear();
-      throw new ApiError(401, envelope !== null && envelope.error ? envelope.error : '登录已过期，请重新登录');
+      throw new ApiError(401, envelope !== null && envelope.error ? envelope.error : '登录已过期，请重新登录', path);
     }
-    if (envelope === null) {
-      throw new ApiError(res.responseCode, `服务器暂时无法访问（${res.responseCode}），请稍后重试`);
+    if (envelope === null || typeof envelope.success !== 'boolean') {
+      const text = typeof res.result === 'string' ? (res.result as string).slice(0, 200) : '';
+      hilog.warn(0x0000, 'LVANJUBOS', 'unexpected response %{public}s %{public}d %{public}s', path, res.responseCode, text);
+      throw new ApiError(res.responseCode, `服务器返回了无法识别的内容（HTTP ${res.responseCode}）`, path);
     }
     if (!envelope.success) {
-      throw new ApiError(res.responseCode, envelope.error ? envelope.error : '操作失败，请稍后重试');
+      const reason = envelope.error ? envelope.error : '操作失败，请稍后重试';
+      hilog.warn(0x0000, 'LVANJUBOS', 'request refused %{public}s %{public}d %{public}s', path, res.responseCode, reason);
+      // Business refusals (400/403/409/429) already read well; server faults get the code for whoever investigates.
+      const shown = res.responseCode >= 500 || res.responseCode === 404 ? `${reason}（HTTP ${res.responseCode}）` : reason;
+      throw new ApiError(res.responseCode, shown, path);
     }
     return envelope.data as T;
   }
@@ -125,7 +155,7 @@ export class Api {
 
   static message(e: Object): string {
     if (e instanceof ApiError) return (e as ApiError).message;
-    if (e instanceof Error) return (e as Error).message;
+    if (e instanceof Error) return `程序出错：${(e as Error).message}`;
     return '操作失败，请稍后重试';
   }
 }

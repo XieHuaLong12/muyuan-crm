@@ -4,9 +4,19 @@ import { Api } from '../api/Http';
 import { Inbox } from '../api/Inbox';
 import { Repo } from '../api/Repo';
 import { Session } from '../api/Session';
-import { NotificationFeed, OrderReminders, QueueCount, TaskRow } from '../api/Models';
+import { NotificationFeed, OrderListPage, OrderReminders, QueueCount, SalesQueue, TaskListPage, TaskRow } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { SectionHead, StatTile, StateView } from '../components/Ui';
+
+/** One section of the page: a failure is noted and the other sections still load. */
+async function attempt<T>(name: string, call: Promise<T>, failures: string[]): Promise<T | null> {
+  try {
+    return await call;
+  } catch (e) {
+    failures.push(`${name}：${Api.message(e)}`);
+    return null;
+  }
+}
 
 /**
  * 工作台. Everything here comes from endpoints BOS already has:
@@ -29,49 +39,93 @@ export struct HomeTab {
   @State reminders: OrderReminders | null = null;
   @State tasks: TaskRow[] = [];
   @State updatedAt: string = '';
+  /** Sections that did not load this time; the rest of the page still shows. */
+  @State warning: string = '';
 
   aboutToAppear(): void {
     this.load();
   }
 
   private async load(): Promise<void> {
+    const failures: string[] = [];
+    const feedCall = attempt<NotificationFeed>('提醒', Repo.notifications(), failures);
+    const queueCall = attempt<SalesQueue>('跟进队列', Repo.queue('today', '', 1), failures);
+    const ordersCall = attempt<OrderListPage>('订单', Repo.orders('ALL', '', 1), failures);
+    const todayCall = attempt<TaskListPage>('今日待办', Repo.todayTasks(), failures);
+    const lateCall = attempt<TaskListPage>('逾期待办', Repo.overdueTasks(), failures);
+    const feed = await feedCall;
+    const queue = await queueCall;
+    const orders = await ordersCall;
+    const today = await todayCall;
+    const late = await lateCall;
     try {
-      const feedCall = Repo.notifications();
-      const queueCall = Repo.queue('today', '', 1);
-      const ordersCall = Repo.orders('ALL', '', 1);
-      const todayCall = Repo.todayTasks();
-      const lateCall = Repo.overdueTasks();
-      const feed = await feedCall;
-      const queue = await queueCall;
-      const orders = await ordersCall;
-      const today = await todayCall;
-      const late = await lateCall;
-      this.feed = feed;
-      Inbox.lastFeed = feed;
-      Inbox.applyBadges(feed);
-      this.counts = queue.counts;
-      this.reminders = orders.reminders;
-      const seen: string[] = [];
-      const merged: TaskRow[] = [];
-      late.tasks.concat(today.tasks).forEach((t: TaskRow) => {
-        if (t.status !== 'DONE' && seen.indexOf(t.id) < 0) {
-          seen.push(t.id);
-          merged.push(t);
+      if (feed !== null) {
+        this.feed = feed;
+        Inbox.lastFeed = feed;
+        Inbox.applyBadges(feed);
+      }
+      if (queue !== null) {
+        this.counts = queue.counts;
+      }
+      if (orders !== null) {
+        this.reminders = orders.reminders;
+      }
+      if (today !== null || late !== null) {
+        let all: TaskRow[] = [];
+        if (late !== null) {
+          all = all.concat(late.tasks);
         }
-      });
-      this.tasks = merged;
-      this.updatedAt = Fmt.time(new Date());
-      this.state = 'ready';
+        if (today !== null) {
+          all = all.concat(today.tasks);
+        }
+        const seen: string[] = [];
+        const merged: TaskRow[] = [];
+        all.forEach((t: TaskRow) => {
+          if (t.status !== 'DONE' && seen.indexOf(t.id) < 0) {
+            seen.push(t.id);
+            merged.push(t);
+          }
+        });
+        this.tasks = merged;
+      }
     } catch (e) {
-      this.error = Api.message(e);
+      failures.push(`显示：${Api.message(e)}`);
+    }
+    this.refreshing = false;
+    if (feed === null && queue === null && orders === null && today === null && late === null) {
+      this.error = failures.join('\n');
       if (this.state !== 'ready') {
         this.state = 'error';
       } else {
-        this.toast(this.error);
+        this.toast(failures.length > 0 ? failures[0] : '加载失败');
       }
-    } finally {
-      this.refreshing = false;
+      return;
     }
+    this.warning = failures.join('\n');
+    this.updatedAt = Fmt.time(new Date());
+    this.state = 'ready';
+  }
+
+  @Builder
+  warningCard() {
+    Row({ space: 10 }) {
+      LvIcon({ name: 'circle-alert', iconColor: $r('app.color.warning'), iconSize: 18 })
+      Column({ space: 3 }) {
+        Text('部分数据没有加载出来，点这里重试').fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink'))
+        Text(this.warning).fontSize(12).fontColor($r('app.color.ink2')).lineHeight(18)
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .padding(12)
+    .borderRadius(16)
+    .backgroundColor($r('app.color.surface'))
+    .border({ width: 1, color: $r('app.color.warning') })
+    .onClick(() => {
+      this.refreshing = true;
+      this.load();
+    })
   }
 
   private count(key: string): number {
@@ -235,6 +289,9 @@ export struct HomeTab {
   @Builder
   content() {
     Column({ space: 20 }) {
+      if (this.warning.length > 0) {
+        this.warningCard()
+      }
       if (this.feed !== null && Session.isAdmin() && this.feed.counts.pool > 0) {
         this.alertCard(`${this.feed.counts.pool} 条线索待分配`, `最早进入：${Fmt.ago(this.feed.counts.poolOldestAt)}`, 'pool')
       }
