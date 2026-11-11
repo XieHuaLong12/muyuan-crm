@@ -1,13 +1,14 @@
-import { AppConfig } from '../common/Config';
+import { AppConfig, RouteParam, Routes } from '../common/Config';
 import { Fmt } from '../common/Format';
 import { Api } from '../api/Http';
 import { Repo } from '../api/Repo';
 import { Session } from '../api/Session';
 import { LvIcon } from '../components/LvIcon';
 
-/** 我的: account, server, version, sign out. Notification settings, offline data and updates come in later versions. */
+/** 我的: account, server, version, sign out. Notification settings and updates come in later versions. */
 @Component
 export struct MeTab {
+  @Consume('pathStack') pathStack: NavPathStack;
   @StorageProp('userName') userName: string = '';
   @StorageProp('userRole') userRole: string = '';
   @StorageProp('userEmail') userEmail: string = '';
@@ -85,6 +86,26 @@ export struct MeTab {
         .backgroundColor($r('app.color.surface'))
 
         Column() {
+          Row({ space: 12 }) {
+            Row() {
+              LvIcon({ name: 'trending-up', iconColor: $r('app.color.brand_ink'), iconSize: 19 })
+            }
+            .width(34).height(34).borderRadius(10).justifyContent(FlexAlign.Center).backgroundColor($r('app.color.brand_tint'))
+            Text('数据分析').fontSize(15).fontColor($r('app.color.ink')).layoutWeight(1)
+            Text('业绩 · 转化 · 首联').fontSize(13).fontColor($r('app.color.ink3'))
+            LvIcon({ name: 'chevron-right', iconColor: $r('app.color.ink3'), iconSize: 18 })
+          }
+          .width('100%')
+          .height(56)
+          .padding({ left: 16, right: 16 })
+          .onClick(() => {
+            this.pathStack.pushPathByName(Routes.ANALYTICS, new RouteParam(''));
+          })
+        }
+        .borderRadius(16)
+        .backgroundColor($r('app.color.surface'))
+
+        Column() {
           this.cell('server', '服务器', Session.baseUrl().replace('https://', ''))
           Divider().color($r('app.color.line_soft')).margin({ left: 62 })
           this.cell('info', '版本', `${AppConfig.VERSION}（企业内部版）`)
@@ -104,7 +125,7 @@ export struct MeTab {
         .enabled(!this.busy)
         .onClick(() => this.confirmLogout())
 
-        Text('通知设置、离线数据、检查更新将在后续版本加入。').fontSize(12).fontColor($r('app.color.ink3'))
+        Text('最近打开过的客户、订单和对话会保存在这台手机上，没有网络时也能查看；退出登录会清除。').fontSize(12).fontColor($r('app.color.ink3')).lineHeight(18)
           .width('100%').textAlign(TextAlign.Center)
       }
       .padding({ left: 16, right: 16, bottom: 24 })

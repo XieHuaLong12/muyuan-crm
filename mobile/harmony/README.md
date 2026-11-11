@@ -60,9 +60,10 @@ mobile/harmony/
 │   ├── ets/
 │   │   ├── entryability/        启动：恢复会话后加载首页
 │   │   ├── pages/Index.ets      根导航：一个 Navigation 栈，五个页签在底层，详情页压在上面
-│   │   ├── views/               登录、页签（工作台 / 客户 / 订单 / 消息 / 我的）、客户详情、订单详情
-│   │   ├── components/          设计系统组件：LvIcon、Pill、Avatar、StateView、StatTile、OrderSteps
-│   │   ├── api/                 Http（{success,data} 信封、会话 Cookie、401 回到登录）、Session、Repo、Models、Inbox
+│   │   ├── views/               登录、页签（工作台 / 客户 / 订单 / 消息 / 我的）、客户详情、订单详情、WhatsApp 对话、我的待办、数据分析
+│   │   ├── views/chat/          聊天面板：优化话术、快捷回复、产品资料
+│   │   ├── components/          设计系统组件：LvIcon、Pill、Avatar、StateView、StatTile、OrderSteps；ListSource（长列表按需渲染）、AuthImage（需要登录的图片）
+│   │   ├── api/                 Http（{success,data} 信封、会话 Cookie、401 回到登录）、Cache（上次数据，先显示后刷新）、Media（选图选文件、转 JPEG、缩略图）、Session、Repo、Models、Inbox
 │   │   └── common/              配置、文案常量（与 lib/constants.ts 一致）、格式化
 │   └── resources/               颜色（浅色 / 深色）、尺寸、字符串、图标与 Logo
 └── README.md

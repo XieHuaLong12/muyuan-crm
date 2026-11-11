@@ -4,6 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { Session } from '../api/Session';
 import { Inbox } from '../api/Inbox';
+import { Cache } from '../api/Cache';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -12,6 +13,7 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     // Restore the saved session and server address before the first page decides between login and the app.
+    Cache.init(this.context);
     Session.init(this.context)
       .then((): Promise<void> => Inbox.init(this.context))
       .catch((e: BusinessError): void => hilog.error(0x0000, 'LVANJUBOS', 'session init failed: %{public}s', JSON.stringify(e)))

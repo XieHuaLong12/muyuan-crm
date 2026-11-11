@@ -24,6 +24,7 @@ NAMES = [
     'triangle-alert', 'circle-alert', 'megaphone', 'inbox', 'sparkles', 'send', 'refresh-cw', 'eye', 'eye-off',
     'smartphone', 'list-todo', 'circle-check', 'pencil', 'copy', 'external-link', 'user-plus', 'user-round-plus',
     'user-check', 'wifi-off', 'rotate-ccw', 'history', 'flag', 'languages', 'cloud-download', 'server', 'globe',
+    'image', 'mic', 'target',
 ]
 
 def icon_path(file):

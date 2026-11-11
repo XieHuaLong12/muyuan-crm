@@ -20,6 +20,11 @@ export struct OrderDetailPage {
   @State error: string = '';
 
   aboutToAppear(): void {
+    const cached = Repo.peekOrder(this.orderId);
+    if (cached !== null) {
+      this.order = cached;
+      this.state = 'ready';
+    }
     this.load();
   }
 
@@ -29,7 +34,9 @@ export struct OrderDetailPage {
       this.state = 'ready';
     } catch (e) {
       this.error = Api.message(e);
-      this.state = 'error';
+      if (this.state !== 'ready') {
+        this.state = 'error';
+      }
     }
   }
 

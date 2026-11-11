@@ -1,6 +1,9 @@
 import { http } from '@kit.NetworkKit';
+import { rcp } from '@kit.RemoteCommunicationKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppConfig } from '../common/Config';
+import { Cache } from './Cache';
 import { Session } from './Session';
 
 /**
@@ -10,11 +13,32 @@ import { Session } from './Session';
  */
 export class ApiError extends Error {
   status: number;
+  path: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, path: string = '') {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.path = path;
+  }
+}
+
+/** Network-stack failures (error code = 2300000 + the libcurl code), in words a salesperson can act on. */
+function networkMessage(code: number): string {
+  switch (code) {
+    case 2300006:
+      return '找不到服务器地址，请检查服务器设置或手机网络';
+    case 2300007:
+      return '连不上服务器，请检查手机网络';
+    case 2300028:
+      return '服务器响应超时，请下拉刷新重试';
+    case 2300035:
+    case 2300058:
+    case 2300060:
+    case 2300077:
+      return '服务器 HTTPS 证书校验失败，请联系管理员';
+    default:
+      return '网络连接失败，请检查网络后重试';
   }
 }
 
@@ -50,21 +74,26 @@ function sessionFrom(res: http.HttpResponse): string {
   return '';
 }
 
-export class Api {
-  static async request<T>(method: http.RequestMethod, path: string, body?: Object, query?: Record<string, string>): Promise<T> {
-    let url = Session.baseUrl() + path;
-    if (query !== undefined) {
-      const parts: string[] = [];
-      Object.keys(query).forEach((key: string) => {
-        const value = query[key];
-        if (value !== undefined && value !== '') {
-          parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
-        }
-      });
-      if (parts.length > 0) {
-        url += `?${parts.join('&')}`;
-      }
+/** Path plus query string: the request target and the cache key. Empty values are left out. */
+function targetOf(path: string, query?: Record<string, string>): string {
+  if (query === undefined) {
+    return path;
+  }
+  const parts: string[] = [];
+  Object.keys(query).forEach((key: string) => {
+    const value = query[key];
+    if (value !== undefined && value !== '') {
+      parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
     }
+  });
+  return parts.length > 0 ? `${path}?${parts.join('&')}` : path;
+}
+
+export class Api {
+  static async request<T>(method: http.RequestMethod, path: string, body?: Object, query?: Record<string, string>,
+    readTimeout: number = 30000): Promise<T> {
+    const target = targetOf(path, query);
+    const url = Session.baseUrl() + target;
     const header: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -82,12 +111,14 @@ export class Api {
         header: header,
         extraData: body === undefined ? undefined : JSON.stringify(body),
         expectDataType: http.HttpDataType.STRING,
+        usingCache: false,
         connectTimeout: 15000,
-        readTimeout: 20000
+        readTimeout: readTimeout
       });
-    } catch (e) {
-      hilog.warn(0x0000, 'LVANJUBOS', 'request failed %{public}s %{public}s', path, JSON.stringify(e));
-      throw new ApiError(0, '网络连接失败，请检查网络后重试');
+    } catch (err) {
+      const e = err as BusinessError;
+      hilog.warn(0x0000, 'LVANJUBOS', 'request failed %{public}s %{public}d %{public}s', path, e.code, e.message);
+      throw new ApiError(0, `${networkMessage(e.code)}（错误码 ${e.code}）`, path);
     } finally {
       client.destroy();
     }
@@ -96,36 +127,172 @@ export class Api {
     if (fresh.length > 0) {
       await Session.saveToken(fresh);
     }
+    const text = typeof res.result === 'string' ? (res.result as string) : '';
+    const data = await Api.unwrap(res.responseCode, text, path);
+    if (method === http.RequestMethod.GET && data !== null) {
+      Cache.put(target, data);
+    }
+    return data as T;
+  }
+
+  /**
+   * The `{ success, data }` / `{ success: false, error }` envelope (lib/http.ts) → data, or an ApiError worded for
+   * the user. A 401 ends the session on this phone.
+   */
+  private static async unwrap(status: number, text: string, path: string): Promise<Object | null> {
     let envelope: Envelope | null = null;
     try {
-      envelope = JSON.parse(res.result as string) as Envelope;
+      envelope = JSON.parse(text) as Envelope;
     } catch (e) {
       envelope = null;
     }
-    if (res.responseCode === 401) {
+    if (status === 401) {
       await Session.clear();
-      throw new ApiError(401, envelope !== null && envelope.error ? envelope.error : '登录已过期，请重新登录');
+      throw new ApiError(401, envelope !== null && envelope.error ? envelope.error : '登录已过期，请重新登录', path);
     }
-    if (envelope === null) {
-      throw new ApiError(res.responseCode, `服务器暂时无法访问（${res.responseCode}），请稍后重试`);
+    if (envelope === null || typeof envelope.success !== 'boolean') {
+      hilog.warn(0x0000, 'LVANJUBOS', 'unexpected response %{public}s %{public}d %{public}s', path, status, text.slice(0, 200));
+      throw new ApiError(status, `服务器返回了无法识别的内容（HTTP ${status}）`, path);
     }
     if (!envelope.success) {
-      throw new ApiError(res.responseCode, envelope.error ? envelope.error : '操作失败，请稍后重试');
+      const reason = envelope.error ? envelope.error : '操作失败，请稍后重试';
+      hilog.warn(0x0000, 'LVANJUBOS', 'request refused %{public}s %{public}d %{public}s', path, status, reason);
+      // Business refusals (400/403/409/429) already read well; server faults get the code for whoever investigates.
+      const shown = status >= 500 || status === 404 ? `${reason}（HTTP ${status}）` : reason;
+      throw new ApiError(status, shown, path);
     }
-    return envelope.data as T;
+    return envelope.data !== undefined ? envelope.data : null;
+  }
+
+  /**
+   * PATCH (stage changes, PATCH /api/bos/crm-stage). The `http` module has no PATCH method, so this one request
+   * goes through Remote Communication Kit with the same cookie and the same envelope handling.
+   */
+  static async patch<T>(path: string, body: Object): Promise<T> {
+    const headers: rcp.RequestHeaders = {
+      'content-type': 'application/json',
+      'accept': 'application/json',
+      'cookie': `${SESSION_COOKIE}=${Session.cookieValue()}`
+    };
+    const session = rcp.createSession();
+    let status = 0;
+    let text = '';
+    try {
+      const response = await session.fetch(new rcp.Request(Session.baseUrl() + path, 'PATCH', headers, JSON.stringify(body)));
+      status = response.statusCode;
+      const raw = response.toString();
+      text = raw !== null ? raw : '';
+    } catch (err) {
+      const e = err as BusinessError;
+      hilog.warn(0x0000, 'LVANJUBOS', 'patch failed %{public}s %{public}d %{public}s', path, e.code, e.message);
+      throw new ApiError(0, `网络连接失败，请检查网络后重试（错误码 ${e.code}）`, path);
+    } finally {
+      session.close();
+    }
+    const data = await Api.unwrap(status, text, path);
+    return data as T;
+  }
+
+  /** The last answer of the same GET (memory or disk), or null. Screens show it while the fresh one loads. */
+  static peek<T>(path: string, query?: Record<string, string>): T | null {
+    return Cache.peek<T>(targetOf(path, query));
   }
 
   static get<T>(path: string, query?: Record<string, string>): Promise<T> {
     return Api.request<T>(http.RequestMethod.GET, path, undefined, query);
   }
 
-  static post<T>(path: string, body: Object): Promise<T> {
-    return Api.request<T>(http.RequestMethod.POST, path, body);
+  /** readTimeout: AI writing (DeepSeek, one retry) can take well over the usual 30 seconds. */
+  static post<T>(path: string, body: Object, readTimeout: number = 30000): Promise<T> {
+    return Api.request<T>(http.RequestMethod.POST, path, body, undefined, readTimeout);
+  }
+
+  private static authHeader(): Record<string, string> {
+    const header: Record<string, string> = { 'Accept': 'application/json', 'X-Client': AppConfig.CLIENT };
+    const token = Session.cookieValue();
+    if (token.length > 0) {
+      header['Cookie'] = `${SESSION_COOKIE}=${token}`;
+    }
+    return header;
+  }
+
+  /** multipart/form-data upload (pictures and files for WhatsApp, POST /api/whatsapp/media). */
+  static async upload<T>(path: string, parts: http.MultiFormData[]): Promise<T> {
+    const header = Api.authHeader();
+    header['Content-Type'] = 'multipart/form-data';
+    const client = http.createHttp();
+    let res: http.HttpResponse;
+    try {
+      res = await client.request(Session.baseUrl() + path, {
+        method: http.RequestMethod.POST,
+        header: header,
+        multiFormDataList: parts,
+        expectDataType: http.HttpDataType.STRING,
+        usingCache: false,
+        connectTimeout: 15000,
+        readTimeout: 120000
+      });
+    } catch (err) {
+      const e = err as BusinessError;
+      hilog.warn(0x0000, 'LVANJUBOS', 'upload failed %{public}s %{public}d %{public}s', path, e.code, e.message);
+      throw new ApiError(0, `${networkMessage(e.code)}（错误码 ${e.code}）`, path);
+    } finally {
+      client.destroy();
+    }
+    const text = typeof res.result === 'string' ? (res.result as string) : '';
+    const data = await Api.unwrap(res.responseCode, text, path);
+    return data as T;
+  }
+
+  /**
+   * A signed-in file (chat pictures, product photos) as bytes. Chat media answers with a redirect to the stored
+   * file; it is followed here with the same cookie.
+   */
+  static async download(href: string): Promise<ArrayBuffer> {
+    let url = href.startsWith('http') ? href : Session.baseUrl() + href;
+    for (let hop = 0; hop < 3; hop++) {
+      const client = http.createHttp();
+      let res: http.HttpResponse;
+      try {
+        res = await client.request(url, {
+          method: http.RequestMethod.GET,
+          header: Api.authHeader(),
+          expectDataType: http.HttpDataType.ARRAY_BUFFER,
+          usingCache: false,
+          connectTimeout: 15000,
+          readTimeout: 60000
+        });
+      } catch (err) {
+        const e = err as BusinessError;
+        throw new ApiError(0, `${networkMessage(e.code)}（错误码 ${e.code}）`, href);
+      } finally {
+        client.destroy();
+      }
+      if (res.responseCode >= 300 && res.responseCode < 400) {
+        const headers = res.header as Record<string, Object>;
+        const location: Object | undefined = headers['location'] !== undefined ? headers['location'] : headers['Location'];
+        if (typeof location !== 'string' || (location as string).length === 0) {
+          break;
+        }
+        const next = location as string;
+        url = next.startsWith('http') ? next : Session.baseUrl() + next;
+        continue;
+      }
+      if (res.responseCode === 401) {
+        await Session.clear();
+        throw new ApiError(401, '登录已过期，请重新登录', href);
+      }
+      if (res.responseCode !== 200 || !(res.result instanceof ArrayBuffer)) {
+        throw new ApiError(res.responseCode, `文件读取失败（HTTP ${res.responseCode}）`, href);
+      }
+      return res.result as ArrayBuffer;
+    }
+    throw new ApiError(0, '文件读取失败', href);
   }
 
   static message(e: Object): string {
     if (e instanceof ApiError) return (e as ApiError).message;
-    if (e instanceof Error) return (e as Error).message;
+    if (e instanceof Error) return `程序出错：${(e as Error).message}`;
     return '操作失败，请稍后重试';
   }
 }

@@ -3,6 +3,9 @@ import { LoginView } from '../views/LoginView';
 import { MainTabs } from '../views/MainTabs';
 import { CustomerDetailPage } from '../views/CustomerDetailPage';
 import { OrderDetailPage } from '../views/OrderDetailPage';
+import { ChatPage } from '../views/ChatPage';
+import { TasksPage } from '../views/TasksPage';
+import { AnalyticsPage } from '../views/AnalyticsPage';
 
 /**
  * Root: one Navigation stack. The five tabs live in its root content; detail pages are pushed on top and cover the
@@ -27,6 +30,12 @@ struct Index {
       CustomerDetailPage({ customerId: (param as RouteParam).id })
     } else if (name === Routes.ORDER) {
       OrderDetailPage({ orderId: (param as RouteParam).id })
+    } else if (name === Routes.CHAT) {
+      ChatPage({ customerId: (param as RouteParam).id })
+    } else if (name === Routes.TASKS) {
+      TasksPage()
+    } else if (name === Routes.ANALYTICS) {
+      AnalyticsPage()
     }
   }
 

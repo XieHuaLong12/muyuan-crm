@@ -5,16 +5,24 @@
  */
 export class AppConfig {
   static readonly DEFAULT_SERVER: string = 'https://avenlee.online';
-  static readonly VERSION: string = '1.0.0';
-  static readonly CLIENT: string = 'LVANJUBOS-HarmonyOS/1.0.0';
+  static readonly VERSION: string = '1.1.0';
+  static readonly CLIENT: string = 'LVANJUBOS-HarmonyOS/1.1.0';
   /** How often the notification feed is refreshed while the app is in front (the PC polls about every 20 s). */
   static readonly FEED_INTERVAL_MS: number = 60000;
+  /** How often an open WhatsApp conversation checks for new messages. */
+  static readonly CHAT_INTERVAL_MS: number = 15000;
 }
 
 /** Navigation destinations pushed on the root NavPathStack (pages/Index.ets). */
 export class Routes {
   static readonly CUSTOMER: string = 'customer';
   static readonly ORDER: string = 'order';
+  /** WhatsApp conversation with one customer (param: customer id). */
+  static readonly CHAT: string = 'chat';
+  /** All my tasks (param unused). */
+  static readonly TASKS: string = 'tasks';
+  /** 数据分析 (param unused). */
+  static readonly ANALYTICS: string = 'analytics';
 }
 
 /** Parameter object for a pushed destination. */
@@ -37,4 +45,8 @@ export class StoreKeys {
   /** Queue the customers tab should show next (set by the home tab before switching tabs). */
   static readonly CUSTOMERS_QUEUE: string = 'customersQueue';
   static readonly CURRENT_TAB: string = 'currentTab';
+  /** Time a WhatsApp conversation was closed: the conversation list refreshes its unread counts. */
+  static readonly CHAT_CLOSED: string = 'chatClosed';
+  /** Time the user changed a customer (follow-up, stage, task): lists and the home tab reload. */
+  static readonly DATA_CHANGED: string = 'dataChanged';
 }

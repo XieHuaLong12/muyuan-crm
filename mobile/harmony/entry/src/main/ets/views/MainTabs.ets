@@ -105,9 +105,6 @@ export struct MainTabs {
     .backgroundColor($r('app.color.bg'))
     .onChange((index: number) => {
       this.current = index;
-      if (index === 3) {
-        Inbox.markAllSeen();
-      }
     })
   }
 }

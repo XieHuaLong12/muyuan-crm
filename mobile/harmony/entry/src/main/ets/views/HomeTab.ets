@@ -4,9 +4,22 @@ import { Api } from '../api/Http';
 import { Inbox } from '../api/Inbox';
 import { Repo } from '../api/Repo';
 import { Session } from '../api/Session';
-import { NotificationFeed, OrderReminders, QueueCount, TaskRow } from '../api/Models';
+import {
+  CompanyTotals, NotificationFeed, OrderListPage, OrderReminders, Performance, PerformanceRow, QueueCount, SalesQueue,
+  TaskListPage, TaskRow
+} from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { SectionHead, StatTile, StateView } from '../components/Ui';
+
+/** One section of the page: a failure is noted and the other sections still load. */
+async function attempt<T>(name: string, call: Promise<T>, failures: string[]): Promise<T | null> {
+  try {
+    return await call;
+  } catch (e) {
+    failures.push(`${name}：${Api.message(e)}`);
+    return null;
+  }
+}
 
 /**
  * 工作台. Everything here comes from endpoints BOS already has:
@@ -14,7 +27,8 @@ import { SectionHead, StatTile, StateView } from '../components/Ui';
  *   pool / first contact / badges  GET /api/notifications
  *   order reminders                GET /api/orders      (待付款 / 待发货 / 物流异常 / 待收尾款)
  *   my tasks                       GET /api/tasks?view=TODAY and OVERDUE
- * Revenue and target need a read-only endpoint on the server first (NATIVE_PLAN §2 S1); the card says so.
+ *   this month's revenue / target  GET /api/sales-team/performance (same numbers as the PC 销售业绩)
+ * Every section shows its last answer at once (Api cache) and refreshes underneath.
  */
 @Component
 export struct HomeTab {
@@ -29,49 +43,125 @@ export struct HomeTab {
   @State reminders: OrderReminders | null = null;
   @State tasks: TaskRow[] = [];
   @State updatedAt: string = '';
+  /** Sections that did not load this time; the rest of the page still shows. */
+  @State warning: string = '';
+  @State performance: Performance | null = null;
+  @StorageProp('dataChanged') @Watch('onDataChanged') dataChanged: number = 0;
 
-  aboutToAppear(): void {
+  onDataChanged(): void {
     this.load();
   }
 
-  private async load(): Promise<void> {
-    try {
-      const feedCall = Repo.notifications();
-      const queueCall = Repo.queue('today', '', 1);
-      const ordersCall = Repo.orders('ALL', '', 1);
-      const todayCall = Repo.todayTasks();
-      const lateCall = Repo.overdueTasks();
-      const feed = await feedCall;
-      const queue = await queueCall;
-      const orders = await ordersCall;
-      const today = await todayCall;
-      const late = await lateCall;
+  aboutToAppear(): void {
+    this.showCached();
+    this.load();
+  }
+
+  /** Last known numbers, so the page is never blank while the network answers. */
+  private showCached(): void {
+    const feed = Repo.peekNotifications();
+    const queue = Repo.peekQueue('today');
+    const orders = Repo.peekOrders('ALL');
+    const today = Repo.peekTasks('TODAY', 'OPEN');
+    const late = Repo.peekTasks('OVERDUE', '');
+    const performance = Repo.peekPerformance();
+    if (feed === null && queue === null && orders === null && today === null && late === null && performance === null) {
+      return;
+    }
+    this.apply(feed, queue, orders, today, late, performance);
+    this.state = 'ready';
+  }
+
+  private apply(feed: NotificationFeed | null, queue: SalesQueue | null, orders: OrderListPage | null,
+    today: TaskListPage | null, late: TaskListPage | null, performance: Performance | null): void {
+    if (feed !== null) {
       this.feed = feed;
       Inbox.lastFeed = feed;
       Inbox.applyBadges(feed);
+    }
+    if (queue !== null) {
       this.counts = queue.counts;
+    }
+    if (orders !== null) {
       this.reminders = orders.reminders;
+    }
+    if (performance !== null) {
+      this.performance = performance;
+    }
+    if (today !== null || late !== null) {
+      let all: TaskRow[] = [];
+      if (late !== null) {
+        all = all.concat(late.tasks);
+      }
+      if (today !== null) {
+        all = all.concat(today.tasks);
+      }
       const seen: string[] = [];
       const merged: TaskRow[] = [];
-      late.tasks.concat(today.tasks).forEach((t: TaskRow) => {
+      all.forEach((t: TaskRow) => {
         if (t.status !== 'DONE' && seen.indexOf(t.id) < 0) {
           seen.push(t.id);
           merged.push(t);
         }
       });
       this.tasks = merged;
-      this.updatedAt = Fmt.time(new Date());
-      this.state = 'ready';
+    }
+  }
+
+  private async load(): Promise<void> {
+    const failures: string[] = [];
+    const performanceCall = attempt<Performance>('本月业绩', Repo.performance(), failures);
+    const feedCall = attempt<NotificationFeed>('提醒', Repo.notifications(), failures);
+    const queueCall = attempt<SalesQueue>('跟进队列', Repo.queue('today', '', 1), failures);
+    const ordersCall = attempt<OrderListPage>('订单', Repo.orders('ALL', '', 1), failures);
+    const todayCall = attempt<TaskListPage>('今日待办', Repo.todayTasks(), failures);
+    const lateCall = attempt<TaskListPage>('逾期待办', Repo.overdueTasks(), failures);
+    const feed = await feedCall;
+    const queue = await queueCall;
+    const orders = await ordersCall;
+    const today = await todayCall;
+    const late = await lateCall;
+    const performance = await performanceCall;
+    try {
+      this.apply(feed, queue, orders, today, late, performance);
     } catch (e) {
-      this.error = Api.message(e);
+      failures.push(`显示：${Api.message(e)}`);
+    }
+    this.refreshing = false;
+    if (feed === null && queue === null && orders === null && today === null && late === null && performance === null) {
+      this.error = failures.join('\n');
       if (this.state !== 'ready') {
         this.state = 'error';
       } else {
-        this.toast(this.error);
+        this.toast(failures.length > 0 ? failures[0] : '加载失败');
       }
-    } finally {
-      this.refreshing = false;
+      return;
     }
+    this.warning = failures.join('\n');
+    this.updatedAt = Fmt.time(new Date());
+    this.state = 'ready';
+  }
+
+  @Builder
+  warningCard() {
+    Row({ space: 10 }) {
+      LvIcon({ name: 'circle-alert', iconColor: $r('app.color.warning'), iconSize: 18 })
+      Column({ space: 3 }) {
+        Text('部分数据没有加载出来，点这里重试').fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink'))
+        Text(this.warning).fontSize(12).fontColor($r('app.color.ink2')).lineHeight(18)
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .padding(12)
+    .borderRadius(16)
+    .backgroundColor($r('app.color.surface'))
+    .border({ width: 1, color: $r('app.color.warning') })
+    .onClick(() => {
+      this.refreshing = true;
+      this.load();
+    })
   }
 
   private count(key: string): number {
@@ -232,9 +322,141 @@ export struct HomeTab {
     return Fmt.due(iso);
   }
 
+  /** Sales: their own row. Administrators: the company line. */
+  private mine(p: Performance): PerformanceRow | null {
+    return p.rows.length > 0 ? p.rows[0] : null;
+  }
+
+  private monthTitle(p: Performance): string {
+    const month = Number(p.month.slice(5, 7));
+    return isNaN(month) || month === 0 ? '本月' : `${month} 月`;
+  }
+
+  /** Target completion in percent, or -1 when no target is set. */
+  private completion(p: Performance): number {
+    if (Session.isAdmin()) {
+      const summary = p.targetSummary;
+      const company = p.company;
+      if (summary === null || summary.company === null || company === null) return -1;
+      const target = Number(summary.company);
+      return target > 0 ? Math.round(Number(company.revenue) / target * 1000) / 10 : -1;
+    }
+    const row = this.mine(p);
+    return row !== null && row.completion !== null ? row.completion : -1;
+  }
+
+  private targetText(p: Performance): string {
+    if (Session.isAdmin()) {
+      const summary = p.targetSummary;
+      return summary !== null && summary.company !== null ? Fmt.money(summary.company, p.currency) : '';
+    }
+    const row = this.mine(p);
+    return row !== null && row.target !== null ? Fmt.money(row.target.amount, p.currency) : '';
+  }
+
+  private ranking(p: Performance): PerformanceRow[] {
+    return p.rows.filter((r: PerformanceRow): boolean => r.isActive)
+      .sort((a: PerformanceRow, b: PerformanceRow): number => Number(b.revenue) - Number(a.revenue))
+      .slice(0, 5);
+  }
+
+  @Builder
+  perfFigure(value: string, title: string) {
+    Column({ space: 2 }) {
+      Text(value).fontSize(17).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+      Text(title).fontSize(12).fontColor($r('app.color.ink3'))
+    }
+    .alignItems(HorizontalAlign.Start)
+    .layoutWeight(1)
+  }
+
+  @Builder
+  performanceCard(p: Performance) {
+    Column({ space: 12 }) {
+      Row({ space: 6 }) {
+        LvIcon({ name: 'trending-up', iconColor: $r('app.color.brand_ink'), iconSize: 18 })
+        Text(Session.isAdmin() ? `${this.monthTitle(p)}全公司业绩` : `${this.monthTitle(p)}我的业绩`)
+          .fontSize(15).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink'))
+        Blank()
+        Text('数据分析').fontSize(13).fontColor($r('app.color.brand_ink'))
+        LvIcon({ name: 'chevron-right', iconColor: $r('app.color.brand_ink'), iconSize: 16 })
+      }
+      .width('100%')
+      .onClick(() => {
+        this.pathStack.pushPathByName(Routes.ANALYTICS, new RouteParam(''));
+      })
+
+      Text(Fmt.money(Session.isAdmin() ? (p.company !== null ? p.company.revenue : '0') : (this.mine(p) !== null ? (this.mine(p) as PerformanceRow).revenue : '0'), p.currency))
+        .fontSize(28).fontWeight(FontWeight.Bold).fontColor($r('app.color.ink'))
+
+      if (this.completion(p) >= 0) {
+        Column({ space: 6 }) {
+          Stack({ alignContent: Alignment.Start }) {
+            Row().width('100%').height(8).borderRadius(4).backgroundColor($r('app.color.surface2'))
+            Row().width(`${Math.min(100, this.completion(p))}%`).height(8).borderRadius(4).backgroundColor($r('app.color.brand'))
+          }
+          .width('100%')
+          Text(`目标 ${this.targetText(p)} · 完成 ${this.completion(p)}%`).fontSize(13).fontColor($r('app.color.ink2'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      } else {
+        Text(Session.isAdmin() ? '本月还没有设置公司目标（电脑端「目标」里设置）' : '本月还没有设置个人目标').fontSize(13).fontColor($r('app.color.ink3'))
+      }
+
+      if (Session.isAdmin() && p.company !== null) {
+        Row() {
+          this.perfFigure(`${(p.company as CompanyTotals).deals}`, '成交单数')
+          this.perfFigure(`${(p.company as CompanyTotals).newCustomers}`, '新客户')
+          this.perfFigure(`${(p.company as CompanyTotals).qualified}`, '有效客户')
+        }
+        .width('100%')
+      } else if (this.mine(p) !== null) {
+        Row() {
+          this.perfFigure(`${(this.mine(p) as PerformanceRow).deals}`, '成交单数')
+          this.perfFigure(`${(this.mine(p) as PerformanceRow).newCustomers}`, '新客户')
+          this.perfFigure((this.mine(p) as PerformanceRow).firstContactOnTime !== null ? `${(this.mine(p) as PerformanceRow).firstContactOnTime}%` : '—', '首联准时')
+        }
+        .width('100%')
+      }
+
+      if (Session.isAdmin() && this.ranking(p).length > 0) {
+        Column() {
+          ForEach(this.ranking(p), (r: PerformanceRow, index: number) => {
+            Row({ space: 10 }) {
+              Text(`${index + 1}`).fontSize(13).fontWeight(FontWeight.Bold)
+                .fontColor(index === 0 ? $r('app.color.brand_ink') : $r('app.color.ink3')).width(16)
+              Text(r.name).fontSize(14).fontColor($r('app.color.ink')).layoutWeight(1)
+                .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text(`${r.deals} 单`).fontSize(13).fontColor($r('app.color.ink3'))
+              Text(Fmt.money(r.revenue, p.currency)).fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.ink'))
+              if (r.completion !== null) {
+                Text(`${r.completion}%`).fontSize(12).fontColor($r('app.color.brand_ink'))
+              }
+            }
+            .width('100%')
+            .padding({ top: 8, bottom: 8 })
+            .border({ width: { top: index === 0 ? 0 : 0.5 }, color: $r('app.color.line_soft') })
+          }, (r: PerformanceRow): string => r.id)
+        }
+        .width('100%')
+        .padding({ top: 4 })
+        .border({ width: { top: 0.5 }, color: $r('app.color.line_soft') })
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .padding(16)
+    .borderRadius(16)
+    .backgroundColor($r('app.color.surface'))
+  }
+
   @Builder
   content() {
     Column({ space: 20 }) {
+      if (this.warning.length > 0) {
+        this.warningCard()
+      }
       if (this.feed !== null && Session.isAdmin() && this.feed.counts.pool > 0) {
         this.alertCard(`${this.feed.counts.pool} 条线索待分配`, `最早进入：${Fmt.ago(this.feed.counts.poolOldestAt)}`, 'pool')
       }
@@ -261,7 +483,9 @@ export struct HomeTab {
       }
 
       Column({ space: 8 }) {
-        SectionHead({ title: '我的待办', sub: '今天与逾期' })
+        SectionHead({ title: '我的待办', sub: '今天与逾期', link: '全部', onLink: () => {
+          this.pathStack.pushPathByName(Routes.TASKS, new RouteParam(''));
+        } })
         if (this.tasks.length === 0) {
           Text('今天的待办都完成了').fontSize(14).fontColor($r('app.color.ink3'))
             .width('100%').textAlign(TextAlign.Center).padding(20)
@@ -280,15 +504,9 @@ export struct HomeTab {
         }
       }
 
-      Row({ space: 10 }) {
-        LvIcon({ name: 'trending-up', iconColor: $r('app.color.ink3'), iconSize: 18 })
-        Text('销售额、目标完成和趋势图将在服务端增加经营数据接口后显示（与电脑端驾驶舱同一口径）。')
-          .fontSize(13).fontColor($r('app.color.ink3')).layoutWeight(1).lineHeight(20)
+      if (this.performance !== null) {
+        this.performanceCard(this.performance as Performance)
       }
-      .width('100%')
-      .padding(14)
-      .borderRadius(16)
-      .border({ width: 1, color: $r('app.color.line'), style: BorderStyle.Dashed })
     }
     .padding({ left: 16, right: 16 })
   }
