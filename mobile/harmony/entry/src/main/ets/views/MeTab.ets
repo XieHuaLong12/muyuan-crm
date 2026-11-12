@@ -242,7 +242,7 @@ export struct MeTab {
   }
 
   /** '@mode' / '@cache' / '@update' are read from state here, so the rows follow changes (builder values would not). */
-  private valueOf(value: string): string {
+  private cellValue(value: string): string {
     if (value === '@mode') return MODE_NAMES[Math.max(0, MODES.indexOf(this.mode))];
     if (value === '@cache') return this.cacheText;
     if (value === '@update') return this.checking ? '正在检查' : `当前 ${AppConfig.VERSION}`;
@@ -257,7 +257,7 @@ export struct MeTab {
       }
       .width(34).height(34).borderRadius(10).justifyContent(FlexAlign.Center).backgroundColor($r('app.color.brand_tint'))
       Text(title).fontSize(15).fontColor($r('app.color.ink')).layoutWeight(1)
-      Text(this.valueOf(value)).fontSize(13).fontColor($r('app.color.ink3')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
+      Text(this.cellValue(value)).fontSize(13).fontColor($r('app.color.ink3')).maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis })
       LvIcon({ name: 'chevron-right', iconColor: $r('app.color.ink3'), iconSize: 18 })
     }
     .width('100%')

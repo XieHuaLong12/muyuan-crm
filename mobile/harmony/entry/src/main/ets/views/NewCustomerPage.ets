@@ -114,7 +114,7 @@ export struct NewCustomerPage {
   field(title: string, placeholder: string, which: string, type: InputType) {
     Column({ space: 6 }) {
       Text(title).fontSize(13).fontColor($r('app.color.ink2'))
-      TextInput({ placeholder: placeholder, text: this.valueOf(which) })
+      TextInput({ placeholder: placeholder, text: this.fieldValue(which) })
         .type(type)
         .height(46)
         .fontSize(16)
@@ -125,7 +125,7 @@ export struct NewCustomerPage {
     .width('100%')
   }
 
-  private valueOf(which: string): string {
+  private fieldValue(which: string): string {
     if (which === 'name') return this.name;
     if (which === 'whatsapp') return this.whatsapp;
     if (which === 'phone') return this.phone;
