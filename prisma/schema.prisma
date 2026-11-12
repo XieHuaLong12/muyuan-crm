@@ -17,6 +17,7 @@ model User {
  customers Customer[]
  salesTargets UserSalesTarget[]
  pushSubscriptions PushSubscription[]
+ notificationSeen NotificationSeen?
  viewPreferences UserViewPreference[]
 }
 model Customer {
@@ -1318,6 +1319,14 @@ model DailyAdInsight {
 }
 
 // 一台设备（手机上的 CRM App 或桌面浏览器）的系统推送订阅；推送服务返回已失效时删除。
+// 每位用户「提醒」看到的时间点（App 与电脑共用）：比它新的提醒算未读。只会往后移，不会倒退。
+model NotificationSeen {
+ userId String @id
+ user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+ seenAt DateTime
+ updatedAt DateTime @updatedAt
+}
+
 model PushSubscription {
  id String @id @default(cuid())
  userId String

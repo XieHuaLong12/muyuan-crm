@@ -3,10 +3,11 @@ import { Fmt } from '../common/Format';
 import { TASK_SOURCES, label } from '../common/Labels';
 import { Api } from '../api/Http';
 import { Repo } from '../api/Repo';
-import { TaskListPage, TaskRow } from '../api/Models';
+import { TaskCustomer, TaskListPage, TaskRow } from '../api/Models';
 import { LvIcon } from '../components/LvIcon';
 import { ListSource } from '../components/ListSource';
 import { Pill, StateView } from '../components/Ui';
+import { TaskEditor } from './task/TaskEditor';
 
 class TaskView {
   title: string;
@@ -39,6 +40,8 @@ export struct TasksPage {
   @State count: number = 0;
   @State total: number = 0;
   private source: ListSource<TaskRow> = new ListSource<TaskRow>();
+  @State showEditor: boolean = false;
+  @State editing: TaskRow | null = null;
 
   aboutToAppear(): void {
     this.select(0);
@@ -89,6 +92,29 @@ export struct TasksPage {
     }
   }
 
+  private openTask(task: TaskRow | null): void {
+    this.editing = task;
+    this.showEditor = true;
+  }
+
+  private edited(): void {
+    this.showEditor = false;
+    AppStorage.setOrCreate<number>(StoreKeys.DATA_CHANGED, Date.now());
+    this.load();
+  }
+
+  @Builder
+  editor() {
+    TaskEditor({
+      customerId: this.editing !== null && (this.editing as TaskRow).customer !== null ? ((this.editing as TaskRow).customer as TaskCustomer).id : '',
+      task: this.editing,
+      onDone: () => this.edited(),
+      onClose: () => {
+        this.showEditor = false;
+      }
+    })
+  }
+
   private async complete(task: TaskRow): Promise<void> {
     try {
       await Repo.completeTask(task.id);
@@ -127,6 +153,11 @@ export struct TasksPage {
             .fontColor(task.status !== 'DONE' && Fmt.due(task.dueDate).late ? $r('app.color.danger') : $r('app.color.ink3'))
           if (task.customer !== null) {
             Text(task.customer.name).fontSize(12).fontColor($r('app.color.brand_ink'))
+              .onClick(() => {
+                if (task.customer !== null) {
+                  this.pathStack.pushPathByName(Routes.CUSTOMER, new RouteParam(task.customer.id));
+                }
+              })
           }
           Pill({ text: label(TASK_SOURCES, task.source), tone: 'neutral' })
           if (task.priority === 'HIGH') {
@@ -136,11 +167,7 @@ export struct TasksPage {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
-      .onClick(() => {
-        if (task.customer !== null) {
-          this.pathStack.pushPathByName(Routes.CUSTOMER, new RouteParam(task.customer.id));
-        }
-      })
+      .onClick(() => this.openTask(task))
     }
     .alignItems(VerticalAlign.Top)
     .width('100%')
@@ -176,6 +203,14 @@ export struct TasksPage {
         .scrollBar(BarState.Off)
         .width('100%')
         .padding({ top: 8, bottom: 10 })
+
+        Row({ space: 6 }) {
+          LvIcon({ name: 'plus', iconColor: $r('app.color.brand_ink'), iconSize: 18 })
+          Text('新建任务').fontSize(14).fontColor($r('app.color.brand_ink'))
+        }
+        .width('100%')
+        .padding({ left: 20, bottom: 8 })
+        .onClick(() => this.openTask(null))
 
         if (this.state === 'loading') {
           StateView({ kind: 'loading' }).layoutWeight(1)
@@ -218,5 +253,6 @@ export struct TasksPage {
     }
     .title('我的待办')
     .backgroundColor($r('app.color.bg'))
+    .bindSheet($$this.showEditor, this.editor(), { detents: [SheetSize.LARGE], dragBar: true })
   }
 }

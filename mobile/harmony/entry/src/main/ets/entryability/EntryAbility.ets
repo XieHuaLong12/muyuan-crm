@@ -5,6 +5,7 @@ import { window } from '@kit.ArkUI';
 import { Session } from '../api/Session';
 import { Inbox } from '../api/Inbox';
 import { Cache } from '../api/Cache';
+import { Appearance } from '../api/Appearance';
 
 export default class EntryAbility extends UIAbility {
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -16,6 +17,7 @@ export default class EntryAbility extends UIAbility {
     Cache.init(this.context);
     Session.init(this.context)
       .then((): Promise<void> => Inbox.init(this.context))
+      .then((): Promise<void> => Appearance.init(this.context))
       .catch((e: BusinessError): void => hilog.error(0x0000, 'LVANJUBOS', 'session init failed: %{public}s', JSON.stringify(e)))
       .finally(() => {
         windowStage.loadContent('pages/Index', (err: BusinessError) => {

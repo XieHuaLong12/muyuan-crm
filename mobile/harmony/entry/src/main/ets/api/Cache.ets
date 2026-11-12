@@ -2,6 +2,11 @@ import { fileIo as fs } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
+export class CacheStats {
+  files: number = 0;
+  bytes: number = 0;
+}
+
 /**
  * The last good answer of every GET, keyed by path + query, so a screen shows at once and refreshes underneath
  * (stale-while-revalidate). Memory first; a copy in the app's cache directory survives restarts and lets the
@@ -65,6 +70,24 @@ export class Cache {
     Cache.write(Cache.fileOf(key), JSON.stringify(value)).catch(() => {
       hilog.warn(0x0000, 'LVANJUBOS', 'cache write failed');
     });
+  }
+
+  /** How much is kept on this phone (离线数据). */
+  static stats(): CacheStats {
+    const result = new CacheStats();
+    if (Cache.dir.length === 0) {
+      return result;
+    }
+    try {
+      const names = fs.listFileSync(Cache.dir);
+      for (let i = 0; i < names.length; i++) {
+        result.files++;
+        result.bytes += fs.statSync(`${Cache.dir}/${names[i]}`).size;
+      }
+    } catch (e) {
+      hilog.warn(0x0000, 'LVANJUBOS', 'cache stats failed');
+    }
+    return result;
   }
 
   /** Forget everything (logout, expired session). */

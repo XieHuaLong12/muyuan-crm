@@ -3,6 +3,8 @@ import { http } from '@kit.NetworkKit';
 import { Api } from './Http';
 import { Session } from './Session';
 import {
+  AppVersion, AssignBody, CancelBody, Cockpit, CreatedCustomer, Done, MilestoneBody, MilestoneResult, NewCustomerBody,
+  PasswordBody, Quotation, SalesAccount, SeenBody, SeenState, TaskBody, TaskPatch, TaskRow,
   AiReply, AiReplyBody, AttachBody, AttachItem, AttachResult, MaterialPicker, MediaAsset, PolishBody, PolishResult,
   QuickReplyList, TranslateBatch, TranslateBatchBody, TranslateBody, TranslateOut, TranslateOutBody, Translation,
   Bootstrap, ConversationPage, CustomerDetail, CustomerListPage, EmptyBody, FollowUpBody, LoginBody, LoginUser,
@@ -47,6 +49,7 @@ export class Repo {
     const body: LoginBody = { email: email, password: password };
     const user = await Api.post<LoginUser>('/api/auth/login', body);
     await Session.rememberUser(user.name, user.role, email);
+    await Session.rememberUserId(user.id);
     return user;
   }
 
@@ -62,6 +65,7 @@ export class Repo {
   static async me(): Promise<Bootstrap> {
     const boot = await Api.get<Bootstrap>('/api/bootstrap');
     await Session.rememberUser(boot.user.name, boot.user.role, boot.user.email);
+    await Session.rememberUserId(boot.user.id);
     return boot;
   }
 
@@ -277,6 +281,106 @@ export class Repo {
 
   static overdueTasks(): Promise<TaskListPage> {
     return Repo.tasks('OVERDUE', '');
+  }
+
+  static createTask(body: TaskBody): Promise<TaskRow> {
+    return Api.post<TaskRow>('/api/tasks', body);
+  }
+
+  /** 改期 / 重新打开 / 改优先级. */
+  static updateTask(id: string, patch: TaskPatch): Promise<TaskRow> {
+    return Api.patch<TaskRow>(`/api/tasks/${encodeURIComponent(id)}`, patch);
+  }
+
+  static deleteTask(id: string): Promise<EmptyBody> {
+    return Api.del<EmptyBody>(`/api/tasks/${encodeURIComponent(id)}`);
+  }
+
+  // ── Orders and quotations ──
+  /** Moves the order to a stage; expectedUpdatedAt stops two people overwriting each other. */
+  static orderMilestone(id: string, status: string, expectedUpdatedAt: string): Promise<MilestoneResult> {
+    const body: MilestoneBody = { status: status, expectedUpdatedAt: expectedUpdatedAt };
+    return Api.patch<MilestoneResult>(`/api/orders/${encodeURIComponent(id)}`, body);
+  }
+
+  static cancelOrder(id: string, reason: string, expectedUpdatedAt: string): Promise<EmptyBody> {
+    const body: CancelBody = { reason: reason, expectedUpdatedAt: expectedUpdatedAt };
+    return Api.post<EmptyBody>(`/api/orders/${encodeURIComponent(id)}/cancel`, body);
+  }
+
+  static quotations(customerId: string): Promise<Quotation[]> {
+    const query: Record<string, string> = { 'customerId': customerId };
+    return Api.get<Quotation[]>('/api/quotations', query);
+  }
+
+  static peekQuotations(customerId: string): Quotation[] | null {
+    const query: Record<string, string> = { 'customerId': customerId };
+    return Api.peek<Quotation[]>('/api/quotations', query);
+  }
+
+  // ── Customers: create, filter, assign, delete ──
+  /** forceDuplicate: administrators only, after the server listed the existing customers with the same contact. */
+  static createCustomer(body: NewCustomerBody): Promise<CreatedCustomer> {
+    return Api.post<CreatedCustomer>('/api/customers', body);
+  }
+
+  /** The PC customer list with filters (stage, source, grade, sort); pageSize 50. */
+  static customers(filters: Record<string, string>, page: number): Promise<CustomerListPage> {
+    const query: Record<string, string> = { 'pageSize': '50', 'page': `${page}` };
+    Object.keys(filters).forEach((key: string) => {
+      query[key] = filters[key];
+    });
+    return Api.get<CustomerListPage>('/api/customers', query);
+  }
+
+  static salesAccounts(): Promise<SalesAccount[]> {
+    return Api.get<SalesAccount[]>('/api/sales-team/accounts');
+  }
+
+  static assign(ids: string[], ownerId: string, reason: string): Promise<EmptyBody> {
+    const body: AssignBody = { ids: ids, ownerId: ownerId, reason: reason };
+    return Api.post<EmptyBody>('/api/customers/assign', body);
+  }
+
+  static deleteCustomer(id: string): Promise<EmptyBody> {
+    return Api.del<EmptyBody>(`/api/customers/${encodeURIComponent(id)}`);
+  }
+
+  // ── Server additions for the app ──
+  /** range: today | week | month | quarter | year, or custom with startDate / endDate (YYYY-MM-DD, not after today). */
+  static cockpit(range: string, startDate: string = '', endDate: string = ''): Promise<Cockpit> {
+    const query: Record<string, string> = { 'range': range, 'startDate': startDate, 'endDate': endDate };
+    return Api.get<Cockpit>('/api/bos/cockpit', query);
+  }
+
+  static peekCockpit(range: string, startDate: string = '', endDate: string = ''): Cockpit | null {
+    const query: Record<string, string> = { 'range': range, 'startDate': startDate, 'endDate': endDate };
+    return Api.peek<Cockpit>('/api/bos/cockpit', query);
+  }
+
+  static notificationsSeen(): Promise<SeenState> {
+    return Api.get<SeenState>('/api/notifications/seen');
+  }
+
+  static markNotificationsSeen(at: string): Promise<SeenState> {
+    const body: SeenBody = { seenAt: at };
+    return Api.put<SeenState>('/api/notifications/seen', body);
+  }
+
+  static appVersion(): Promise<AppVersion> {
+    const query: Record<string, string> = { 'platform': 'harmony' };
+    return Api.get<AppVersion>('/api/app/version', query);
+  }
+
+  /** The server signs this device in again (new cookie); other devices keep working until 退出其他设备. */
+  static changePassword(currentPassword: string, newPassword: string): Promise<Done> {
+    const body: PasswordBody = { currentPassword: currentPassword, newPassword: newPassword };
+    return Api.post<Done>('/api/auth/password', body);
+  }
+
+  static signOutOtherDevices(): Promise<Done> {
+    const body: EmptyBody = {};
+    return Api.post<Done>('/api/auth/logout-others', body);
   }
 
   static completeTask(id: string): Promise<EmptyBody> {

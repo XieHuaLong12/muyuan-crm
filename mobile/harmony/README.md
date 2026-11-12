@@ -60,14 +60,19 @@ mobile/harmony/
 │   ├── ets/
 │   │   ├── entryability/        启动：恢复会话后加载首页
 │   │   ├── pages/Index.ets      根导航：一个 Navigation 栈，五个页签在底层，详情页压在上面
-│   │   ├── views/               登录、页签（工作台 / 客户 / 订单 / 消息 / 我的）、客户详情、订单详情、WhatsApp 对话、我的待办、数据分析
+│   │   ├── views/               登录、页签（工作台 / 客户 / 订单 / 消息 / 我的）、客户详情、新建客户、订单详情、WhatsApp 对话、我的待办、数据分析
 │   │   ├── views/chat/          聊天面板：优化话术、快捷回复、产品资料
-│   │   ├── components/          设计系统组件：LvIcon、Pill、Avatar、StateView、StatTile、OrderSteps；ListSource（长列表按需渲染）、AuthImage（需要登录的图片）
-│   │   ├── api/                 Http（{success,data} 信封、会话 Cookie、401 回到登录）、Cache（上次数据，先显示后刷新）、Media（选图选文件、转 JPEG、缩略图）、Session、Repo、Models、Inbox
+│   │   ├── views/task/          任务新建与详情（改期、完成、删除）
+│   │   ├── components/          设计系统组件：LvIcon、Pill、Avatar、StateView、StatTile、OrderSteps；ListSource（长列表按需渲染）、AuthImage（需要登录的图片）、BarChart
+│   │   ├── api/                 Http（{success,data} 信封、会话 Cookie、401 回到登录）、Cache（上次数据，先显示后刷新）、Media（选图选文件、转 JPEG、缩略图）、Appearance（浅色 / 深色）、Session、Repo、Models、Inbox
 │   │   └── common/              配置、文案常量（与 lib/constants.ts 一致）、格式化
 │   └── resources/               颜色（浅色 / 深色）、尺寸、字符串、图标与 Logo
 └── README.md
 ```
+
+**屏幕适配（以华为 Pura 70 Pro 为基准）**：1260 × 2844 px，默认「显示大小」下约 360 × 812 vp。界面全部用 vp / fp 布局，左右留 16 vp；底部页签栏 64 vp，每个页签约 72 vp 宽，图标与文字同一中线，未读数用系统 Badge 挂在图标右上角；页签栏、聊天输入区、客户详情底部操作栏的白色背景延伸到手势条区域（`expandSafeArea`），内容仍在安全区内。改「显示大小」或「字体大小」后会按比例缩放。
+
+**写界面的一条规则**：`@Builder` 方法的参数按值传递，状态变了也不会刷新。要么在 Builder 里直接读 `this.xxx`，要么像客户详情、工作台、数据页那样用 `ForEach([this.rev], …)` 在每次拿到新数据时整块重建。
 
 颜色、尺寸由 `prototypes/mobile-app/tokens.json` 生成，图标由 Lucide 0.468.0 生成，**不要手改生成的文件**：
 

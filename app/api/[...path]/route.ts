@@ -10,7 +10,7 @@ import {
 import { customerList, customerPreview } from '@/services/customer-list-service';
 import { assignCustomers, saveLeadAssignMode } from '@/services/lead-assignment-service';
 import { deliverLeadAlertsAfterResponse } from '@/lib/after-response';
-import { createUserAccount, changeOwnPassword } from '@/services/sales-account-service';
+import { createUserAccount, changeOwnPassword, signOutOtherDevices } from '@/services/sales-account-service';
 import { allocateTargets, targetProgress } from '@/services/target-service';
 import { workspaceBootstrap } from '@/services/sales-workspace-service';
 import { batchCustomers, purgeCustomers } from '@/services/customer-batch-service';
@@ -137,6 +137,11 @@ async function route(req: NextRequest, ctx: { params: Promise<{ path: string[] }
     const user = await requireUser();
     if (['target-progress', 'targets', 'settings', 'users'].includes(resource) && user.role !== 'ADMIN') throw new HttpError(403, '需要管理员权限');
     if (resource === 'auth' && id === 'logout' && method === 'POST') { const res = ok({}); res.cookies.delete('crm_session'); return res; }
+    if (resource === 'auth' && id === 'logout-others' && method === 'POST') {
+      // The mobile app's 退出其他设备: this device keeps working with a fresh session.
+      const kept = await signOutOtherDevices(user);
+      return withSession(req, ok({ signedOut: true }), kept.id, kept.sessionVersion);
+    }
     if (resource === 'auth' && id === 'password' && method === 'POST') {
       const changed = await changeOwnPassword(await req.json(), user);
       return withSession(req, ok({ changed: true }), changed.id, changed.sessionVersion);

@@ -31,6 +31,7 @@ export class Inbox {
   /** Reload the feed and update both badges. Errors are ignored here; the screens show their own. */
   static async refresh(): Promise<NotificationFeed | null> {
     try {
+      await Inbox.syncSeen();
       const feed = await Repo.notifications();
       Inbox.lastFeed = feed;
       Inbox.applyBadges(feed);
@@ -48,14 +49,33 @@ export class Inbox {
     AppStorage.setOrCreate<number>(StoreKeys.BADGE_CUSTOMERS, Session.isAdmin() ? feed.counts.pool : feed.counts.pendingFirstContact);
   }
 
-  /** Opening 「提醒」 marks the reminders up to the feed time as read; unread chats stay until they are opened. */
-  static async markAllSeen(): Promise<void> {
-    const feed = Inbox.lastFeed;
-    Inbox.seenAt = feed !== null ? new Date(feed.at).getTime() : Date.now();
-    AppStorage.setOrCreate<number>(StoreKeys.BADGE_INBOX, feed !== null ? feed.counts.unreadConversations : 0);
+  /** The read point shared with the PC and other phones (GET /api/notifications/seen): the later one wins. */
+  static async syncSeen(): Promise<void> {
+    try {
+      const state = await Repo.notificationsSeen();
+      const server = state.seenAt !== null ? new Date(state.seenAt).getTime() : 0;
+      if (server > Inbox.seenAt) {
+        await Inbox.saveLocal(server);
+      }
+    } catch (e) {
+      // Offline or an older server: the phone's own read point still works.
+    }
+  }
+
+  private static async saveLocal(at: number): Promise<void> {
+    Inbox.seenAt = at;
     if (Inbox.prefs) {
       await Inbox.prefs.put('seenAt', Inbox.seenAt);
       await Inbox.prefs.flush();
     }
+  }
+
+  /** Opening 「提醒」 marks the reminders up to the feed time as read, here and on the server; chats stay unread until opened. */
+  static async markAllSeen(): Promise<void> {
+    const feed = Inbox.lastFeed;
+    const at = feed !== null ? new Date(feed.at).getTime() : Date.now();
+    AppStorage.setOrCreate<number>(StoreKeys.BADGE_INBOX, feed !== null ? feed.counts.unreadConversations : 0);
+    await Inbox.saveLocal(Math.max(at, Inbox.seenAt));
+    Repo.markNotificationsSeen(new Date(Inbox.seenAt).toISOString()).catch(() => {});
   }
 }

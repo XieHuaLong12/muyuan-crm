@@ -31,10 +31,26 @@ export struct MainTabs {
     }
   }
 
+  /**
+   * One tab: the icon pill and the label share one centre line. The unread count is a system Badge on the pill's
+   * top-right corner, so it never pushes the icon off centre.
+   */
+  /** Read inside the tab (not passed in) so the unread counts follow every refresh. */
+  private badgeOf(index: number): number {
+    if (index === 1) return this.badgeCustomers;
+    if (index === 3) return this.badgeInbox;
+    return 0;
+  }
+
   @Builder
-  tabItem(index: number, title: string, icon: string, badge: number) {
-    Column({ space: 3 }) {
-      Stack({ alignContent: Alignment.TopEnd }) {
+  tabItem(index: number, title: string, icon: string) {
+    Column({ space: 4 }) {
+      Badge({
+        count: this.badgeOf(index),
+        maxCount: 99,
+        position: BadgePosition.RightTop,
+        style: { badgeSize: 16, badgeColor: $r('app.color.danger'), fontSize: 10, color: Color.White }
+      }) {
         Row() {
           LvIcon({ name: icon, iconColor: this.current === index ? $r('app.color.brand_ink') : $r('app.color.ink3'), iconSize: 22 })
         }
@@ -43,68 +59,68 @@ export struct MainTabs {
         .borderRadius(15)
         .justifyContent(FlexAlign.Center)
         .backgroundColor(this.current === index ? $r('app.color.brand_soft') : Color.Transparent)
-
-        if (badge > 0) {
-          Text(badge > 99 ? '99+' : `${badge}`)
-            .fontSize(11)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(Color.White)
-            .backgroundColor($r('app.color.danger'))
-            .borderRadius(9)
-            .height(18)
-            .constraintSize({ minWidth: 18 })
-            .padding({ left: 5, right: 5 })
-            .textAlign(TextAlign.Center)
-            .border({ width: 2, color: $r('app.color.surface') })
-        }
       }
-      .width(64)
 
       Text(title)
         .fontSize(12)
         .fontColor(this.current === index ? $r('app.color.brand_ink') : $r('app.color.ink3'))
         .fontWeight(this.current === index ? FontWeight.Medium : FontWeight.Normal)
+        .textAlign(TextAlign.Center)
+        .width('100%')
     }
     .width('100%')
     .height('100%')
+    .alignItems(HorizontalAlign.Center)
     .justifyContent(FlexAlign.Center)
   }
 
   build() {
-    Tabs({ barPosition: BarPosition.End, index: this.current }) {
-      TabContent() {
-        HomeTab()
-      }
-      .tabBar(this.tabItem(0, '工作台', 'layout-dashboard', 0))
+    Stack({ alignContent: Alignment.Bottom }) {
+      // White under the tab bar, reaching down into the gesture-bar area, so the bar runs to the screen edge.
+      Column()
+        .width('100%')
+        .height(64)
+        .backgroundColor($r('app.color.surface'))
+        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
 
-      TabContent() {
-        CustomersTab()
-      }
-      .tabBar(this.tabItem(1, '客户', 'users', this.badgeCustomers))
+      Tabs({ barPosition: BarPosition.End, index: this.current }) {
+        TabContent() {
+          HomeTab()
+        }
+        .tabBar(this.tabItem(0, '工作台', 'layout-dashboard'))
 
-      TabContent() {
-        OrdersTab()
-      }
-      .tabBar(this.tabItem(2, '订单', 'package', 0))
+        TabContent() {
+          CustomersTab()
+        }
+        .tabBar(this.tabItem(1, '客户', 'users'))
 
-      TabContent() {
-        InboxTab()
-      }
-      .tabBar(this.tabItem(3, '消息', 'message-circle', this.badgeInbox))
+        TabContent() {
+          OrdersTab()
+        }
+        .tabBar(this.tabItem(2, '订单', 'package'))
 
-      TabContent() {
-        MeTab()
+        TabContent() {
+          InboxTab()
+        }
+        .tabBar(this.tabItem(3, '消息', 'message-circle'))
+
+        TabContent() {
+          MeTab()
+        }
+        .tabBar(this.tabItem(4, '我的', 'user-round'))
       }
-      .tabBar(this.tabItem(4, '我的', 'user-round', 0))
+      .barHeight(64)
+      .scrollable(false)
+      .animationDuration(0)
+      .barBackgroundColor($r('app.color.surface'))
+      .divider({ strokeWidth: 0.5, color: $r('app.color.line') })
+      .backgroundColor($r('app.color.bg'))
+      .onChange((index: number) => {
+        this.current = index;
+      })
     }
-    .barHeight(64)
-    .scrollable(false)
-    .animationDuration(0)
-    .barBackgroundColor($r('app.color.surface'))
-    .divider({ strokeWidth: 0.5, color: $r('app.color.line') })
+    .width('100%')
+    .height('100%')
     .backgroundColor($r('app.color.bg'))
-    .onChange((index: number) => {
-      this.current = index;
-    })
   }
 }

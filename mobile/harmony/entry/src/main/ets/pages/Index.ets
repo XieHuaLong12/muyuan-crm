@@ -6,6 +6,7 @@ import { OrderDetailPage } from '../views/OrderDetailPage';
 import { ChatPage } from '../views/ChatPage';
 import { TasksPage } from '../views/TasksPage';
 import { AnalyticsPage } from '../views/AnalyticsPage';
+import { NewCustomerPage } from '../views/NewCustomerPage';
 
 /**
  * Root: one Navigation stack. The five tabs live in its root content; detail pages are pushed on top and cover the
@@ -36,6 +37,8 @@ struct Index {
       TasksPage()
     } else if (name === Routes.ANALYTICS) {
       AnalyticsPage()
+    } else if (name === Routes.NEW_CUSTOMER) {
+      NewCustomerPage()
     }
   }
 

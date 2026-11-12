@@ -284,6 +284,8 @@ export interface OrderDetail {
   orderDate: string;
   estimatedDelivery: string | null;
   notes: string;
+  /** For the compare-and-swap of 推进状态 / 取消订单. */
+  updatedAt: string;
   progress: OrderProgress;
   customer: OrderCustomer;
   deal: OrderDeal | null;
@@ -305,6 +307,7 @@ export interface TaskRow {
   status: string;
   priority: string;
   source: string;
+  type?: string;
   customer: TaskCustomer | null;
 }
 
@@ -674,4 +677,194 @@ export interface MediaAsset {
 
 export interface AttachResult {
   assets: MediaAsset[];
+}
+
+// ── Server additions for the app (services/mobile-app-service.ts, app/api/bos/cockpit) ────────────────────────
+export interface CockpitSelected {
+  range: string;
+  label: string;
+  startKey: string;
+  endKey: string;
+  trend: string;
+}
+
+export interface CockpitKpis {
+  periodRevenue: number;
+  quotedAmount: number;
+  grossProfit: number | null;
+  periodOrders: number;
+  newCustomers: number;
+  completion: number | null;
+}
+
+export interface CockpitGoal {
+  periodGoal: number | null;
+  periodRevenue: number;
+  completion: number | null;
+}
+
+export interface TrendPoint {
+  label: string;
+  revenue: number;
+  orders: number;
+}
+
+export interface CockpitTrend {
+  view: string;
+  label: string;
+  points: TrendPoint[];
+}
+
+export interface FunnelStage {
+  label: string;
+  count: number;
+  conversion: number | null;
+}
+
+export interface CockpitChannel {
+  id: string;
+  name: string;
+  customers: number;
+  revenue: number;
+  roi: number | null;
+}
+
+export interface CockpitSuggestion {
+  kind: string;
+  title: string;
+  detail: string;
+  href: string;
+}
+
+/** GET /api/bos/cockpit?range= — the PC 驾驶舱 (sales: own customers, no profit). */
+export interface Cockpit {
+  scope: string;
+  currency: string;
+  selected: CockpitSelected;
+  kpis: CockpitKpis;
+  goal: CockpitGoal;
+  trend: CockpitTrend;
+  funnel: FunnelStage[];
+  channels: CockpitChannel[];
+  suggestions: CockpitSuggestion[];
+}
+
+export interface SeenState {
+  seenAt: string | null;
+}
+
+export interface SeenBody {
+  seenAt: string;
+}
+
+export interface AppLatest {
+  versionName: string;
+  versionCode: number;
+  url: string;
+  notes: string;
+}
+
+export interface AppVersion {
+  platform: string;
+  latest: AppLatest | null;
+  minVersionCode: number | null;
+}
+
+export interface PasswordBody {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface Done {
+  changed?: boolean;
+  signedOut?: boolean;
+}
+
+// ── Writes the PC already offers ────────────────────────────────────────────────────────────────────────────
+/** POST /api/tasks (services/task-service.ts taskInput). */
+export interface TaskBody {
+  customerId: string | null;
+  title: string;
+  description: string;
+  type: string;
+  priority: string;
+  dueDate: string;
+}
+
+/** PATCH /api/tasks/:id. */
+export interface TaskPatch {
+  status?: string;
+  dueDate?: string;
+  priority?: string;
+}
+
+/** PATCH /api/orders/:id — PENDING_PAYMENT | PRODUCING | SHIPPED | IN_TRANSIT | COMPLETED (completion: administrators). */
+export interface MilestoneBody {
+  status: string;
+  expectedUpdatedAt: string;
+}
+
+export interface MilestoneResult {
+  status: string;
+  statusLabel: string;
+  updatedAt: string;
+}
+
+/** POST /api/orders/:id/cancel (administrators). */
+export interface CancelBody {
+  reason: string;
+  expectedUpdatedAt: string;
+}
+
+/** GET /api/quotations?customerId= — the customer's quotations, newest first. */
+export interface Quotation {
+  id: string;
+  quoteNumber: string;
+  product: string;
+  quantity: number;
+  unitPrice: string;
+  totalAmount: string | null;
+  currency: string;
+  incoterm: string;
+  status: string;
+  sentAt: string | null;
+  createdAt: string;
+}
+
+/** POST /api/customers (lib/validation.ts customerSchema; the rest take their defaults). */
+export interface NewCustomerBody {
+  name: string;
+  companyName: string;
+  country: string;
+  whatsapp: string;
+  phone: string;
+  email: string;
+  source: string;
+  productInterest: string;
+  purchaseType: string;
+  quantity: number | null;
+  notes: string;
+  ownerId: string;
+  forceDuplicate?: boolean;
+}
+
+export interface CreatedCustomer {
+  id: string;
+  name: string;
+}
+
+/** GET /api/sales-team/accounts (administrators). */
+export interface SalesAccount {
+  id: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  customerCount: number;
+}
+
+/** POST /api/customers/assign (administrators). */
+export interface AssignBody {
+  ids: string[];
+  ownerId: string;
+  reason: string;
 }

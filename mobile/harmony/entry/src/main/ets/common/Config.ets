@@ -5,8 +5,10 @@
  */
 export class AppConfig {
   static readonly DEFAULT_SERVER: string = 'https://avenlee.online';
-  static readonly VERSION: string = '1.1.0';
-  static readonly CLIENT: string = 'LVANJUBOS-HarmonyOS/1.1.0';
+  static readonly VERSION: string = '1.3.0';
+  /** Same as AppScope/app.json5 versionCode; 检查更新 compares it with the server's MOBILE_HARMONY_VERSION_CODE. */
+  static readonly VERSION_CODE: number = 1003000;
+  static readonly CLIENT: string = 'LVANJUBOS-HarmonyOS/1.3.0';
   /** How often the notification feed is refreshed while the app is in front (the PC polls about every 20 s). */
   static readonly FEED_INTERVAL_MS: number = 60000;
   /** How often an open WhatsApp conversation checks for new messages. */
@@ -23,6 +25,8 @@ export class Routes {
   static readonly TASKS: string = 'tasks';
   /** 数据分析 (param unused). */
   static readonly ANALYTICS: string = 'analytics';
+  /** 新建客户 (param unused). */
+  static readonly NEW_CUSTOMER: string = 'customer-new';
 }
 
 /** Parameter object for a pushed destination. */
@@ -40,6 +44,7 @@ export class StoreKeys {
   static readonly USER_NAME: string = 'userName';
   static readonly USER_ROLE: string = 'userRole';
   static readonly USER_EMAIL: string = 'userEmail';
+  static readonly USER_ID: string = 'userId';
   static readonly BADGE_CUSTOMERS: string = 'badgeCustomers';
   static readonly BADGE_INBOX: string = 'badgeInbox';
   /** Queue the customers tab should show next (set by the home tab before switching tabs). */
